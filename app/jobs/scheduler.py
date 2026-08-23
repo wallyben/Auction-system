@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from app.core.config import settings
@@ -46,6 +47,20 @@ async def _scheduled_scan() -> None:
         _running = False
 
 
+async def _scheduled_audit() -> None:
+    from app.audit.self_audit import run_self_audit
+
+    session = get_session_factory()()
+    try:
+        run_self_audit(session)
+        session.commit()
+    except Exception:
+        session.rollback()
+        logger.exception("self_audit_failed")
+    finally:
+        session.close()
+
+
 def start_scheduler() -> None:
     global _scheduler
     import sys
@@ -63,6 +78,13 @@ def start_scheduler() -> None:
         replace_existing=True,
         max_instances=1,
         coalesce=True,
+    )
+    _scheduler.add_job(
+        _scheduled_audit,
+        CronTrigger(hour=6, minute=15),
+        id="daily-self-audit",
+        replace_existing=True,
+        max_instances=1,
     )
     _scheduler.start()
     logger.info("scheduler_started", minutes=settings.fast_marketplace_minutes)

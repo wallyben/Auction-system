@@ -9,7 +9,7 @@ from decimal import Decimal
 from app.core.money import ZERO, money
 from app.models.enums import EvidenceType
 from app.valuation.irish import EVIDENCE_WEIGHT, TERRITORY_WEIGHT, irish_net_proceeds
-from app.valuation.stats import recency_weight, reject_outliers, weighted_median
+from app.valuation.stats import display_money, percentile, recency_weight, reject_outliers, weighted_median
 
 
 @dataclass(slots=True)
@@ -42,6 +42,15 @@ class ValuationResult:
     expected_days: int | None
     provenance: dict = field(default_factory=dict)
     net_proceeds_eur: Decimal = ZERO
+    p10: Decimal = ZERO
+    p25: Decimal = ZERO
+    median: Decimal = ZERO
+    p75: Decimal = ZERO
+    p90: Decimal = ZERO
+    asking_count: int = 0
+    display_expected: Decimal = ZERO
+    display_low: Decimal = ZERO
+    display_high: Decimal = ZERO
 
 
 def _weight(comp: Comp, now: datetime) -> Decimal:
@@ -108,6 +117,12 @@ def value_from_comps(comps: list[Comp], *, now: datetime | None = None) -> Valua
         confidence = min(confidence, Decimal("0.62"))
     if confidence > Decimal("0.95"):
         confidence = Decimal("0.95")
+    p10 = percentile(ordered, Decimal("0.10"))
+    p25 = percentile(ordered, Decimal("0.25"))
+    p50 = percentile(ordered, Decimal("0.50"))
+    p75 = percentile(ordered, Decimal("0.75"))
+    p90 = percentile(ordered, Decimal("0.90"))
+    asking_count = sum(1 for c in usable if c.evidence_type in {EvidenceType.CURRENT_ASKING, EvidenceType.DEALER_RETAIL})
     provenance = {
         "comps": [
             {
@@ -124,6 +139,11 @@ def value_from_comps(comps: list[Comp], *, now: datetime | None = None) -> Valua
         "rejected_outliers": [str(value) for value in rejected],
         "method": method,
         "warning": "Asking prices are not realised Irish sales." if asking_only else "",
+        "percentiles": {"p10": str(p10), "p25": str(p25), "median": str(p50), "p75": str(p75), "p90": str(p90)},
+        "display": {
+            "expected": str(display_money(expected, confidence=confidence)),
+            "range": f"{display_money(low, confidence=confidence)}–{display_money(high, confidence=confidence)}",
+        },
     }
     return ValuationResult(
         expected_sale_eur=expected,
@@ -139,4 +159,13 @@ def value_from_comps(comps: list[Comp], *, now: datetime | None = None) -> Valua
         expected_days=21 if local else 35,
         provenance=provenance,
         net_proceeds_eur=irish_net_proceeds(expected),
+        p10=p10,
+        p25=p25,
+        median=p50,
+        p75=p75,
+        p90=p90,
+        asking_count=asking_count,
+        display_expected=display_money(expected, confidence=confidence),
+        display_low=display_money(low, confidence=confidence),
+        display_high=display_money(high, confidence=confidence),
     )

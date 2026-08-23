@@ -36,9 +36,12 @@ make scan
 make scan-source SOURCE=scryfall
 make validate
 make production-proof
+make ebay-check
+make source-health
+make backtest
 ```
 
-Dashboard: open `/`. Click **Scan all sources now**.
+Dashboard: open `/`. Scan, value a URL/item, inspect gates, mark purchased. `BUY_READY` is not engine `BUY`.
 
 ## Owner knobs
 
@@ -50,3 +53,4 @@ All ordinary configuration is in `.env`. You do not edit Python to change thresh
 - Asking prices are haircut and capped at 0.48 confidence.
 - Tax figures are operational estimates. An accountant must confirm VAT/margin-scheme treatment.
 - Do not trust ARIE with real money until you have recorded actual buys and sales in the outcome loop.
+- Current honest status: software complete; empirical validation required. SAFE_START stays on.

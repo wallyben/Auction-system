@@ -1,7 +1,7 @@
 PYTHON ?= python3
 export DATABASE_URL ?= postgresql+psycopg://arie:arie@localhost:5432/arie
 
-.PHONY: dev test test-live scan scan-source validate production-proof migrate install
+.PHONY: dev test test-live scan scan-source validate production-proof migrate install ebay-check source-health backtest
 
 install:
 	$(PYTHON) -m pip install -e ".[dev]"
@@ -30,3 +30,12 @@ validate:
 
 production-proof:
 	$(PYTHON) -m app.cli production-proof
+
+ebay-check:
+	$(PYTHON) -m app.cli ebay-check
+
+source-health:
+	$(PYTHON) -m app.cli source-health
+
+backtest:
+	$(PYTHON) -m app.cli backtest

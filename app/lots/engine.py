@@ -75,13 +75,30 @@ def lot_liquidation(
     quick = money(gross * Decimal("0.55"))
     selling = money(expected * selling_cost_rate)
     profit = money(expected - selling - labour_eur - purchase)
+    residue = money(gross * Decimal("0.20"))
+    labour_penalty = labour_eur
+    if len(item_values) >= 8:
+        labour_penalty = money(labour_eur + Decimal(len(item_values)) * Decimal("8"))
     return {
         "lot_purchase_price": money(purchase),
         "gross_breakup_value": money(gross),
         "expected_realised_breakup_value": expected,
         "quick_liquidation_value": quick,
+        "unsellable_residue": residue,
         "estimated_selling_costs": selling,
-        "labour": money(labour_eur),
-        "expected_profit": profit,
-        "max_safe_bid": money(max(ZERO, expected - selling - labour_eur - money(expected * Decimal("0.15")))),
+        "labour": money(labour_penalty),
+        "expected_profit": money(expected - selling - labour_penalty - purchase),
+        "max_safe_bid": money(max(ZERO, expected - selling - labour_penalty - money(expected * Decimal("0.15")))),
     }
+
+
+def liquidation_sellthrough(unit_resale: Decimal, qty: int, unit_cost: Decimal) -> dict[str, Decimal]:
+    """Do not value N units at the current one-unit retail price."""
+    erosion = {25: Decimal("1.00"), 50: Decimal("0.92"), 75: Decimal("0.82"), 100: Decimal("0.70")}
+    out: dict[str, Decimal] = {}
+    for pct, factor in erosion.items():
+        sold = Decimal(qty) * Decimal(pct) / Decimal("100")
+        revenue = money(sold * unit_resale * factor)
+        storage = money(Decimal(qty) * Decimal("0.15") * (Decimal(pct) / Decimal("50")))
+        out[f"sellthrough_{pct}"] = money(revenue - unit_cost * Decimal(qty) - storage)
+    return out

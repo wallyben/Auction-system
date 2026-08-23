@@ -11,15 +11,25 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.certification.engine import category_is_certified
+from app.comps.matcher import match_comp
+from app.condition.category import assess_category_condition
 from app.condition.engine import assess_condition
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.money import ZERO, as_decimal, money
 from app.costs.landed import compute_landed_cost
+from app.decision.gates import apply_money_ready_gates
+from app.discovery.mispricing import mispricing
+from app.economics.ev import expected_value
+from app.economics.negotiate import negotiation_targets
+from app.economics.urgency import classify_urgency
+from app.exits.engine import compare_exits
 from app.identity.engine import identify_listing
+from app.identity.resolvers import identify_with_resolvers
 from app.liquidity.engine import estimate_liquidity
 from app.lots.engine import split_lot
-from app.models.enums import Corridor, Decision, EvidenceType, SourceStatus
+from app.models.enums import EvidenceType, SourceStatus
 from app.models.orm import (
     Comparable,
     FxRate,
@@ -32,13 +42,19 @@ from app.models.orm import (
     SourceHealth,
     Valuation,
 )
+from app.observability.metrics import record_metric
+from app.observations.tracker import record_observation
 from app.opportunity.engine import score_opportunity
+from app.paper.service import open_paper_trade
 from app.risk.engine import assess_risk
+from app.shipping.engine import estimate_inbound, estimate_outbound
+from app.sold.provider import search_sold_evidence
 from app.sources.base import HealthProof, NormalizedListing
 from app.sources.ecb import EcbFxAdapter
 from app.sources.registry import adapter_map, all_adapters
 from app.sources.scryfall import ScryfallAdapter
 from app.tax.irish import estimate_acquisition_tax
+from app.tax.scenarios import scenario_matrix
 from app.valuation.engine import Comp, value_from_comps
 from app.valuation.irish import corridor_for, to_eur
 
@@ -77,6 +93,7 @@ def seed_sources(session: Session) -> None:
                 cadence_minutes=adapter.cadence_minutes,
                 enabled=adapter.source_id in settings.source_ids()
                 or adapter.source_id in {"csv_import", "manual", "ecb_fx"},
+                commercial_quality="LOW" if adapter.source_id == "scryfall" else "UNKNOWN",
             )
         )
     session.flush()
@@ -167,7 +184,7 @@ def persist_listing(session: Session, item: NormalizedListing) -> Listing:
             Listing.external_id == item.external_id,
         )
     )
-    identity = identify_listing(
+    identity = identify_with_resolvers(
         title=item.title,
         description=item.description,
         brand_hint=item.brand,
@@ -176,7 +193,7 @@ def persist_listing(session: Session, item: NormalizedListing) -> Listing:
         mpn=item.mpn,
         category=item.category,
     )
-    condition = assess_condition(item.condition_raw, item.description)
+    condition = assess_category_condition(item.condition_raw, item.description, identity.category or item.category)
     if listing is None:
         listing = Listing(
             source_id=item.source_id,
@@ -245,11 +262,35 @@ def persist_listing(session: Session, item: NormalizedListing) -> Listing:
     return listing
 
 
-async def _comps_for(listing: Listing, rates: dict[str, Decimal]) -> list[Comp]:
+async def _comps_for(listing: Listing, rates: dict[str, Decimal], session=None) -> list[Comp]:
     comps: list[Comp] = []
     identity = getattr(listing, "_identity", None)
     is_card = listing.category == "trading_cards" or (identity and getattr(identity, "category", None) == "trading_cards")
     fx = _eur_per_unit(rates, listing.currency)
+    query = (listing.model or listing.title or "")[:80]
+    if session is not None:
+        try:
+            sold = await search_sold_evidence(session, query, listing.country or "IE", listing.condition_grade or "")
+            for hit in sold:
+                verdict = match_comp(listing.title, hit.title)
+                if not verdict.accepted:
+                    continue
+                comps.append(
+                    Comp(
+                        source=hit.source,
+                        url=hit.url,
+                        title=hit.title,
+                        price_eur=hit.sold_price_eur,
+                        evidence_type=hit.evidence_type,
+                        country=hit.territory,
+                        condition_score=Decimal("0.85"),
+                        product_score=verdict.identity_similarity,
+                        observed_at=hit.sold_date,
+                        notes=hit.notes,
+                    )
+                )
+        except Exception as exc:
+            logger.warning("sold_evidence_failed", error=str(exc))
     # Comparable-source guides (Scryfall) *are* the evidence. Acquisition asks are not.
     if listing.source_id == "scryfall" and listing.asking_price is not None:
         comps.append(
@@ -266,7 +307,6 @@ async def _comps_for(listing: Listing, rates: dict[str, Decimal]) -> list[Comp]:
                 notes="Subject Cardmarket EUR guide via Scryfall. Dealer/market, not an Irish realised sale.",
             )
         )
-    query = (listing.model or listing.title or "")[:80]
     if not is_card:
         try:
             from app.sources.reverb import ReverbAdapter
@@ -274,6 +314,8 @@ async def _comps_for(listing: Listing, rates: dict[str, Decimal]) -> list[Comp]:
             peers = await ReverbAdapter().search(query, limit=8)
             for peer in peers:
                 if not peer.asking_price or peer.url == listing.url:
+                    continue
+                if not match_comp(listing.title, peer.title).accepted:
                     continue
                 peer_fx = _eur_per_unit(rates, peer.currency) if peer.currency else fx
                 comps.append(
@@ -324,8 +366,12 @@ def evaluate_listing(
     comps: list[Comp],
     rates: dict[str, Decimal],
 ) -> Opportunity:
-    identity = getattr(listing, "_identity", None) or identify_listing(title=listing.title, description=listing.description)
-    condition = getattr(listing, "_condition", None) or assess_condition(listing.condition_raw, listing.description)
+    identity = getattr(listing, "_identity", None) or identify_with_resolvers(
+        title=listing.title, description=listing.description, category=listing.category
+    )
+    condition = getattr(listing, "_condition", None) or assess_category_condition(
+        listing.condition_raw, listing.description, listing.category
+    )
     valuation = value_from_comps(comps)
     fx = _eur_per_unit(rates, listing.currency)
     purchase = listing.asking_price or listing.current_bid or ZERO
@@ -339,9 +385,15 @@ def evaluate_listing(
         owner_uses_margin_scheme=settings.owner_uses_margin_scheme,
         vat_rate=_d("vat_rate"),
     )
-    shipping = listing.shipping_cost
-    if shipping is not None:
-        shipping = to_eur(shipping, listing.shipping_currency or listing.currency, fx)
+    inbound = estimate_inbound(
+        corridor=corridor,
+        listed=to_eur(listing.shipping_cost, listing.shipping_currency or listing.currency, fx)
+        if listing.shipping_cost is not None
+        else None,
+        category=listing.category or identity.category,
+    )
+    outbound = estimate_outbound(category=listing.category or identity.category, channel="ebay_ie")
+    shipping = inbound.amount_eur
     costs = compute_landed_cost(
         purchase_price=purchase,
         currency_to_eur=fx,
@@ -364,7 +416,17 @@ def evaluate_listing(
         target_margin_percent=_d("target_margin_percent"),
         risk_percent=_d("risk_percent"),
         listing_type=listing.listing_type,
+        outbound_shipping=outbound.amount_eur + outbound.insurance_eur + outbound.packaging_eur,
     )
+    exits = compare_exits(
+        expected_sale_eur=valuation.expected_sale_eur,
+        category=listing.category or identity.category,
+    )
+    best_quote = next((q for q in exits.quotes if q.channel == exits.best_expected_exit), exits.quotes[0])
+    # Recompute net from the best exit rather than a single generic fee.
+    costs.expected_net_resale_eur = best_quote.net_proceeds
+    costs.expected_profit_eur = money(best_quote.net_proceeds - costs.all_in_acquisition_eur)
+    costs.roi = money(costs.expected_profit_eur / costs.all_in_acquisition_eur) if costs.all_in_acquisition_eur else ZERO
     lot = split_lot(listing.title, listing.description)
     liquidity = estimate_liquidity(
         comparable_count=valuation.comparable_count,
@@ -385,6 +447,9 @@ def evaluate_listing(
         images=listing.images or [],
         is_lot=lot.is_lot,
     )
+    ends_in = None
+    if listing.ends_at:
+        ends_in = max(0.0, (listing.ends_at - _now()).total_seconds() / 3600)
     decision = score_opportunity(
         expected_profit=costs.expected_profit_eur,
         roi=costs.roi,
@@ -396,7 +461,7 @@ def evaluate_listing(
         downside_profit=costs.downside_profit_eur,
         risk_score=risk.score,
         identity_level=identity.level,
-        ends_in_hours=None,
+        ends_in_hours=ends_in,
         min_profit=_d("min_profit_eur"),
         min_roi=_d("min_roi"),
         min_confidence=_d("min_confidence"),
@@ -405,6 +470,66 @@ def evaluate_listing(
         capital_required=costs.all_in_acquisition_eur,
         asking=costs.purchase_price_eur,
         max_buy=costs.max_purchase_eur,
+    )
+    age_hours = (_now() - listing.observed_at).total_seconds() / 3600 if listing.observed_at else 0
+    gates = apply_money_ready_gates(
+        engine=decision.decision,
+        identity_level=identity.level,
+        identity_confidence=identity.confidence,
+        condition_confidence=condition.confidence,
+        valuation_confidence=valuation.confidence,
+        comparable_count=valuation.comparable_count,
+        realised_count=valuation.realised_count,
+        local_count=valuation.local_count,
+        liquidity_confidence=liquidity.liquidity_confidence,
+        expected_days=liquidity.expected_days_to_sale,
+        expected_profit=costs.expected_profit_eur,
+        downside_profit=costs.downside_profit_eur,
+        roi=costs.roi,
+        risk_score=risk.score,
+        high_risk=risk.high,
+        asking=costs.purchase_price_eur,
+        max_buy=costs.max_purchase_eur,
+        all_in_cost=costs.all_in_acquisition_eur,
+        purchase_price=costs.purchase_price_eur,
+        gross_sale=costs.expected_resale_eur,
+        net_proceeds=costs.expected_net_resale_eur,
+        category=listing.category or identity.category,
+        category_certified=category_is_certified(listing.category or identity.category),
+        exit_present=bool(exits.quotes),
+        provenance_complete=bool(valuation.provenance),
+        source_fresh=age_hours <= 36,
+        tax_modelled=True,
+        listing_type=listing.listing_type,
+    )
+    ev = expected_value(
+        base_profit=costs.expected_profit_eur,
+        upside_profit=costs.upside_profit_eur,
+        downside_profit=costs.downside_profit_eur,
+        failure_loss=money(-costs.all_in_acquisition_eur * Decimal("0.6")),
+    )
+    nego = negotiation_targets(
+        ask=costs.purchase_price_eur,
+        max_buy=costs.max_purchase_eur,
+        expected_profit=costs.expected_profit_eur,
+        listing_type=listing.listing_type,
+    )
+    miss = mispricing(
+        ask=costs.purchase_price_eur,
+        expected=valuation.expected_sale_eur,
+        quick=valuation.quick_sale_eur,
+        p10=valuation.p10,
+    )
+    urgency = classify_urgency(
+        listing_type=listing.listing_type,
+        ends_in_hours=ends_in,
+        money_ready=gates.money_ready,
+    )
+    scenarios = scenario_matrix(
+        corridor=corridor,
+        customs_value_eur=to_eur(purchase, listing.currency, fx),
+        goods_are_second_hand=condition.grade.value not in {"new"},
+        vat_rate=_d("vat_rate"),
     )
     val_row = Valuation(
         listing_id=listing.id,
@@ -454,6 +579,55 @@ def evaluate_listing(
         valuation_id=val_row.id,
         product_id=listing.product_id,
         decision=decision.decision.value,
+        engine_decision=decision.decision.value,
+        money_ready=gates.money_ready,
+        money_ready_decision=gates.money_ready_decision.value,
+        expected_value_eur=ev,
+        ideal_offer_eur=nego.ideal_offer,
+        acceptable_offer_eur=nego.acceptable_offer,
+        walk_away_eur=nego.walk_away_price,
+        best_exit_channel=exits.best_expected_exit,
+        fastest_exit_channel=exits.fastest_exit,
+        safest_exit_channel=exits.safest_exit,
+        highest_net_exit=exits.highest_net_exit,
+        mispricing_score=miss.mispricing_score,
+        discount_to_expected=miss.discount_to_expected_sale,
+        urgency=urgency.value,
+        gate_results={"gates": gates.gates, "failures": gates.failures, "why": gates.why},
+        exit_analysis={
+            "quotes": [
+                {
+                    "channel": q.channel,
+                    "gross": str(q.gross_expected_sale),
+                    "fee": str(q.expected_fee),
+                    "payment": str(q.payment_fee),
+                    "shipping": str(q.shipping),
+                    "returns": str(q.returns_allowance),
+                    "days": q.expected_days,
+                    "net": str(q.net_proceeds),
+                    "confidence": str(q.confidence),
+                }
+                for q in exits.quotes
+            ],
+            "best": exits.best_expected_exit,
+            "fastest": exits.fastest_exit,
+            "safest": exits.safest_exit,
+            "highest_net": exits.highest_net_exit,
+        },
+        negotiation={"ask": str(nego.ask), "ideal": str(nego.ideal_offer), "acceptable": str(nego.acceptable_offer), "walk_away": str(nego.walk_away_price), "notes": nego.notes},
+        provenance_pack={
+            "identity": {"level": identity.level.value, "confidence": str(identity.confidence), "key": identity.canonical_key, "brand": identity.brand, "model": identity.model, "variant": identity.variant},
+            "condition": {"grade": condition.grade.value, "confidence": str(condition.confidence), "notes": condition.notes},
+            "valuation": valuation.provenance,
+            "tax_scenarios": [{"name": s.name, "import_vat": str(s.estimate.import_vat_eur), "notes": s.estimate.notes} for s in scenarios],
+            "shipping": {"inbound": str(inbound.amount_eur), "outbound": str(outbound.amount_eur), "notes": outbound.notes},
+            "liquidity": {
+                "low": liquidity.expected_days_to_sale_low,
+                "expected": liquidity.expected_days_to_sale,
+                "high": liquidity.expected_days_to_sale_high,
+                "confidence": str(liquidity.liquidity_confidence),
+            },
+        },
         score=decision.score,
         expected_profit_eur=costs.expected_profit_eur,
         expected_roi=costs.roi,
@@ -470,7 +644,7 @@ def evaluate_listing(
         identity_confidence=identity.confidence,
         valuation_confidence=valuation.confidence,
         condition_confidence=condition.confidence,
-        why=decision.why,
+        why=gates.why + " " + decision.why,
         score_breakdown={
             "profit": str(decision.breakdown.profit),
             "roi": str(decision.breakdown.roi),
@@ -494,6 +668,9 @@ def evaluate_listing(
             "tax_notes": tax.notes,
             "tax_class": tax.assumption_class.value,
             "used_existing_margin_engine": costs.used_existing_margin_engine,
+            "best_exit_net": str(best_quote.net_proceeds),
+            "inbound_shipping": inbound.notes,
+            "outbound_shipping": outbound.notes,
         },
         risks=[{"code": f.code, "severity": f.severity, "detail": f.detail} for f in risk.flags],
         last_evaluated_at=_now(),
@@ -505,6 +682,11 @@ def evaluate_listing(
         for key, value in payload.items():
             setattr(existing, key, value)
     session.flush()
+    record_observation(session, listing, asking=listing.asking_price)
+    open_paper_trade(session, existing)
+    record_metric(session, "valuation_count", run_id=str(listing.id))
+    if existing.money_ready:
+        record_metric(session, "BUY_READY_count", run_id=str(listing.id))
     from app.notifications import notify_opportunity
 
     notify_opportunity(session, existing)
@@ -558,8 +740,9 @@ async def run_scan(
                 for item in items:
                     seen += 1
                     listing = persist_listing(session, item)
-                    comps = await _comps_for(listing, rates)
+                    comps = await _comps_for(listing, rates, session)
                     evaluate_listing(session, listing, comps, rates)
+                    record_metric(session, "records_seen", run_id=job.correlation_id, source=sid)
                     written += 1
         job.status = "partial" if errors else "success"
         job.listings_seen = seen

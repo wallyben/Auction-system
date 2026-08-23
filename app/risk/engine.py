@@ -19,6 +19,7 @@ class RiskFlag:
 class RiskResult:
     score: Decimal
     flags: list[RiskFlag] = field(default_factory=list)
+    high: bool = False
 
 
 def assess_risk(
@@ -64,6 +65,19 @@ def assess_risk(
     if seller and seller.lower() in {"unknown", ""}:
         flags.append(RiskFlag("unknown_seller", "low", "Seller identity missing."))
         score += Decimal("0.05")
+    if any(word in blob for word in ("cash only", "whatsapp only", "outside ebay", "off platform")):
+        flags.append(RiskFlag("off_platform_payment", "high", "Payment outside platform."))
+        score += Decimal("0.25")
+    if any(word in blob for word in ("serial removed", "serial obscured", "no serial")):
+        flags.append(RiskFlag("serial_obscured", "high", "Serial number hidden."))
+        score += Decimal("0.20")
+    if "stock photo" in blob or "catalogue image" in blob:
+        flags.append(RiskFlag("stock_photos", "medium", "Stock photos only."))
+        score += Decimal("0.12")
+    if asking_eur and asking_eur < Decimal("30") and expected_sale_eur and expected_sale_eur > Decimal("200"):
+        flags.append(RiskFlag("shipping_trap_or_fraud", "high", "Tiny ask vs high expected sale."))
+        score += Decimal("0.20")
+    high = any(flag.severity == "high" for flag in flags)
     if score > Decimal("0.99"):
         score = Decimal("0.99")
-    return RiskResult(score=score, flags=flags)
+    return RiskResult(score=score, flags=flags, high=high)

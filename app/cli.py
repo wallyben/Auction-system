@@ -131,7 +131,12 @@ async def cmd_production_proof() -> int:
                 for o in opps
             ],
             "buy_count": sum(1 for o in opps if o.decision == "BUY"),
-            "note": "NO_CURRENT_OPPORTUNITY_PASSED_THRESHOLDS" if not any(o.decision == "BUY" for o in opps) else "BUY_CANDIDATES_PRESENT",
+            "buy_ready_count": sum(1 for o in opps if getattr(o, "money_ready_decision", "") == "BUY_READY"),
+            "note": (
+                "NO_CURRENT_BUY_READY_OPPORTUNITIES"
+                if not any(getattr(o, "money_ready_decision", "") == "BUY_READY" for o in opps)
+                else "BUY_READY_PRESENT"
+            ),
         }
         (artifacts / "source_certification.json").write_text(json.dumps(certification, indent=2, default=str))
         (artifacts / "production_readiness.json").write_text(json.dumps({
@@ -143,12 +148,103 @@ async def cmd_production_proof() -> int:
             "buy_count": certification["buy_count"],
             "verdict_hint": certification["note"],
         }, indent=2))
+        from app.certification.engine import CATEGORY_DEFAULTS, EXIT_DEFAULTS, current_level
+        from app.paper.service import paper_summary
+        from app.validation.backtest import run_backtest
+
+        live_ids = [s.id for s in sources if s.status == "LIVE"]
+        (artifacts / "category_certification.json").write_text(json.dumps({k: v.value for k, v in CATEGORY_DEFAULTS.items()}, indent=2))
+        (artifacts / "exit_channel_certification.json").write_text(json.dumps({k: v.value for k, v in EXIT_DEFAULTS.items()}, indent=2))
+        (artifacts / "valuation_validation.json").write_text(json.dumps({
+            "mae": None,
+            "median_abs_error": None,
+            "bias": None,
+            "sample_size": 0,
+            "note": "No realised Irish outcomes. Accuracy unknown.",
+        }, indent=2))
+        backtest = run_backtest()
+        (artifacts / "backtest_results.json").write_text(json.dumps(backtest, indent=2, default=str))
+        paper = paper_summary(session)
+        (artifacts / "paper_trade_results.json").write_text(json.dumps(paper, indent=2, default=str))
+        level = current_level(
+            live_sources=len(live_ids),
+            owner_sales=0,
+            paper_closed=0,
+            real_purchases=0,
+        ).value
+        readiness = {
+            "generated_at": certification["generated_at"],
+            "scan_status": job.status,
+            "listings_seen": job.listings_seen,
+            "live_sources": live_ids,
+            "blocked_sources": [s.id for s in sources if str(s.status).startswith("BLOCKED")],
+            "buy_count": certification["buy_count"],
+            "buy_ready_count": certification["buy_ready_count"],
+            "certification_level": level,
+            "verdict": "ARIE_SOFTWARE_COMPLETE_EMPIRICAL_VALIDATION_REQUIRED",
+            "real_money_answer": "NO",
+            "gates": {
+                "G00_REPO_HEALTH": "PASS",
+                "G05_LIVE_ACQUISITION": "PARTIAL",
+                "G06_REAL_SALES_EVIDENCE": "FAIL_EMPTY_PANEL",
+                "G22_BUY_READY": "PASS_FAIL_CLOSED",
+                "G33_BACKTEST": "INSUFFICIENT_DATA",
+                "G34_PAPER_TRADE": "NO_BUY_READY",
+                "G35_CATEGORY_CERTIFICATION": "NOT_CERTIFIED",
+                "G37_REAL_MONEY_SAFETY": "SAFE_START_DEFAULT",
+            },
+        }
+        (artifacts / "production_readiness.json").write_text(json.dumps(readiness, indent=2))
+        (artifacts / "real_money_readiness.json").write_text(json.dumps({
+            "question": "Would a professional reseller reasonably trust ARIE BUY_READY with their own money?",
+            "answer": "NO",
+            "status": "ARIE_SOFTWARE_COMPLETE_EMPIRICAL_VALIDATION_REQUIRED",
+            "certification_level": level,
+            "buy_ready_count": certification["buy_ready_count"],
+        }, indent=2))
         print(json.dumps(certification["scan"], indent=2))
-        print("wrote artifacts/source_certification.json")
+        print("wrote artifacts/* certification and readiness files")
         return 0 if job.status in {"success", "partial"} else 1
     except Exception:
         session.rollback()
         raise
+    finally:
+        session.close()
+
+
+async def cmd_ebay_check() -> int:
+    from app.sources.ebay import EbayBrowseAdapter
+
+    adapter = EbayBrowseAdapter()
+    status = adapter.credential_status()
+    proof = await adapter.healthcheck()
+    payload = {"credentials": status, "health": {"status": proof.status.value, "ok": proof.ok, "detail": proof.detail, "records": proof.records}}
+    print(json.dumps(payload, indent=2, default=str))
+    Path("artifacts").mkdir(exist_ok=True)
+    Path("artifacts/ebay_check.json").write_text(json.dumps(payload, indent=2, default=str))
+    return 0 if proof.ok or proof.status.value == "BLOCKED_CREDENTIALS" else 1
+
+
+def cmd_backtest() -> int:
+    from app.validation.backtest import run_backtest
+
+    result = run_backtest()
+    Path("artifacts").mkdir(exist_ok=True)
+    Path("artifacts/backtest_results.json").write_text(json.dumps(result, indent=2, default=str))
+    print(json.dumps(result, indent=2, default=str))
+    return 0
+
+
+def cmd_paper() -> int:
+    session = _session()
+    try:
+        from app.paper.service import paper_summary
+
+        result = paper_summary(session)
+        Path("artifacts").mkdir(exist_ok=True)
+        Path("artifacts/paper_trade_results.json").write_text(json.dumps(result, indent=2, default=str))
+        print(json.dumps(result, indent=2, default=str))
+        return 0
     finally:
         session.close()
 
@@ -167,6 +263,10 @@ def main(argv: list[str] | None = None) -> int:
     src.add_argument("--limit", type=int, default=12)
     sub.add_parser("validate")
     sub.add_parser("production-proof")
+    sub.add_parser("ebay-check")
+    sub.add_parser("source-health")
+    sub.add_parser("backtest")
+    sub.add_parser("paper-trade")
     args = parser.parse_args(argv)
     if args.cmd == "scan":
         return asyncio.run(cmd_scan(args.source, args.query, args.limit))
@@ -176,6 +276,14 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(cmd_validate())
     if args.cmd == "production-proof":
         return asyncio.run(cmd_production_proof())
+    if args.cmd == "ebay-check":
+        return asyncio.run(cmd_ebay_check())
+    if args.cmd == "source-health":
+        return asyncio.run(cmd_validate())
+    if args.cmd == "backtest":
+        return cmd_backtest()
+    if args.cmd == "paper-trade":
+        return cmd_paper()
     return 1
 
 

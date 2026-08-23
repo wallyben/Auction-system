@@ -27,7 +27,11 @@ a { color: var(--green); }
 .muted { color: var(--muted); font-size: 0.8rem; }
 .warn { color: var(--rust); font-size: 0.85rem; }
 .pill { display: inline-block; padding: 0.1rem 0.45rem; font-size: 0.75rem; letter-spacing: 0.04em; background: #ece4d4; }
-.pill.LIVE, .pill.BUY { background: var(--green); color: #fff; }
+.pill.LIVE, .pill.BUY, .pill.BUY_READY { background: var(--green); color: #fff; }
+.wrap { flex-wrap: wrap; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
+.card { background: var(--panel); border: 1px solid var(--line); padding: 0.9rem; }
+input { font: inherit; padding: 0.35rem 0.45rem; border: 1px solid var(--line); }
 .pill.WATCH, .pill.DEGRADED { background: var(--gold); }
 .pill.IGNORE, .pill.BLOCKED_POLICY, .pill.BLOCKED_CREDENTIALS, .pill.BLOCKED_TECHNICAL { background: var(--rust); color: #fff; }
 .pill.REVIEW { background: #3d4a66; color: #fff; }

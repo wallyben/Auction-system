@@ -12,6 +12,9 @@ from app.core.money import ZERO
 class LiquidityResult:
     score: Decimal
     expected_days_to_sale: int | None
+    expected_days_to_sale_low: int | None
+    expected_days_to_sale_high: int | None
+    liquidity_confidence: Decimal
     quick_sale_discount: Decimal
     slow_sale_risk: Decimal
     notes: str
@@ -46,15 +49,24 @@ def estimate_liquidity(
     if score > Decimal("0.95"):
         score = Decimal("0.95")
     if comparable_count == 0:
-        return LiquidityResult(ZERO, None, Decimal("0.15"), Decimal("0.80"), "No evidence. Days-to-sale unknown.")
+        return LiquidityResult(
+            ZERO, None, None, None, ZERO, Decimal("0.15"), Decimal("0.80"), "No evidence. Days-to-sale unknown."
+        )
     days = 45
+    low, high = 21, 70
     if score >= Decimal("0.70"):
-        days = 14
+        days, low, high = 14, 7, 23
     elif score >= Decimal("0.50"):
-        days = 28
+        days, low, high = 28, 14, 45
+    if realised_count == 0:
+        high = max(high, 60)
+    conf = min(score, Decimal("0.40") if realised_count == 0 else score)
     return LiquidityResult(
         score=score,
         expected_days_to_sale=days,
+        expected_days_to_sale_low=low,
+        expected_days_to_sale_high=high,
+        liquidity_confidence=conf,
         quick_sale_discount=Decimal("0.12"),
         slow_sale_risk=money_risk(score),
         notes="Days-to-sale is a band from evidence density, not a calendar promise.",

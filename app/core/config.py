@@ -35,6 +35,28 @@ class Settings(BaseSettings):
     risk_percent: str = "0.08"
     risk_tolerance: Literal["low", "medium", "high"] = "medium"
 
+    available_capital_eur: str = "5000"
+    max_position_percent: str = "0.25"
+    max_category_exposure: str = "0.40"
+    max_purchase_eur: str = "1500"
+    max_daily_capital_eur: str = "2000"
+    max_weekly_capital_eur: str = "5000"
+    max_single_item_loss_eur: str = "150"
+    min_downside_margin: str = "0"
+    buy_ready_min_identity: str = "0.90"
+    buy_ready_min_condition: str = "0.75"
+    buy_ready_min_valuation: str = "0.80"
+    buy_ready_min_comps: int = 3
+    buy_ready_require_realised: bool = True
+    safe_start_mode: bool = True
+    safe_start_max_purchase_eur: str = "250"
+    safe_start_min_confidence: str = "0.85"
+    owner_override_uncertified: bool = False
+    certified_categories: str = ""
+    certified_exits: str = "ebay_ie,local_ie"
+    alert_on: str = "BUY_READY"
+    labour_eur_per_hour: str = "25"
+
     enabled_sources: str = (
         "reverb,scryfall,csv_import,manual,rss_generic,ecb_fx,ebay_browse"
     )
@@ -43,8 +65,10 @@ class Settings(BaseSettings):
         "collectibles,trading_cards,tools,sporting_goods,hobby,small_business"
     )
     scan_queries: str = (
-        "sol ring,lightning bolt,rhystic study,"
-        "sony a7,canon rf,iphone 14,macbook air,nintendo switch,dewalt 18v"
+        "sony 24-70 gm,sony a7 iv,canon rf 24-70,"
+        "macbook pro 14,iphone 15 pro,playstation 5 slim,"
+        "rtx 4070,pioneer ddj-1000,shure sm7b,"
+        "force of will,rhystic study"
     )
     scan_enabled: bool = True
     fast_marketplace_minutes: int = 15
@@ -107,6 +131,12 @@ class Settings(BaseSettings):
 
     def ebay_marketplace_list(self) -> list[str]:
         return [part.strip() for part in self.ebay_marketplaces.split(",") if part.strip()]
+
+    def certified_category_list(self) -> list[str]:
+        return [part.strip() for part in self.certified_categories.split(",") if part.strip()]
+
+    def certified_exit_list(self) -> list[str]:
+        return [part.strip() for part in self.certified_exits.split(",") if part.strip()]
 
     def d(self, attr: str):
         from decimal import Decimal

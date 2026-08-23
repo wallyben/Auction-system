@@ -1,0 +1,160 @@
+"""Owner historical sales ingest. High evidence weight, reject malformed rows."""
+
+from __future__ import annotations
+
+import csv
+import hashlib
+import io
+from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.identity.resolvers import identify_with_resolvers
+from app.models.orm import OwnerSale, SoldEvidence
+
+REQUIRED = {"product", "sale_price", "sale_date"}
+OPTIONAL = {
+    "brand",
+    "model",
+    "variant",
+    "condition",
+    "purchase_date",
+    "purchase_price",
+    "acquisition_source",
+    "fees",
+    "shipping_in",
+    "refurb_cost",
+    "sale_platform",
+    "listing_price",
+    "platform_fee",
+    "payment_fee",
+    "shipping_out",
+    "return_cost",
+}
+
+
+def _d(value: str | None) -> Decimal:
+    if value is None or str(value).strip() == "":
+        return Decimal("0")
+    try:
+        return Decimal(str(value).replace(",", "").replace("€", "").strip())
+    except InvalidOperation as exc:
+        raise ValueError(f"Invalid money value: {value!r}") from exc
+
+
+def _date(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    raw = value.strip()
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(raw[:10], fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    raise ValueError(f"Unparseable date: {value!r}")
+
+
+def _fp(row: dict[str, str]) -> str:
+    key = "|".join(
+        [
+            (row.get("product") or "").lower(),
+            row.get("sale_date") or "",
+            row.get("sale_price") or "",
+            row.get("sale_platform") or "",
+        ]
+    )
+    return hashlib.sha256(key.encode()).hexdigest()
+
+
+def parse_owner_sales_csv(text: str) -> tuple[list[dict[str, str]], list[str]]:
+    if not text or not text.strip():
+        return [], ["Empty file"]
+    if "\x00" in text:
+        return [], ["Binary/NUL content rejected"]
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames:
+        return [], ["CSV has no header row"]
+    headers = {name.strip().lower().replace(" ", "_") for name in reader.fieldnames if name}
+    missing = REQUIRED - headers
+    if missing:
+        return [], [f"Missing required columns: {sorted(missing)}"]
+    rows: list[dict[str, str]] = []
+    errors: list[str] = []
+    for i, raw in enumerate(reader, start=2):
+        row = {(k or "").strip().lower().replace(" ", "_"): (v or "").strip() for k, v in raw.items()}
+        try:
+            if not row.get("product"):
+                raise ValueError("product is blank")
+            price = _d(row.get("sale_price"))
+            if price <= 0:
+                raise ValueError("sale_price must be positive")
+            sale_date = _date(row.get("sale_date"))
+            if sale_date is None:
+                raise ValueError("sale_date required")
+            _d(row.get("purchase_price") or "0")
+            rows.append(row)
+        except ValueError as exc:
+            errors.append(f"row {i}: {exc}")
+    return rows, errors
+
+
+def import_owner_sales(session: Session, text: str) -> dict[str, int | list[str]]:
+    rows, errors = parse_owner_sales_csv(text)
+    written = 0
+    skipped = 0
+    for row in rows:
+        fp = _fp(row)
+        existing = session.scalar(select(OwnerSale).where(OwnerSale.fingerprint == fp))
+        if existing:
+            skipped += 1
+            continue
+        identity = identify_with_resolvers(
+            title=row["product"],
+            brand_hint=row.get("brand"),
+            model_hint=row.get("model"),
+            category=None,
+        )
+        sale = OwnerSale(
+            canonical_key=identity.canonical_key,
+            product=row["product"],
+            brand=row.get("brand") or identity.brand,
+            model=row.get("model") or identity.model,
+            variant=row.get("variant") or identity.variant,
+            condition=row.get("condition") or "unknown",
+            purchase_date=_date(row.get("purchase_date")),
+            purchase_price=_d(row.get("purchase_price")) if row.get("purchase_price") else None,
+            acquisition_source=row.get("acquisition_source"),
+            fees=_d(row.get("fees")),
+            shipping_in=_d(row.get("shipping_in")),
+            refurb_cost=_d(row.get("refurb_cost")),
+            sale_platform=row.get("sale_platform"),
+            listing_price=_d(row.get("listing_price")) if row.get("listing_price") else None,
+            sale_price=_d(row["sale_price"]),
+            platform_fee=_d(row.get("platform_fee")),
+            payment_fee=_d(row.get("payment_fee")),
+            shipping_out=_d(row.get("shipping_out")),
+            return_cost=_d(row.get("return_cost")),
+            sale_date=_date(row["sale_date"]) or datetime.now(timezone.utc),
+            fingerprint=fp,
+            raw=row,
+        )
+        session.add(sale)
+        session.add(
+            SoldEvidence(
+                canonical_product_id=identity.canonical_key,
+                condition=sale.condition,
+                channel=sale.sale_platform or "owner",
+                territory="IE",
+                sold_price=sale.sale_price,
+                sold_date=sale.sale_date,
+                source="owner_recorded",
+                evidence_quality="high",
+                url_or_reference=None,
+                fingerprint=fp,
+            )
+        )
+        written += 1
+    session.flush()
+    return {"imported": written, "duplicates": skipped, "rejected": len(errors), "errors": errors}

@@ -18,7 +18,11 @@ logger = get_logger("arie.notifications")
 def _should_notify(opp: Opportunity) -> bool:
     if opp.ignored or opp.purchased:
         return False
-    return opp.decision in {Decision.BUY.value, "BUY"}
+    wanted = (settings.alert_on or "BUY_READY").upper()
+    money = getattr(opp, "money_ready_decision", None) or ""
+    if wanted == "BUY_READY":
+        return bool(getattr(opp, "money_ready", False) or money == "BUY_READY")
+    return opp.decision in {Decision.BUY.value, "BUY"} or money == wanted
 
 
 def notify_opportunity(session: Session, opp: Opportunity) -> None:

@@ -76,6 +76,7 @@ def compute_landed_cost(
     target_margin_percent: Decimal = Decimal("0.15"),
     risk_percent: Decimal = Decimal("0.08"),
     listing_type: str = "fixed",
+    outbound_shipping: Decimal | None = None,
 ) -> LandedCost:
     """Build a full Irish landed-cost stack. Auction subset uses the existing engine."""
     purchase_eur = money(purchase_price * currency_to_eur)
@@ -123,7 +124,7 @@ def compute_landed_cost(
     )
     platform_fee = money(expected_resale_eur * platform_fee_rate * (Decimal("1") + platform_fee_vat))
     pay_out = _fee(expected_resale_eur, payment_fee_rate, payment_fee_fixed)
-    outbound = Decimal("9.50")
+    outbound = money(outbound_shipping if outbound_shipping is not None else Decimal("9.50"))
     returns = money(expected_resale_eur * returns_allowance)
     warranty = money(expected_resale_eur * warranty_allowance)
     lines.extend(

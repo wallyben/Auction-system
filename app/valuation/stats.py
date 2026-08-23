@@ -73,3 +73,25 @@ def recency_weight(age_days: int) -> Decimal:
     if age_days <= 180:
         return Decimal("0.30")
     return Decimal("0.10")
+
+
+def percentile(values: list[Decimal], p: Decimal) -> Decimal:
+    if not values:
+        raise ValueError("percentile requires values")
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    idx = (len(ordered) - 1) * p
+    lo = int(idx)
+    hi = min(lo + 1, len(ordered) - 1)
+    frac = idx - lo
+    return money(ordered[lo] + (ordered[hi] - ordered[lo]) * frac)
+
+
+def display_money(value: Decimal, *, confidence: Decimal) -> Decimal:
+    """Do not print false precision when evidence is thin."""
+    if confidence < Decimal("0.40"):
+        return money(value).quantize(Decimal("10"))
+    if confidence < Decimal("0.70"):
+        return money(value).quantize(Decimal("1"))
+    return money(value)

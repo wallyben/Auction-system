@@ -12,6 +12,7 @@ class SourceStatus(str, enum.Enum):
     BLOCKED_POLICY = "BLOCKED_POLICY"
     BLOCKED_TECHNICAL = "BLOCKED_TECHNICAL"
     DISABLED = "DISABLED"
+    COMMERCIAL_DATA_QUALITY = "COMMERCIAL_DATA_QUALITY"
 
 
 class SourceKind(str, enum.Enum):
@@ -51,6 +52,65 @@ class Decision(str, enum.Enum):
     REVIEW = "REVIEW"
 
 
+class MoneyReadyDecision(str, enum.Enum):
+    BUY_READY = "BUY_READY"
+    WATCH = "WATCH"
+    REVIEW = "REVIEW"
+    IGNORE = "IGNORE"
+
+
+class CertificationLevel(str, enum.Enum):
+    LEVEL_0_ENGINEERING = "LEVEL_0_ENGINEERING"
+    LEVEL_1_LIVE_DATA = "LEVEL_1_LIVE_DATA"
+    LEVEL_2_MARKET_VALIDATED = "LEVEL_2_MARKET_VALIDATED"
+    LEVEL_3_PAPER_TRADE = "LEVEL_3_PAPER_TRADE"
+    LEVEL_4_SMALL_MONEY = "LEVEL_4_SMALL_MONEY"
+    LEVEL_5_REAL_MONEY = "LEVEL_5_REAL_MONEY"
+
+
+class CategoryCert(str, enum.Enum):
+    CERTIFIED = "CERTIFIED"
+    NOT_CERTIFIED = "NOT_CERTIFIED"
+
+
+class CommercialQuality(str, enum.Enum):
+    HIGH = "HIGH"
+    MEDIUM = "MEDIUM"
+    LOW = "LOW"
+    UNKNOWN = "UNKNOWN"
+
+
+class ObservationClass(str, enum.Enum):
+    LIKELY_SOLD = "LIKELY_SOLD"
+    EXPIRED = "EXPIRED"
+    REMOVED = "REMOVED"
+    UNKNOWN = "UNKNOWN"
+    ACTIVE = "ACTIVE"
+
+
+class LossClass(str, enum.Enum):
+    VALUATION_ERROR = "valuation_error"
+    IDENTITY_ERROR = "identity_error"
+    CONDITION_ERROR = "condition_error"
+    HIDDEN_COST = "hidden_cost"
+    SHIPPING_ERROR = "shipping_error"
+    FEE_ERROR = "fee_error"
+    TAX_ERROR = "tax_error"
+    LIQUIDITY_ERROR = "liquidity_error"
+    MARKET_PRICE_DROP = "market_price_drop"
+    FRAUD = "fraud"
+    RETURN = "return"
+    OWNER_OVERBID = "owner_overbid"
+    OTHER = "other"
+
+
+class Urgency(str, enum.Enum):
+    ACT_NOW = "act_now"
+    WATCH = "watch"
+    BID_LATER = "bid_later"
+    IGNORE = "ignore"
+
+
 class IdentityLevel(str, enum.Enum):
     EXACT = "exact"
     VARIANT = "variant"
@@ -70,7 +130,10 @@ class ScanStatus(str, enum.Enum):
 class InventoryState(str, enum.Enum):
     WATCHING = "watching"
     PURCHASED = "purchased"
+    IN_TRANSIT = "in_transit"
     RECEIVED = "received"
+    REPAIR = "repair"
+    READY_TO_LIST = "ready_to_list"
     REFURBISHED = "refurbished"
     LISTED = "listed"
     SOLD = "sold"

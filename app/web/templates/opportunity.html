@@ -7,7 +7,8 @@
 {% else %}
 <article class="detail">
   <header>
-    <span class="pill {{ opportunity.decision }}">{{ opportunity.decision }}</span>
+    <span class="pill {{ opportunity.money_ready_decision }}">{{ opportunity.money_ready_decision }}</span>
+    <span class="pill {{ opportunity.engine_decision or opportunity.decision }}">engine {{ opportunity.engine_decision or opportunity.decision }}</span>
     <h1>{{ opportunity.listing.title if opportunity.listing else "Unknown listing" }}</h1>
     <p class="meta">
       Source {{ opportunity.listing.source_id if opportunity.listing else "" }} ·
@@ -27,15 +28,18 @@
   {% endif %}
 
   <section class="numbers">
-    <div><span>Asking / current</span><strong>{% if opportunity.listing %}{{ opportunity.listing.currency }} {{ '%.2f'|format(opportunity.listing.asking_price or 0) }}{% endif %}</strong></div>
-    <div><span>All-in acquisition</span><strong>€{{ '%.2f'|format(opportunity.all_in_acquisition_eur) }}</strong></div>
-    <div><span>Ireland expected resale</span><strong>€{{ '%.2f'|format(opportunity.expected_resale_eur) }}</strong></div>
-    <div><span>Expected net proceeds</span><strong>€{{ '%.2f'|format(opportunity.expected_net_resale_eur) }}</strong></div>
-    <div><span>Expected profit</span><strong>€{{ '%.2f'|format(opportunity.expected_profit_eur) }}</strong></div>
-    <div><span>Downside profit</span><strong>€{{ '%.2f'|format(opportunity.downside_profit_eur) }}</strong></div>
-    <div><span>ROI</span><strong>{{ '%.1f'|format(opportunity.expected_roi * 100) }}%</strong></div>
-    <div class="emphasis"><span>MAX SAFE PURCHASE</span><strong>€{{ '%.2f'|format(opportunity.max_buy_eur) }}</strong></div>
-    <div><span>Days to sale (est.)</span><strong>{{ opportunity.expected_days_to_sale }}</strong></div>
+    <div><span>Asking / current</span><strong>{% if opportunity.listing %}{{ opportunity.listing.currency }} {{ '%.0f'|format(opportunity.listing.asking_price or 0) }}{% endif %}</strong></div>
+    <div><span>Ideal offer</span><strong>€{{ '%.0f'|format(opportunity.ideal_offer_eur or 0) }}</strong></div>
+    <div class="emphasis"><span>MAX SAFE PURCHASE</span><strong>€{{ '%.0f'|format(opportunity.max_buy_eur) }}</strong></div>
+    <div><span>Expected sale (range)</span><strong>€{{ '%.0f'|format(opportunity.expected_resale_eur) }}</strong></div>
+    <div><span>Expected net</span><strong>€{{ '%.0f'|format(opportunity.expected_net_resale_eur) }}</strong></div>
+    <div><span>Expected profit</span><strong>€{{ '%.0f'|format(opportunity.expected_profit_eur) }}</strong></div>
+    <div><span>Downside</span><strong>€{{ '%.0f'|format(opportunity.downside_profit_eur) }}</strong></div>
+    <div><span>Expected value</span><strong>€{{ '%.0f'|format(opportunity.expected_value_eur or 0) }}</strong></div>
+    <div><span>ROI</span><strong>{{ '%.0f'|format(opportunity.expected_roi * 100) }}%</strong></div>
+    <div><span>Best exit</span><strong>{{ opportunity.best_exit_channel }}</strong></div>
+    <div><span>Days (band)</span><strong>{{ opportunity.expected_days_to_sale }}</strong></div>
+    <div><span>Urgency</span><strong>{{ opportunity.urgency }}</strong></div>
   </section>
 
   <section>
@@ -90,9 +94,32 @@
     <pre class="json">{{ opportunity.risks | tojson(indent=2) }}</pre>
   </section>
 
+  <section>
+    <h2>Money-ready gates</h2>
+    <pre class="json">{{ opportunity.gate_results | tojson(indent=2) }}</pre>
+  </section>
+  <section>
+    <h2>Exit channels</h2>
+    <pre class="json">{{ opportunity.exit_analysis | tojson(indent=2) }}</pre>
+  </section>
+  <section>
+    <h2>Negotiation</h2>
+    <pre class="json">{{ opportunity.negotiation | tojson(indent=2) }}</pre>
+  </section>
+  <section>
+    <h2>Provenance</h2>
+    <pre class="json">{{ opportunity.provenance_pack | tojson(indent=2) }}</pre>
+  </section>
   <section class="actions">
     <form method="post" action="/opportunities/{{ opportunity.id }}/ignore"><button>Ignore</button></form>
     <form method="post" action="/opportunities/{{ opportunity.id }}/watch"><button>Watch</button></form>
+    <form method="post" action="/opportunities/{{ opportunity.id }}/purchase">
+      <input name="actual_purchase_price" placeholder="paid €" required>
+      <input name="actual_shipping" placeholder="ship €">
+      <input name="actual_buyer_fee" placeholder="buyer fee €">
+      <input name="notes" placeholder="notes">
+      <button class="primary">Mark purchased</button>
+    </form>
   </section>
 </article>
 {% endif %}
