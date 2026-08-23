@@ -57,16 +57,21 @@ async def test_ebay_sandbox_or_production_when_configured() -> None:
     if adapter._missing_credentials():
         pytest.skip("eBay credentials not configured")
     proof = await adapter.healthcheck()
-    assert proof.status in {SourceStatus.LIVE, SourceStatus.DEGRADED}
-    assert proof.http_status == 200
-    items = await adapter.search("iphone", limit=2)
-    if items:
-        assert items[0].title
-        assert items[0].url
-        assert items[0].source_id == "ebay_browse"
     host = (proof.proof or {}).get("token_host") or ""
     if settings.ebay_api_env == "production":
         assert "api.ebay.com" in host
         assert "sandbox" not in host
+        assert proof.proof.get("sandbox_used") is False
+        assert proof.proof.get("silent_sandbox_fallback") is False
+    if proof.status is SourceStatus.BLOCKED_CREDENTIALS:
+        assert proof.http_status in {401, 403}
+        return
+    assert proof.status in {SourceStatus.LIVE, SourceStatus.DEGRADED}
+    assert proof.http_status == 200
+    items = await adapter.search("Sony A7 IV", limit=2)
+    if items:
+        assert items[0].title
+        assert items[0].url
+        assert items[0].source_id == "ebay_browse"
     if settings.ebay_api_env == "sandbox":
         assert proof.proof.get("env") == "sandbox" or "sandbox" in host

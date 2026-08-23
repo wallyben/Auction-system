@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-08-23T18:21:07.418624+00:00",
+  "generated_at": "2026-08-23T19:10:08.988813+00:00",
   "scan_status": "partial",
-  "listings_seen": 24,
+  "listings_seen": 0,
   "live_sources": [
     "csv_import",
     "ecb_fx",
@@ -35,13 +35,21 @@
   "certification_level": "LEVEL_1_LIVE_DATA",
   "verdict": "ARIE_SOFTWARE_COMPLETE_EMPIRICAL_VALIDATION_REQUIRED",
   "real_money_answer": "NO",
+  "ebay_production_live": false,
+  "test_inventory_loop": {
+    "label": "TEST_TRANSACTION",
+    "inventory_id": "eb760ff1-a7c4-4c22-960a-ef967a02f2cf",
+    "sale_id": "6e4d3d5d-6b56-4b61-994f-c216ac0193bc",
+    "state": "sold",
+    "note": "Synthetic loop for software proof. Not a real owner buy/sell."
+  },
   "gates": {
     "G00_REPO_HEALTH": "PASS",
-    "G05_LIVE_ACQUISITION": "PARTIAL",
+    "G05_LIVE_ACQUISITION": "FAIL_PRODUCTION_OAUTH",
     "G06_REAL_SALES_EVIDENCE": "FAIL_EMPTY_PANEL",
     "G22_BUY_READY": "PASS_FAIL_CLOSED",
     "G33_BACKTEST": "INSUFFICIENT_DATA",
-    "G34_PAPER_TRADE": "NO_BUY_READY",
+    "G34_PAPER_TRADE": "NO_POSITIONS",
     "G35_CATEGORY_CERTIFICATION": "NOT_CERTIFIED",
     "G37_REAL_MONEY_SAFETY": "SAFE_START_DEFAULT"
   }

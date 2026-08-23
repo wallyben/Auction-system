@@ -12,19 +12,18 @@
       "EBAY_ES",
       "EBAY_NL"
     ],
-    "docs": "https://developer.ebay.com/api-docs/static/oauth-client-credentials-grant.html",
-    "setup": [
-      "Create an app at https://developer.ebay.com/my/keys",
-      "Enable the Buy Browse API",
-      "Set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET in .env",
-      "Optionally set EBAY_ENV=sandbox and EBAY_MARKETPLACES",
-      "Run: make ebay-check"
-    ]
+    "docs": "https://developer.ebay.com/api-docs/static/oauth-client-credentials-grant.html"
   },
   "health": {
     "status": "BLOCKED_CREDENTIALS",
     "ok": false,
-    "detail": "HTTP 401 for https://api.ebay.com/identity/v1/oauth2/token: {\"error\":\"invalid_client\",\"error_description\":\"client authentication failed\"}",
-    "records": 0
+    "detail": "{\"error\":\"invalid_client\",\"error_description\":\"client authentication failed\"}",
+    "records": 0,
+    "http_status": 401,
+    "proof_hosts": {
+      "token_host": "https://api.ebay.com/identity/v1/oauth2/token",
+      "search_host": "https://api.ebay.com/buy/browse/v1/item_summary/search",
+      "sandbox_used": false
+    }
   }
 }

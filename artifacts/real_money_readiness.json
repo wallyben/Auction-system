@@ -1,8 +1,8 @@
 {
-  "question": "Would a professional reseller reasonably trust ARIE BUY_READY with their own money?",
+  "question": "Would I put my own money into ARIE's current BUY_READY output?",
   "answer": "NO",
   "status": "ARIE_SOFTWARE_COMPLETE_EMPIRICAL_VALIDATION_REQUIRED",
   "certification_level": "LEVEL_1_LIVE_DATA",
   "buy_ready_count": 0,
-  "ebay": "LIVE_SANDBOX_NOT_MONEY_READY"
+  "why": "No BUY_READY rows. Production eBay OAuth is not LIVE. Realised Irish sold panel is empty. Categories are not certified."
 }
