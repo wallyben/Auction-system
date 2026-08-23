@@ -46,3 +46,24 @@ async def test_scryfall_returns_cardmarket_guide() -> None:
     items = await adapter.search("sol ring", limit=1)
     assert items
     assert items[0].title
+
+
+@pytest.mark.asyncio
+async def test_ebay_sandbox_or_production_when_configured() -> None:
+    from app.core.config import settings
+    from app.sources.ebay import EbayBrowseAdapter
+
+    adapter = EbayBrowseAdapter()
+    if adapter._missing_credentials():
+        pytest.skip("eBay credentials not configured")
+    proof = await adapter.healthcheck()
+    assert proof.status in {SourceStatus.LIVE, SourceStatus.DEGRADED}
+    assert proof.http_status == 200
+    items = await adapter.search("iphone", limit=2)
+    if items:
+        assert items[0].title
+        assert items[0].url
+        assert items[0].source_id == "ebay_browse"
+    # Sandbox dummy inventory must never be treated as production sold evidence.
+    if settings.ebay_api_env == "sandbox":
+        assert proof.proof.get("env") == "sandbox"

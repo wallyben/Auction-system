@@ -1,7 +1,8 @@
 {
   "credentials": {
-    "configured": false,
-    "env": "production",
+    "configured": true,
+    "env": "sandbox",
+    "configured_ebay_env": "sandbox",
     "marketplaces": [
       "EBAY_IE",
       "EBAY_GB",
@@ -21,9 +22,9 @@
     ]
   },
   "health": {
-    "status": "BLOCKED_CREDENTIALS",
-    "ok": false,
-    "detail": "EBAY_CLIENT_ID / EBAY_CLIENT_SECRET not configured. Create an app at developer.ebay.com.",
-    "records": 0
+    "status": "LIVE",
+    "ok": true,
+    "detail": "Browse search succeeded across configured marketplaces.",
+    "records": 3
   }
 }

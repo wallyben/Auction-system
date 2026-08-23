@@ -85,6 +85,15 @@ class Settings(BaseSettings):
     ebay_env: Literal["production", "sandbox"] = "production"
     ebay_marketplaces: str = "EBAY_IE,EBAY_GB,EBAY_DE,EBAY_FR,EBAY_IT,EBAY_ES,EBAY_NL"
 
+    @property
+    def ebay_api_env(self) -> Literal["production", "sandbox"]:
+        """Use sandbox hosts when the keyset is SBX, even if EBAY_ENV was left at production."""
+        cid = (self.ebay_client_id or "").upper()
+        secret = (self.ebay_client_secret or "").upper()
+        if "SBX" in cid or secret.startswith("SBX-"):
+            return "sandbox"
+        return self.ebay_env
+
     reverb_token: str = ""
     discogs_token: str = ""
     discord_webhook_url: str = ""

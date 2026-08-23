@@ -3,5 +3,6 @@
   "answer": "NO",
   "status": "ARIE_SOFTWARE_COMPLETE_EMPIRICAL_VALIDATION_REQUIRED",
   "certification_level": "LEVEL_1_LIVE_DATA",
-  "buy_ready_count": 0
+  "buy_ready_count": 0,
+  "ebay": "LIVE_SANDBOX_NOT_MONEY_READY"
 }

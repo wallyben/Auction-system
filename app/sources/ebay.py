@@ -52,7 +52,8 @@ class EbayBrowseAdapter(SourceAdapter):
     def credential_status(self) -> dict[str, object]:
         return {
             "configured": not self._missing_credentials(),
-            "env": settings.ebay_env,
+            "env": settings.ebay_api_env,
+            "configured_ebay_env": settings.ebay_env,
             "marketplaces": settings.ebay_marketplace_list(),
             "docs": "https://developer.ebay.com/api-docs/static/oauth-client-credentials-grant.html",
             "setup": [
@@ -77,7 +78,7 @@ class EbayBrowseAdapter(SourceAdapter):
             )
         started = time.perf_counter()
         try:
-            listings = await self.search("sony a7", limit=2, marketplaces=settings.ebay_marketplace_list()[:2])
+            listings = await self.search("iphone", limit=3)
             return HealthProof(
                 status=SourceStatus.LIVE if listings else SourceStatus.DEGRADED,
                 ok=bool(listings),
@@ -113,7 +114,7 @@ class EbayBrowseAdapter(SourceAdapter):
             _, payload = await request_json(
                 client,
                 "POST",
-                TOKEN_URL[settings.ebay_env],
+                TOKEN_URL[settings.ebay_api_env],
                 headers={
                     "Authorization": f"Basic {basic}",
                     "Content-Type": "application/x-www-form-urlencoded",
@@ -134,6 +135,9 @@ class EbayBrowseAdapter(SourceAdapter):
         if self._missing_credentials():
             return []
         markets = marketplaces or settings.ebay_marketplace_list()
+        if settings.ebay_api_env == "sandbox" and "EBAY_US" not in markets:
+            # Sandbox catalogue is mostly US dummy inventory; keep owner markets first.
+            markets = list(markets) + ["EBAY_US"]
         out: list[NormalizedListing] = []
         remaining = min(limit, 80)
         per_market = max(1, remaining // max(1, len(markets)))
@@ -157,7 +161,7 @@ class EbayBrowseAdapter(SourceAdapter):
                     _, payload = await request_json(
                         client,
                         "GET",
-                        SEARCH_URL[settings.ebay_env],
+                        SEARCH_URL[settings.ebay_api_env],
                         headers=headers,
                         params={"q": query, "limit": str(page), "offset": str(offset)},
                     )
@@ -183,7 +187,7 @@ class EbayBrowseAdapter(SourceAdapter):
             _, payload = await request_json(
                 client,
                 "GET",
-                ITEM_URL[settings.ebay_env] + external_id,
+                ITEM_URL[settings.ebay_api_env] + external_id,
                 headers=headers,
             )
         return self._normalize(payload, settings.ebay_marketplace_list()[0], full=True)
@@ -258,7 +262,12 @@ class EbayBrowseAdapter(SourceAdapter):
                 "legacyItemId": item.get("legacyItemId"),
                 "itemSpecifics": specifics,
                 "full_item": full,
-                "note": "Active listings are asking prices, not realised sales.",
+                "sandbox": settings.ebay_api_env == "sandbox",
+                "note": (
+                    "SANDBOX dummy listing. Not a real-money acquisition."
+                    if settings.ebay_api_env == "sandbox"
+                    else "Active listings are asking prices, not realised sales."
+                ),
             },
             raw=item,
             source_confidence=Decimal("0.90"),

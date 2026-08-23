@@ -6,7 +6,7 @@ Investigated in official-API → feed → owner-import order. No CAPTCHA/auth/To
 |---|---|---|---|
 | Scryfall | Public JSON | LIVE comparable | — |
 | ECB FX | Public XML | LIVE | — |
-| eBay Browse | OAuth client credentials | Adapter complete; BLOCKED_CREDENTIALS without keys | `make ebay-check` |
+| eBay Browse | OAuth client credentials | **LIVE (sandbox)** with owner SBX keys 2026-08-23. Token + Browse search 200. Dummy inventory only. `PRODUCTION_SOURCE_PASS` blocks BUY_READY. Production keys not supplied. | Production App ID when ready; no code change |
 | Reverb | Public JSON | BLOCKED_TECHNICAL 403 from this IP | Owner token / residential browser export |
 | CSV / manual / URL (allow-list) | n/a | LIVE | — |
 | Owner sales / marketplace export | n/a | LIVE parsers | — |

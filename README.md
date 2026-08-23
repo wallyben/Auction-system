@@ -15,7 +15,7 @@ It is not a toy dashboard. It is a decision engine that fails closed when eviden
 | Continuous APScheduler scans | Working when `SCAN_ENABLED=true` |
 | Scryfall + ECB FX | **LIVE** (real HTTP in this environment) |
 | Reverb public listings | **BLOCKED_TECHNICAL** (HTTP 403 from this host) |
-| eBay Browse | **BLOCKED_CREDENTIALS** until you add app keys |
+| eBay Browse | **LIVE (sandbox)** with owner SBX keys — dummy listings only, cannot be BUY_READY |
 | DoneDeal, Adverts.ie, auction houses, CeX | **BLOCKED_POLICY** — no scraping |
 | CSV / manual capture | LIVE fallback |
 | Asking prices labelled as realised Irish sales | Never |

@@ -78,6 +78,10 @@ def seed_sources(session: Session) -> None:
     existing = {row.id for row in session.scalars(select(Source)).all()}
     for adapter in all_adapters():
         if adapter.source_id in existing:
+            if adapter.source_id == "ebay_browse":
+                row = session.get(Source, adapter.source_id)
+                if row is not None:
+                    row.commercial_quality = "LOW" if settings.ebay_api_env == "sandbox" else row.commercial_quality
             continue
         session.add(
             Source(
@@ -93,7 +97,12 @@ def seed_sources(session: Session) -> None:
                 cadence_minutes=adapter.cadence_minutes,
                 enabled=adapter.source_id in settings.source_ids()
                 or adapter.source_id in {"csv_import", "manual", "ecb_fx"},
-                commercial_quality="LOW" if adapter.source_id == "scryfall" else "UNKNOWN",
+                commercial_quality=(
+                    "LOW"
+                    if adapter.source_id == "scryfall"
+                    or (adapter.source_id == "ebay_browse" and settings.ebay_api_env == "sandbox")
+                    else "UNKNOWN"
+                ),
             )
         )
     session.flush()
@@ -501,6 +510,7 @@ def evaluate_listing(
         source_fresh=age_hours <= 36,
         tax_modelled=True,
         listing_type=listing.listing_type,
+        sandbox_source=settings.ebay_api_env == "sandbox" and listing.source_id == "ebay_browse",
     )
     ev = expected_value(
         base_profit=costs.expected_profit_eur,

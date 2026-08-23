@@ -74,6 +74,24 @@ def test_no_realised_comp_forces_review() -> None:
     assert result.money_ready_decision == MoneyReadyDecision.REVIEW
 
 
+def test_sandbox_source_cannot_be_buy_ready(monkeypatch) -> None:
+    from app.decision import gates as gates_mod
+
+    monkeypatch.setattr(gates_mod.settings, "safe_start_mode", True)
+    monkeypatch.setattr(gates_mod.settings, "safe_start_max_purchase_eur", "250")
+    result = _gates(
+        asking=Decimal("200"),
+        purchase_price=Decimal("200"),
+        all_in_cost=Decimal("220"),
+        expected_profit=Decimal("80"),
+        net_proceeds=Decimal("300"),
+        downside_profit=Decimal("10"),
+        sandbox_source=True,
+    )
+    assert result.money_ready is False
+    assert "PRODUCTION_SOURCE_PASS" in result.failures
+
+
 def test_high_risk_blocks_buy_ready() -> None:
     result = _gates(high_risk=True, risk_score=Decimal("0.80"), asking=Decimal("200"), purchase_price=Decimal("200"), all_in_cost=Decimal("220"))
     assert result.money_ready is False

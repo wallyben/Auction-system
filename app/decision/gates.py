@@ -27,6 +27,7 @@ GATES = (
     "DATA_PROVENANCE_PASS",
     "CATEGORY_CERT_PASS",
     "SAFE_START_PASS",
+    "PRODUCTION_SOURCE_PASS",
 )
 
 
@@ -70,6 +71,7 @@ def apply_money_ready_gates(
     source_fresh: bool,
     tax_modelled: bool,
     listing_type: str = "fixed",
+    sandbox_source: bool = False,
 ) -> GateResult:
     min_id = as_decimal(settings.buy_ready_min_identity)
     min_cond = as_decimal(settings.buy_ready_min_condition)
@@ -116,6 +118,7 @@ def apply_money_ready_gates(
         and valuation_confidence >= safe_conf
         and downside_profit >= ZERO
     )
+    gates["PRODUCTION_SOURCE_PASS"] = not sandbox_source
     failures = [name for name, ok in gates.items() if not ok]
     money_ready = False
     action = MoneyReadyDecision.REVIEW
