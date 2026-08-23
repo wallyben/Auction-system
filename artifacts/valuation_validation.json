@@ -1,0 +1,20 @@
+{
+  "generated_at": "2026-08-23T17:49:14Z",
+  "home_market": "IE",
+  "currency": "EUR",
+  "method": "weighted_median_with_mad_outliers_and_asking_haircut",
+  "sample": {
+    "title": "Sol Ring",
+    "source": "scryfall",
+    "url": "https://scryfall.com/card",
+    "asking_eur": "1.53",
+    "expected_sale_eur": "1.38",
+    "confidence": "0.25",
+    "realised_count": 0,
+    "evidence": "dealer_retail Cardmarket EUR via Scryfall",
+    "note": "Not an Irish realised sale. Haircut applied. Confidence capped because asking/dealer only."
+  },
+  "mae": null,
+  "mape": null,
+  "disclaimer": "No Irish realised-sale panel exists in this run, so accuracy vs local sold prices cannot be claimed."
+}

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}What should I buy today? · ARIE{% endblock %}
+{% block body %}
+<section class="hero">
+  <h1>What should I buy today?</h1>
+  <p>Ranked by expected economic value after every modelled cost and risk. BUY is only issued when thresholds and evidence both pass. If the feed is empty of BUY, that is a valid commercial result.</p>
+</section>
+
+<section class="controls">
+  <form method="post" action="/scan-now">
+    <button type="submit" class="primary">Scan all sources now</button>
+  </form>
+  <p class="meta">Home {{ settings.home_country }} · {{ settings.base_currency }} · min profit €{{ settings.min_profit_eur }} · min ROI {{ settings.min_roi }} · min confidence {{ settings.min_confidence }}</p>
+</section>
+
+<section>
+  <h2>Source health</h2>
+  <table>
+    <thead>
+      <tr><th>Source</th><th>Status</th><th>Kind</th><th>Last success</th><th>Records</th><th>Error</th></tr>
+    </thead>
+    <tbody>
+      {% for s in sources %}
+      <tr>
+        <td>{{ s.display_name }} <span class="muted">{{ s.id }}</span></td>
+        <td><span class="pill {{ s.status }}">{{ s.status }}</span></td>
+        <td>{{ s.kind }}</td>
+        <td>{{ s.last_success_at or "—" }}</td>
+        <td>{{ s.records_ingested }}</td>
+        <td class="warn">{{ s.last_error or "" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Recent scans</h2>
+  <ul class="scans">
+    {% for j in jobs %}
+    <li><strong>{{ j.status }}</strong> {{ j.trigger }} · {{ j.created_at }} · listings {{ j.listings_seen }} · opportunities {{ j.opportunities_written }} {% if j.error %}<span class="warn">{{ j.error }}</span>{% endif %}</li>
+    {% else %}
+    <li>No scans yet. Click Scan all sources now.</li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section>
+  <h2>Opportunity feed</h2>
+  <p class="meta">{{ opportunities|length }} persisted opportunities (ignored hidden). Open a row for provenance.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Decision</th><th>Item</th><th>Source</th><th>Ask</th><th>All-in</th>
+        <th>IE expected</th><th>Profit</th><th>ROI</th><th>Days</th><th>Conf</th><th>Max buy</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for o in opportunities %}
+      <tr>
+        <td><a href="/opportunities/{{ o.id }}/view"><span class="pill {{ o.decision }}">{{ o.decision }}</span></a></td>
+        <td><a href="/opportunities/{{ o.id }}/view">{{ (o.listing.title if o.listing else "")[:90] }}</a></td>
+        <td>{{ o.listing.source_id if o.listing else "" }}</td>
+        <td>{% if o.listing %}{{ o.listing.currency }} {{ '%.2f'|format(o.listing.asking_price or 0) }}{% endif %}</td>
+        <td>€{{ '%.2f'|format(o.all_in_acquisition_eur) }}</td>
+        <td>€{{ '%.2f'|format(o.expected_resale_eur) }}</td>
+        <td>€{{ '%.2f'|format(o.expected_profit_eur) }}</td>
+        <td>{{ '%.1f'|format(o.expected_roi * 100) }}%</td>
+        <td>{{ o.expected_days_to_sale }}</td>
+        <td>{{ '%.0f'|format(o.valuation_confidence * 100) }}%</td>
+        <td>€{{ '%.2f'|format(o.max_buy_eur) }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="11">No opportunities stored. Run a scan.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

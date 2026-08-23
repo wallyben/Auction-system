@@ -18,7 +18,12 @@ def get_engine() -> Engine:
     """Create and cache a SQLAlchemy engine."""
     global _engine
     if _engine is None:
-        _engine = create_engine(settings.database_url_required, pool_pre_ping=True)
+        _engine = create_engine(
+            settings.database_url_required,
+            pool_pre_ping=True,
+            pool_size=8,
+            max_overflow=8,
+        )
     return _engine
 
 
@@ -41,5 +46,9 @@ def get_db_session() -> Generator[Session, None, None]:
     session = get_session_factory()()
     try:
         yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
     finally:
         session.close()

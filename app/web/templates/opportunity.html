@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{{ (opportunity.listing.title if opportunity and opportunity.listing else "Opportunity")[:60] }} · ARIE{% endblock %}
+{% block body %}
+<p class="crumb"><a href="/">← Opportunity feed</a></p>
+{% if not opportunity %}
+<p>Opportunity not found.</p>
+{% else %}
+<article class="detail">
+  <header>
+    <span class="pill {{ opportunity.decision }}">{{ opportunity.decision }}</span>
+    <h1>{{ opportunity.listing.title if opportunity.listing else "Unknown listing" }}</h1>
+    <p class="meta">
+      Source {{ opportunity.listing.source_id if opportunity.listing else "" }} ·
+      {% if opportunity.listing and opportunity.listing.url %}<a href="{{ opportunity.listing.url }}" rel="noopener">Open listing</a>{% endif %}
+      · identity {{ '%.0f'|format(opportunity.identity_confidence * 100) }}%
+      · valuation {{ '%.0f'|format(opportunity.valuation_confidence * 100) }}%
+      · condition {{ '%.0f'|format(opportunity.condition_confidence * 100) }}%
+    </p>
+  </header>
+
+  {% if opportunity.listing and opportunity.listing.images %}
+  <div class="images">
+    {% for img in opportunity.listing.images[:6] %}
+    <img src="{{ img }}" alt="Listing image {{ loop.index }}" loading="lazy">
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <section class="numbers">
+    <div><span>Asking / current</span><strong>{% if opportunity.listing %}{{ opportunity.listing.currency }} {{ '%.2f'|format(opportunity.listing.asking_price or 0) }}{% endif %}</strong></div>
+    <div><span>All-in acquisition</span><strong>€{{ '%.2f'|format(opportunity.all_in_acquisition_eur) }}</strong></div>
+    <div><span>Ireland expected resale</span><strong>€{{ '%.2f'|format(opportunity.expected_resale_eur) }}</strong></div>
+    <div><span>Expected net proceeds</span><strong>€{{ '%.2f'|format(opportunity.expected_net_resale_eur) }}</strong></div>
+    <div><span>Expected profit</span><strong>€{{ '%.2f'|format(opportunity.expected_profit_eur) }}</strong></div>
+    <div><span>Downside profit</span><strong>€{{ '%.2f'|format(opportunity.downside_profit_eur) }}</strong></div>
+    <div><span>ROI</span><strong>{{ '%.1f'|format(opportunity.expected_roi * 100) }}%</strong></div>
+    <div class="emphasis"><span>MAX SAFE PURCHASE</span><strong>€{{ '%.2f'|format(opportunity.max_buy_eur) }}</strong></div>
+    <div><span>Days to sale (est.)</span><strong>{{ opportunity.expected_days_to_sale }}</strong></div>
+  </section>
+
+  <section>
+    <h2>Why</h2>
+    <p>{{ opportunity.why }}</p>
+    <pre class="json">{{ opportunity.score_breakdown | tojson(indent=2) }}</pre>
+  </section>
+
+  <section>
+    <h2>Product identity</h2>
+    <p>{{ opportunity.listing.brand if opportunity.listing else "" }} {{ opportunity.listing.model if opportunity.listing else "" }}</p>
+    <p>Condition grade: <strong>{{ opportunity.listing.condition_grade if opportunity.listing else "" }}</strong></p>
+    {% if valuation %}
+    <pre class="json">{{ valuation.provenance | tojson(indent=2) }}</pre>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2>Cost stack</h2>
+    <pre class="json">{{ opportunity.cost_breakdown | tojson(indent=2) }}</pre>
+  </section>
+
+  <section>
+    <h2>Comparable evidence</h2>
+    <p>Every number above is produced from these stored comparables. Asking prices are labelled. Do not treat dealer/asking evidence as a completed Irish sale.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th><th>Territory</th><th>Price</th><th>Adj EUR</th><th>Weight</th><th>Match</th><th>Ref</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in comps %}
+        <tr>
+          <td>{{ c.evidence_type }}</td>
+          <td>{{ c.country }}</td>
+          <td>{{ c.currency }} {{ '%.2f'|format(c.price) }}</td>
+          <td>€{{ '%.2f'|format(c.adjusted_price_eur or 0) }}</td>
+          <td>{{ '%.2f'|format(c.evidence_weight) }}</td>
+          <td>{{ '%.2f'|format(c.product_match_score) }} / {{ '%.2f'|format(c.condition_match_score) }}</td>
+          <td>{% if c.url %}<a href="{{ c.url }}">link</a>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">No stored comparables — fail-closed valuation.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Risks</h2>
+    <pre class="json">{{ opportunity.risks | tojson(indent=2) }}</pre>
+  </section>
+
+  <section class="actions">
+    <form method="post" action="/opportunities/{{ opportunity.id }}/ignore"><button>Ignore</button></form>
+    <form method="post" action="/opportunities/{{ opportunity.id }}/watch"><button>Watch</button></form>
+  </section>
+</article>
+{% endif %}
+{% endblock %}

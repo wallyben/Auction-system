@@ -1,0 +1,35 @@
+{
+  "generated_at": "2026-08-23T17:54:15.071340+00:00",
+  "scan_status": "partial",
+  "listings_seen": 24,
+  "live_sources": [
+    "csv_import",
+    "ecb_fx",
+    "manual",
+    "scryfall"
+  ],
+  "blocked_sources": [
+    "adverts_ie",
+    "allegro",
+    "bidspotter",
+    "bpi_auctions",
+    "bstock",
+    "cardmarket",
+    "cex_ie",
+    "discogs_market",
+    "donedeal",
+    "ebay_browse",
+    "i_bidder",
+    "john_pye",
+    "kleinanzeigen",
+    "leboncoin",
+    "marktplaats",
+    "reverb",
+    "subito",
+    "vinted",
+    "wallapop",
+    "wilsons"
+  ],
+  "buy_count": 0,
+  "verdict_hint": "NO_CURRENT_OPPORTUNITY_PASSED_THRESHOLDS"
+}

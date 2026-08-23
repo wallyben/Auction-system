@@ -128,3 +128,6 @@ def calculate_margin(input_data: MarginInput) -> MarginCalculationResult:
         "risk_discount": quantized_risk_discount,
         "breakdown": breakdown,
     }
+
+
+calculate_margin = calculate_margin

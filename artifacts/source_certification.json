@@ -1,0 +1,795 @@
+{
+  "generated_at": "2026-08-23T17:54:15.071340+00:00",
+  "home_country": "IE",
+  "scan": {
+    "id": "f8888134-0ffc-40af-a533-34ca158b5116",
+    "status": "partial",
+    "listings_seen": 24,
+    "opportunities_written": 24,
+    "error": null,
+    "details": {
+      "errors": [
+        "reverb:sol ring:HTTP 403 for https://reverb.com/api/listings: <DOCTYPE html>\n  <html lang=\"en\">\n    <head>\n      <title>The Marketplace for Musicians | Reverb.com</title>\n\n      <style>/* latin-ext */\n@font-face {\n  font-family: 'Lato';\n  font-style: normal;\n  font-weight: 300;\n  src: url(data:font/woff2;base64,d09GMgABAAAAAAtEAA0AAAAAE4wAAArvAAEAAAAAAAAAAAAAA",
+        "reverb:lightning bolt:HTTP 403 for https://reverb.com/api/listings: <DOCTYPE html>\n  <html lang=\"en\">\n    <head>\n      <title>The Marketplace for Musicians | Reverb.com</title>\n\n      <style>/* latin-ext */\n@font-face {\n  font-family: 'Lato';\n  font-style: normal;\n  font-weight: 300;\n  src: url(data:font/woff2;base64,d09GMgABAAAAAAtEAA0AAAAAE4wAAArvAAEAAAAAAAAAAAAAA",
+        "reverb:rhystic study:HTTP 403 for https://reverb.com/api/listings: <DOCTYPE html>\n  <html lang=\"en\">\n    <head>\n      <title>The Marketplace for Musicians | Reverb.com</title>\n\n      <style>/* latin-ext */\n@font-face {\n  font-family: 'Lato';\n  font-style: normal;\n  font-weight: 300;\n  src: url(data:font/woff2;base64,d09GMgABAAAAAAtEAA0AAAAAE4wAAArvAAEAAAAAAAAAAAAAA",
+        "reverb:sony a7:HTTP 403 for https://reverb.com/api/listings: <DOCTYPE html>\n  <html lang=\"en\">\n    <head>\n      <title>The Marketplace for Musicians | Reverb.com</title>\n\n      <style>/* latin-ext */\n@font-face {\n  font-family: 'Lato';\n  font-style: normal;\n  font-weight: 300;\n  src: url(data:font/woff2;base64,d09GMgABAAAAAAtEAA0AAAAAE4wAAArvAAEAAAAAAAAAAAAAA"
+      ],
+      "queries": [
+        "sol ring",
+        "lightning bolt",
+        "rhystic study",
+        "sony a7"
+      ],
+      "targets": [
+        "reverb",
+        "scryfall",
+        "csv_import",
+        "manual",
+        "rss_generic",
+        "ecb_fx",
+        "ebay_browse"
+      ]
+    }
+  },
+  "sources": [
+    {
+      "id": "adverts_ie",
+      "name": "Adverts.ie",
+      "status": "BLOCKED_POLICY",
+      "reason": "No official public API; unofficial wrappers are not used. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "last_success_at": null,
+      "records_ingested": 0,
+      "last_error": "No official public API; unofficial wrappers are not used. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture."
+    },
+    {
+      "id": "allegro",
+      "name": "Allegro",
+      "status": "BLOCKED_CREDENTIALS",
+      "reason": "Official REST API exists but requires owner app credentials. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "last_success_at": null,
+      "records_ingested": 0,
+      "last_error": "Official REST API exists but requires owner app credentials. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture."
+    },
+    {
+      "id": "bidspotter",
+      "name": "BidSpotter",
+      "status": "BLOCKED_POLICY",
+      "reason": "No official public developer API found. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "last_success_at": null,
+      "records_ingested": 0,
+      "last_error": "No official public developer API found. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture."
+    },
+    {
+      "id": "bpi_auctions",
+      "name": "BPI Auctions",
+      "status": "BLOCKED_POLICY",
+      "reason": "No official public API found. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "last_success_at": null,
+      "records_ingested": 0,
+      "last_error": "No official public API found. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture."
+    },
+    {
+      "id": "bstock",
+      "name": "B-Stock",
+      "status": "BLOCKED_CREDENTIALS",
+      "reason": "Partner API required. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "last_success_at": null,
+      "records_ingested": 0,
+      "last_error": "Partner API required. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture."
+    },
+    {
+      "id": "cardmarket",
+      "name": "Cardmarket",
+      "status": "BLOCKED_CREDENTIALS",
+      "reason": "Official API requires owner keys. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "last_success_at": null,
+      "records_ingested": 0,
+      "last_error": "Official API requires owner keys. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture."
+    },
+    {
+      "id": "cex_ie",
+      "name": "CeX Ireland",
+      "status": "BLOCKED_POLICY",
+      "reason": "No official valuation API. Do not scrape storefront. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "last_success_at": null,
+      "records_ingested": 0,
+      "last_error": "No official valuation API. Do not scrape storefront. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture."
+    },
+    {
+      "id": "csv_import",
+      "name": "Owner CSV import",
+      "status": "LIVE",
+      "reason": "CSV import is always available.",
+      "last_success_at": "2026-08-23T17:54:12.262675+00:00",
+      "records_ingested": 0,
+      "last_error": null
+    },
+    {
+      "id": "discogs_market",
+      "name": "Discogs Marketplace",
+      "status": "BLOCKED_CREDENTIALS",
+      "reason": "Marketplace search requires authentication. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "last_success_at": null,
+      "records_ingested": 0,
+      "last_error": "Marketplace search requires authentication. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture."
+    },
+    {
+      "id": "donedeal",
+      "name": "DoneDeal",
+      "status": "BLOCKED_POLICY",
+      "reason": "Dealer API is not licensed for multi-dealer aggregation. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "last_success_at": null,
+      "records_ingested": 0,
+      "last_error": "Dealer API is not licensed for multi-dealer aggregation. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture."
+    },
+    {
+      "id": "ebay_browse",
+      "name": "eBay Browse API",
+      "status": "BLOCKED_CREDENTIALS",
+      "reason": "EBAY_CLIENT_ID / EBAY_CLIENT_SECRET not configured. Create an app at developer.ebay.com.",
+      "last_success_at": null,
+      "records_ingested": 0,
+      "last_error": "EBAY_CLIENT_ID / EBAY_CLIENT_SECRET not configured. Create an app at developer.ebay.com."
+    },
+    {
+      "id": "ecb_fx",
+      "name": "ECB euro FX reference",
+      "status": "LIVE",
+      "reason": "ECB daily FX as of 2026-08-21",
+      "last_success_at": "2026-08-23T17:54:12.262588+00:00",
+      "records_ingested": 180,
+      "last_error": null
+    },
+    {
+      "id": "i_bidder",
+      "name": "i-bidder",
+      "status": "BLOCKED_POLICY",
+      "reason": "No official public developer API found. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "last_success_at": null,
+      "records_ingested": 0,
+      "last_error": "No official public developer API found. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture."
+    },
+    {
+      "id": "john_pye",
+      "name": "John Pye Auctions",
+      "status": "BLOCKED_POLICY",
+      "reason": "In-house bidding platform; no public developer API. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "last_success_at": null,
+      "records_ingested": 0,
+      "last_error": "In-house bidding platform; no public developer API. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture."
+    },
+    {
+      "id": "kleinanzeigen",
+      "name": "Kleinanzeigen",
+      "status": "BLOCKED_POLICY",
+      "reason": "No licensed public API for aggregation. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "last_success_at": null,
+      "records_ingested": 0,
+      "last_error": "No licensed public API for aggregation. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture."
+    },
+    {
+      "id": "leboncoin",
+      "name": "Leboncoin",
+      "status": "BLOCKED_POLICY",
+      "reason": "Partner API only. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "last_success_at": null,
+      "records_ingested": 0,
+      "last_error": "Partner API only. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture."
+    },
+    {
+      "id": "manual",
+      "name": "Manual listing",
+      "status": "LIVE",
+      "reason": "Manual capture is LIVE. Owner pastes a listing; ARIE does not fetch blocked sites.",
+      "last_success_at": "2026-08-23T17:54:12.262697+00:00",
+      "records_ingested": 0,
+      "last_error": null
+    },
+    {
+      "id": "marktplaats",
+      "name": "Marktplaats",
+      "status": "BLOCKED_POLICY",
+      "reason": "No licensed public aggregation API. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "last_success_at": null,
+      "records_ingested": 0,
+      "last_error": "No licensed public aggregation API. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture."
+    },
+    {
+      "id": "reverb",
+      "name": "Reverb",
+      "status": "BLOCKED_TECHNICAL",
+      "reason": "HTTP 403 for https://reverb.com/api/listings: <DOCTYPE html>\n  <html lang=\"en\">\n    <head>\n      <title>The Marketplace for Musicians | Reverb.com</title>\n\n      <style>/* latin-ext */\n@font-face {\n  font-family: 'Lato';\n  font-style: normal;\n  font-weight: 300;\n  src: url(data:font/woff2;base64,d09GMgABAAAAAAtEAA0AAAAAE4wAAArvAAEAAAAAAAAAAAAAA",
+      "last_success_at": null,
+      "records_ingested": 0,
+      "last_error": "HTTP 403 for https://reverb.com/api/listings: <DOCTYPE html>\n  <html lang=\"en\">\n    <head>\n      <title>The Marketplace for Musicians | Reverb.com</title>\n\n      <style>/* latin-ext */\n@font-face {\n  font-family: 'Lato';\n  font-style: normal;\n  font-weight: 300;\n  src: url(data:font/woff2;base64,d09GMgABAAAAAAtEAA0AAAAAE4wAAArvAAEAAAAAAAAAAAAAA"
+    },
+    {
+      "id": "rss_generic",
+      "name": "Configured RSS/Atom feeds",
+      "status": "DISABLED",
+      "reason": "No RSS_URLS configured. Parser is implemented; owner must supply permitted feed URLs.",
+      "last_success_at": null,
+      "records_ingested": 0,
+      "last_error": "No RSS_URLS configured. Parser is implemented; owner must supply permitted feed URLs."
+    },
+    {
+      "id": "scryfall",
+      "name": "Scryfall / Cardmarket guide",
+      "status": "LIVE",
+      "reason": "Scryfall card + EUR guide price retrieved. This is dealer/market evidence, not a realised Irish sale.",
+      "last_success_at": "2026-08-23T17:54:11.629773+00:00",
+      "records_ingested": 9,
+      "last_error": null
+    },
+    {
+      "id": "subito",
+      "name": "Subito",
+      "status": "BLOCKED_POLICY",
+      "reason": "No licensed public aggregation API. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "last_success_at": null,
+      "records_ingested": 0,
+      "last_error": "No licensed public aggregation API. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture."
+    },
+    {
+      "id": "vinted",
+      "name": "Vinted",
+      "status": "BLOCKED_POLICY",
+      "reason": "No licensed public aggregation API. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "last_success_at": null,
+      "records_ingested": 0,
+      "last_error": "No licensed public aggregation API. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture."
+    },
+    {
+      "id": "wallapop",
+      "name": "Wallapop",
+      "status": "BLOCKED_POLICY",
+      "reason": "No licensed public aggregation API. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "last_success_at": null,
+      "records_ingested": 0,
+      "last_error": "No licensed public aggregation API. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture."
+    },
+    {
+      "id": "wilsons",
+      "name": "Wilsons Auctions Ireland",
+      "status": "BLOCKED_POLICY",
+      "reason": "No official public catalogue API found. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "last_success_at": null,
+      "records_ingested": 0,
+      "last_error": "No official public catalogue API found. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture."
+    }
+  ],
+  "health_proofs": [
+    {
+      "status": "BLOCKED_TECHNICAL",
+      "ok": false,
+      "http_status": 403,
+      "latency_ms": 89,
+      "records": 0,
+      "detail": "HTTP 403 for https://reverb.com/api/listings: <DOCTYPE html>\n  <html lang=\"en\">\n    <head>\n      <title>The Marketplace for Musicians | Reverb.com</title>\n\n      <style>/* latin-ext */\n@font-face {\n  font-family: 'Lato';\n  font-style: normal;\n  font-weight: 300;\n  src: url(data:font/woff2;base64,d09GMgABAAAAAAtEAA0AAAAAE4wAAArvAAEAAAAAAAAAAAAAA",
+      "proof": {}
+    },
+    {
+      "status": "LIVE",
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 48,
+      "records": 1,
+      "detail": "Scryfall card + EUR guide price retrieved. This is dealer/market evidence, not a realised Irish sale.",
+      "proof": {
+        "id": "91fdb56b-54d5-4272-8319-505ff987fe9b",
+        "name": "Sol Ring",
+        "eur": "1.53",
+        "usd": "1.56",
+        "scryfall_uri": "https://scryfall.com/card/msc/211/sol-ring?utm_source=api",
+        "evidence_type": "dealer_retail"
+      }
+    },
+    {
+      "status": "LIVE",
+      "ok": true,
+      "http_status": 200,
+      "latency_ms": 633,
+      "records": 30,
+      "detail": "ECB daily FX as of 2026-08-21",
+      "proof": {
+        "as_of": "2026-08-21T00:00:00+00:00",
+        "gbp": "0.85670",
+        "usd": "1.1699"
+      }
+    },
+    {
+      "status": "BLOCKED_CREDENTIALS",
+      "ok": false,
+      "http_status": null,
+      "latency_ms": null,
+      "records": 0,
+      "detail": "EBAY_CLIENT_ID / EBAY_CLIENT_SECRET not configured. Create an app at developer.ebay.com.",
+      "proof": {
+        "docs": "https://developer.ebay.com/api-docs/buy/browse/resources/item_summary/methods/search"
+      }
+    },
+    {
+      "status": "LIVE",
+      "ok": true,
+      "http_status": null,
+      "latency_ms": 0,
+      "records": 0,
+      "detail": "CSV import is always available.",
+      "proof": {
+        "columns": [
+          "source",
+          "external_id",
+          "url",
+          "title",
+          "price",
+          "currency",
+          "country",
+          "condition"
+        ]
+      }
+    },
+    {
+      "status": "LIVE",
+      "ok": true,
+      "http_status": null,
+      "latency_ms": 0,
+      "records": 0,
+      "detail": "Manual capture is LIVE. Owner pastes a listing; ARIE does not fetch blocked sites.",
+      "proof": {
+        "mode": "owner_supplied"
+      }
+    },
+    {
+      "status": "BLOCKED_POLICY",
+      "ok": false,
+      "http_status": null,
+      "latency_ms": null,
+      "records": 0,
+      "detail": "Dealer API is not licensed for multi-dealer aggregation. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "proof": {
+        "fallback": "csv_import+manual",
+        "status": "BLOCKED_POLICY"
+      }
+    },
+    {
+      "status": "BLOCKED_POLICY",
+      "ok": false,
+      "http_status": null,
+      "latency_ms": null,
+      "records": 0,
+      "detail": "No official public API; unofficial wrappers are not used. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "proof": {
+        "fallback": "csv_import+manual",
+        "status": "BLOCKED_POLICY"
+      }
+    },
+    {
+      "status": "BLOCKED_POLICY",
+      "ok": false,
+      "http_status": null,
+      "latency_ms": null,
+      "records": 0,
+      "detail": "No official public catalogue API found. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "proof": {
+        "fallback": "csv_import+manual",
+        "status": "BLOCKED_POLICY"
+      }
+    },
+    {
+      "status": "BLOCKED_POLICY",
+      "ok": false,
+      "http_status": null,
+      "latency_ms": null,
+      "records": 0,
+      "detail": "In-house bidding platform; no public developer API. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "proof": {
+        "fallback": "csv_import+manual",
+        "status": "BLOCKED_POLICY"
+      }
+    },
+    {
+      "status": "BLOCKED_POLICY",
+      "ok": false,
+      "http_status": null,
+      "latency_ms": null,
+      "records": 0,
+      "detail": "No official public API found. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "proof": {
+        "fallback": "csv_import+manual",
+        "status": "BLOCKED_POLICY"
+      }
+    },
+    {
+      "status": "BLOCKED_POLICY",
+      "ok": false,
+      "http_status": null,
+      "latency_ms": null,
+      "records": 0,
+      "detail": "No official public developer API found. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "proof": {
+        "fallback": "csv_import+manual",
+        "status": "BLOCKED_POLICY"
+      }
+    },
+    {
+      "status": "BLOCKED_POLICY",
+      "ok": false,
+      "http_status": null,
+      "latency_ms": null,
+      "records": 0,
+      "detail": "No official public developer API found. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "proof": {
+        "fallback": "csv_import+manual",
+        "status": "BLOCKED_POLICY"
+      }
+    },
+    {
+      "status": "BLOCKED_POLICY",
+      "ok": false,
+      "http_status": null,
+      "latency_ms": null,
+      "records": 0,
+      "detail": "No official valuation API. Do not scrape storefront. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "proof": {
+        "fallback": "csv_import+manual",
+        "status": "BLOCKED_POLICY"
+      }
+    },
+    {
+      "status": "BLOCKED_CREDENTIALS",
+      "ok": false,
+      "http_status": null,
+      "latency_ms": null,
+      "records": 0,
+      "detail": "Marketplace search requires authentication. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "proof": {
+        "fallback": "csv_import+manual",
+        "status": "BLOCKED_CREDENTIALS"
+      }
+    },
+    {
+      "status": "BLOCKED_CREDENTIALS",
+      "ok": false,
+      "http_status": null,
+      "latency_ms": null,
+      "records": 0,
+      "detail": "Official API requires owner keys. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "proof": {
+        "fallback": "csv_import+manual",
+        "status": "BLOCKED_CREDENTIALS"
+      }
+    },
+    {
+      "status": "BLOCKED_POLICY",
+      "ok": false,
+      "http_status": null,
+      "latency_ms": null,
+      "records": 0,
+      "detail": "No licensed public API for aggregation. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "proof": {
+        "fallback": "csv_import+manual",
+        "status": "BLOCKED_POLICY"
+      }
+    },
+    {
+      "status": "BLOCKED_POLICY",
+      "ok": false,
+      "http_status": null,
+      "latency_ms": null,
+      "records": 0,
+      "detail": "Partner API only. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "proof": {
+        "fallback": "csv_import+manual",
+        "status": "BLOCKED_POLICY"
+      }
+    },
+    {
+      "status": "BLOCKED_POLICY",
+      "ok": false,
+      "http_status": null,
+      "latency_ms": null,
+      "records": 0,
+      "detail": "No licensed public aggregation API. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "proof": {
+        "fallback": "csv_import+manual",
+        "status": "BLOCKED_POLICY"
+      }
+    },
+    {
+      "status": "BLOCKED_POLICY",
+      "ok": false,
+      "http_status": null,
+      "latency_ms": null,
+      "records": 0,
+      "detail": "No licensed public aggregation API. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "proof": {
+        "fallback": "csv_import+manual",
+        "status": "BLOCKED_POLICY"
+      }
+    },
+    {
+      "status": "BLOCKED_POLICY",
+      "ok": false,
+      "http_status": null,
+      "latency_ms": null,
+      "records": 0,
+      "detail": "No licensed public aggregation API. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "proof": {
+        "fallback": "csv_import+manual",
+        "status": "BLOCKED_POLICY"
+      }
+    },
+    {
+      "status": "BLOCKED_CREDENTIALS",
+      "ok": false,
+      "http_status": null,
+      "latency_ms": null,
+      "records": 0,
+      "detail": "Official REST API exists but requires owner app credentials. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "proof": {
+        "fallback": "csv_import+manual",
+        "status": "BLOCKED_CREDENTIALS"
+      }
+    },
+    {
+      "status": "BLOCKED_POLICY",
+      "ok": false,
+      "http_status": null,
+      "latency_ms": null,
+      "records": 0,
+      "detail": "No licensed public aggregation API. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "proof": {
+        "fallback": "csv_import+manual",
+        "status": "BLOCKED_POLICY"
+      }
+    },
+    {
+      "status": "BLOCKED_CREDENTIALS",
+      "ok": false,
+      "http_status": null,
+      "latency_ms": null,
+      "records": 0,
+      "detail": "Partner API required. No official public aggregation API. ARIE will not scrape or use unofficial clients. Fallback: owner CSV / manual capture.",
+      "proof": {
+        "fallback": "csv_import+manual",
+        "status": "BLOCKED_CREDENTIALS"
+      }
+    },
+    {
+      "status": "DISABLED",
+      "ok": false,
+      "http_status": null,
+      "latency_ms": 0,
+      "records": 0,
+      "detail": "No RSS_URLS configured. Parser is implemented; owner must supply permitted feed URLs.",
+      "proof": {
+        "parser": "feedparser",
+        "configured_urls": 0
+      }
+    }
+  ],
+  "top_opportunities": [
+    {
+      "id": "8de10fcc-ecbe-4c4a-804b-95b7930c4d62",
+      "decision": "REVIEW",
+      "expected_profit_eur": "-63.42",
+      "expected_roi": "-1.1600",
+      "max_buy_eur": "0.00",
+      "expected_resale_eur": "1.49",
+      "valuation_confidence": "0.3100",
+      "why": "Valuation confidence 0.31 is below minimum 0.55.",
+      "listing_id": "627dc136-19b0-42af-ad60-adf42a94ba83"
+    },
+    {
+      "id": "b28702e7-d420-4200-b8e2-e00c8087f133",
+      "decision": "REVIEW",
+      "expected_profit_eur": "-63.90",
+      "expected_roi": "-1.1600",
+      "max_buy_eur": "0.00",
+      "expected_resale_eur": "1.49",
+      "valuation_confidence": "0.3100",
+      "why": "Valuation confidence 0.31 is below minimum 0.55.",
+      "listing_id": "f19defc3-9eb7-43bb-8c0c-ad9147700933"
+    },
+    {
+      "id": "16f97d20-7f78-4fac-bbdd-779cb726a494",
+      "decision": "REVIEW",
+      "expected_profit_eur": "-64.10",
+      "expected_roi": "-1.1500",
+      "max_buy_eur": "0.00",
+      "expected_resale_eur": "1.59",
+      "valuation_confidence": "0.3100",
+      "why": "Valuation confidence 0.31 is below minimum 0.55.",
+      "listing_id": "daf0e22a-5eec-419c-ac2c-db465c45619d"
+    },
+    {
+      "id": "c515891f-1a24-47f6-9172-c2dfe6979f21",
+      "decision": "REVIEW",
+      "expected_profit_eur": "-64.12",
+      "expected_roi": "-1.1500",
+      "max_buy_eur": "0.00",
+      "expected_resale_eur": "1.59",
+      "valuation_confidence": "0.3100",
+      "why": "Valuation confidence 0.31 is below minimum 0.55.",
+      "listing_id": "cf2aa33a-9d4c-4489-a061-25224c0ea0a7"
+    },
+    {
+      "id": "0c4ec29c-506e-417a-9627-8dc231cfc577",
+      "decision": "REVIEW",
+      "expected_profit_eur": "-63.97",
+      "expected_roi": "-1.1500",
+      "max_buy_eur": "0.00",
+      "expected_resale_eur": "1.59",
+      "valuation_confidence": "0.3100",
+      "why": "Valuation confidence 0.31 is below minimum 0.55.",
+      "listing_id": "32b8593b-9041-4ae4-a429-a0d5b6aed7dd"
+    },
+    {
+      "id": "090d89d4-bd36-41ea-88b6-9e13bbce8d1d",
+      "decision": "REVIEW",
+      "expected_profit_eur": "-28.01",
+      "expected_roi": "-0.5300",
+      "max_buy_eur": "0.00",
+      "expected_resale_eur": "44.73",
+      "valuation_confidence": "0.2900",
+      "why": "Valuation confidence 0.29 is below minimum 0.55.",
+      "listing_id": "765f1506-d5e3-4ade-9fb5-2298d9e14e40"
+    },
+    {
+      "id": "6dd49ce4-63e1-41e8-9738-4fa9b05a7ec4",
+      "decision": "REVIEW",
+      "expected_profit_eur": "-90.55",
+      "expected_roi": "-0.7800",
+      "max_buy_eur": "0.00",
+      "expected_resale_eur": "44.73",
+      "valuation_confidence": "0.2900",
+      "why": "Valuation confidence 0.29 is below minimum 0.55.",
+      "listing_id": "bbfd1367-e0ef-445f-a408-5bb9d005d8a9"
+    },
+    {
+      "id": "6acd8795-960d-4ed7-8e0d-df153d56bc86",
+      "decision": "REVIEW",
+      "expected_profit_eur": "-113.72",
+      "expected_roi": "-0.8200",
+      "max_buy_eur": "0.00",
+      "expected_resale_eur": "44.73",
+      "valuation_confidence": "0.2900",
+      "why": "Valuation confidence 0.29 is below minimum 0.55.",
+      "listing_id": "b1f246d7-db27-4b2c-85c7-9f159706cf99"
+    },
+    {
+      "id": "3c3a506c-3b19-4a66-832f-923ea4249e1c",
+      "decision": "REVIEW",
+      "expected_profit_eur": "-82.60",
+      "expected_roi": "-0.7700",
+      "max_buy_eur": "0.00",
+      "expected_resale_eur": "44.73",
+      "valuation_confidence": "0.2900",
+      "why": "Valuation confidence 0.29 is below minimum 0.55.",
+      "listing_id": "b1dd534a-ab75-48d1-a609-1c4ae23a552b"
+    },
+    {
+      "id": "c2176b75-5504-4f3e-8af3-9f4bdff87658",
+      "decision": "REVIEW",
+      "expected_profit_eur": "-77.50",
+      "expected_roi": "-0.7500",
+      "max_buy_eur": "0.00",
+      "expected_resale_eur": "44.73",
+      "valuation_confidence": "0.2900",
+      "why": "Valuation confidence 0.29 is below minimum 0.55.",
+      "listing_id": "9efcecc7-8841-4cdc-9667-7e7ab8642194"
+    },
+    {
+      "id": "5cc78680-3b3e-4142-9473-62068c9a2dcf",
+      "decision": "REVIEW",
+      "expected_profit_eur": "-70.59",
+      "expected_roi": "-0.7400",
+      "max_buy_eur": "0.00",
+      "expected_resale_eur": "44.73",
+      "valuation_confidence": "0.2900",
+      "why": "Valuation confidence 0.29 is below minimum 0.55.",
+      "listing_id": "007313a6-16e7-471a-8d89-4d6c81f49d1a"
+    },
+    {
+      "id": "2359d90f-8db0-4711-a927-35f549ba6d52",
+      "decision": "REVIEW",
+      "expected_profit_eur": "-90.08",
+      "expected_roi": "-0.7800",
+      "max_buy_eur": "0.00",
+      "expected_resale_eur": "44.73",
+      "valuation_confidence": "0.2900",
+      "why": "Valuation confidence 0.29 is below minimum 0.55.",
+      "listing_id": "92b8fb21-1128-422d-bf9d-9a89d7548dab"
+    },
+    {
+      "id": "4f5ecc58-2148-49f4-a4ff-c64314e0cdd8",
+      "decision": "REVIEW",
+      "expected_profit_eur": "-133.41",
+      "expected_roi": "-0.8400",
+      "max_buy_eur": "0.00",
+      "expected_resale_eur": "44.73",
+      "valuation_confidence": "0.2900",
+      "why": "Valuation confidence 0.29 is below minimum 0.55.",
+      "listing_id": "b04219a5-ac29-4611-abb2-6e22049bcb3c"
+    },
+    {
+      "id": "b5563711-ade9-45b8-bdb0-1742f2c35de2",
+      "decision": "REVIEW",
+      "expected_profit_eur": "-62.99",
+      "expected_roi": "-1.1800",
+      "max_buy_eur": "0.00",
+      "expected_resale_eur": "0.13",
+      "valuation_confidence": "0.2500",
+      "why": "Valuation confidence 0.25 is below minimum 0.55.",
+      "listing_id": "9c477894-fab2-464e-8109-397d2d1ce415"
+    },
+    {
+      "id": "6166ac7b-75b6-442d-982b-5149d67a4909",
+      "decision": "REVIEW",
+      "expected_profit_eur": "-63.03",
+      "expected_roi": "-1.1800",
+      "max_buy_eur": "0.00",
+      "expected_resale_eur": "0.13",
+      "valuation_confidence": "0.2500",
+      "why": "Valuation confidence 0.25 is below minimum 0.55.",
+      "listing_id": "471ba4d0-551d-4f2d-9f7a-f70e77074af4"
+    },
+    {
+      "id": "8f15f333-7e14-4595-917a-48292fd1937c",
+      "decision": "REVIEW",
+      "expected_profit_eur": "-63.83",
+      "expected_roi": "-1.1600",
+      "max_buy_eur": "0.00",
+      "expected_resale_eur": "1.38",
+      "valuation_confidence": "0.2500",
+      "why": "Valuation confidence 0.25 is below minimum 0.55.",
+      "listing_id": "4ee407a0-9e6d-4988-8b22-ad14cbd531e3"
+    },
+    {
+      "id": "0afbd2c5-c576-4af7-9c20-64bf9e3c6945",
+      "decision": "REVIEW",
+      "expected_profit_eur": "-63.87",
+      "expected_roi": "-1.1600",
+      "max_buy_eur": "0.00",
+      "expected_resale_eur": "1.38",
+      "valuation_confidence": "0.2500",
+      "why": "Valuation confidence 0.25 is below minimum 0.55.",
+      "listing_id": "a8d8a8eb-8841-428a-b38e-868e6d55f9b3"
+    },
+    {
+      "id": "f8f31f3f-4e83-4df7-9ba4-8a78033c9940",
+      "decision": "REVIEW",
+      "expected_profit_eur": "-63.06",
+      "expected_roi": "-1.1800",
+      "max_buy_eur": "0.00",
+      "expected_resale_eur": "0.13",
+      "valuation_confidence": "0.2500",
+      "why": "Valuation confidence 0.25 is below minimum 0.55.",
+      "listing_id": "173c3d8d-8280-4a1d-beb6-2cb7d503dae7"
+    },
+    {
+      "id": "4bbcaf4c-b9f7-4205-b321-20287fef1a9e",
+      "decision": "REVIEW",
+      "expected_profit_eur": "-63.23",
+      "expected_roi": "-1.1800",
+      "max_buy_eur": "0.00",
+      "expected_resale_eur": "0.13",
+      "valuation_confidence": "0.2500",
+      "why": "Valuation confidence 0.25 is below minimum 0.55.",
+      "listing_id": "70c8c471-e01e-4316-ae81-94c63bcd000a"
+    },
+    {
+      "id": "09cdd11d-bbff-4504-8ab5-de8ca88bbfca",
+      "decision": "REVIEW",
+      "expected_profit_eur": "-63.06",
+      "expected_roi": "-1.1800",
+      "max_buy_eur": "0.00",
+      "expected_resale_eur": "0.13",
+      "valuation_confidence": "0.2500",
+      "why": "Valuation confidence 0.25 is below minimum 0.55.",
+      "listing_id": "c8a2ad9a-e554-47d8-8e29-58e382c8fd95"
+    }
+  ],
+  "buy_count": 0,
+  "note": "NO_CURRENT_OPPORTUNITY_PASSED_THRESHOLDS"
+}

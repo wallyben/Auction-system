@@ -66,3 +66,6 @@ class MarginInput(BaseModel):
         if value > Decimal("1"):
             raise ValueError("Percentage fields must be provided as fractions between 0 and 1.")
         return value
+
+
+MarginInput = MarginInput
