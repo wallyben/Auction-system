@@ -22,6 +22,11 @@ services:
     environment:
       APP_ENV: development
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/arie
+      EBAY_CLIENT_ID: ${EBAY_CLIENT_ID:-}
+      EBAY_CLIENT_SECRET: ${EBAY_CLIENT_SECRET:-}
+      EBAY_ENV: ${EBAY_ENV:-production}
+      EBAY_NOTIFICATION_VERIFICATION_TOKEN: ${EBAY_NOTIFICATION_VERIFICATION_TOKEN:-}
+      EBAY_NOTIFICATION_ENDPOINT_URL: ${EBAY_NOTIFICATION_ENDPOINT_URL:-}
     depends_on:
       db:
         condition: service_healthy

@@ -1,7 +1,7 @@
 PYTHON ?= python3
 export DATABASE_URL ?= postgresql+psycopg://arie:arie@localhost:5432/arie
 
-.PHONY: dev test test-live scan scan-source validate production-proof migrate install ebay-check source-health backtest
+.PHONY: dev test test-live scan scan-source validate production-proof migrate install ebay-check ebay-notification-check ebay-notification-token source-health backtest
 
 install:
 	$(PYTHON) -m pip install -e ".[dev]"
@@ -33,6 +33,12 @@ production-proof:
 
 ebay-check:
 	$(PYTHON) -m app.cli ebay-check
+
+ebay-notification-check:
+	$(PYTHON) -m app.cli ebay-notification-check
+
+ebay-notification-token:
+	$(PYTHON) -m app.cli ebay-notification-token
 
 source-health:
 	$(PYTHON) -m app.cli source-health

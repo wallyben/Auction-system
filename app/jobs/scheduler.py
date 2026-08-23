@@ -47,6 +47,20 @@ async def _scheduled_scan() -> None:
         _running = False
 
 
+async def _scheduled_deletion_retry() -> None:
+    from app.privacy.ebay_processor import retry_failed_deletions
+
+    session = get_session_factory()()
+    try:
+        retry_failed_deletions(session)
+        session.commit()
+    except Exception:
+        session.rollback()
+        logger.exception("ebay_deletion_retry_failed")
+    finally:
+        session.close()
+
+
 async def _scheduled_audit() -> None:
     from app.audit.self_audit import run_self_audit
 
@@ -85,6 +99,14 @@ def start_scheduler() -> None:
         id="daily-self-audit",
         replace_existing=True,
         max_instances=1,
+    )
+    _scheduler.add_job(
+        _scheduled_deletion_retry,
+        IntervalTrigger(minutes=15, jitter=20),
+        id="ebay-deletion-retry",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
     )
     _scheduler.start()
     logger.info("scheduler_started", minutes=settings.fast_marketplace_minutes)

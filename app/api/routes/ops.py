@@ -18,6 +18,7 @@ from app.jobs.scheduler import scheduler_status
 from app.models.orm import Listing, Opportunity, Purchase, ScanJob, Source, WatchlistItem
 from app.pipeline.service import evaluate_listing, persist_listing, record_health, refresh_fx, run_scan, seed_sources
 from app.pipeline.service import _comps_for
+from app.privacy.ebay_health import notification_health
 from app.sources.manual import CsvImportAdapter
 
 router = APIRouter()
@@ -75,6 +76,12 @@ def health_sources(session: Session = Depends(get_db)) -> dict[str, Any]:
 @router.get("/health/workers")
 def health_workers() -> dict[str, Any]:
     return {"status": "ok", **scheduler_status()}
+
+
+@router.get("/health/ebay-notifications")
+def health_ebay_notifications(session: Session = Depends(get_db)) -> dict[str, Any]:
+    """Local readiness for the deletion webhook. Does not claim eBay subscription."""
+    return notification_health(session)
 
 
 @router.post("/scans")

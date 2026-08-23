@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.core.http import SourceHttpError, build_client, request_json
 from app.core.logging import get_logger
 from app.models.enums import SourceKind, SourceStatus
+from app.privacy.ebay_minimise import minimise_normalized_listing
 from app.sources.base import HealthProof, NormalizedListing, SourceAdapter
 from app.sources.ebay_filters import browse_filter, reject_title
 
@@ -97,13 +98,27 @@ class EbayBrowseAdapter(SourceAdapter):
         oauth = await self._oauth_probe()
         base_proof["oauth"] = oauth
         if not oauth.get("ok"):
+            status = SourceStatus.BLOCKED_CREDENTIALS
+            error = str(oauth.get("error") or "")
+            if (
+                settings.ebay_api_env == "production"
+                and oauth.get("http_status") == 401
+                and "invalid_client" in error
+            ):
+                status = SourceStatus.PRODUCTION_KEYSET_DISABLED_COMPLIANCE
             return HealthProof(
-                status=SourceStatus.BLOCKED_CREDENTIALS,
+                status=status,
                 ok=False,
                 http_status=oauth.get("http_status"),
                 latency_ms=int((time.perf_counter() - started) * 1000),
                 records=0,
-                detail=str(oauth.get("error") or "OAuth failed"),
+                detail=(
+                    "Production keyset appears disabled pending Marketplace Account Deletion "
+                    "compliance (invalid_client). Do not regenerate keys. Complete the notification "
+                    "endpoint in the eBay Developer portal."
+                    if status is SourceStatus.PRODUCTION_KEYSET_DISABLED_COMPLIANCE
+                    else str(oauth.get("error") or "OAuth failed")
+                ),
                 proof=base_proof,
             )
         try:
@@ -135,6 +150,8 @@ class EbayBrowseAdapter(SourceAdapter):
             code = getattr(exc, "status_code", None)
             if code in {401, 403}:
                 status = SourceStatus.BLOCKED_CREDENTIALS
+                if settings.ebay_api_env == "production" and code == 401:
+                    status = SourceStatus.PRODUCTION_KEYSET_DISABLED_COMPLIANCE
             return HealthProof(
                 status=status,
                 ok=False,
@@ -195,11 +212,20 @@ class EbayBrowseAdapter(SourceAdapter):
             "No silent sandbox fallback",
         ]
         if status == 401 and "invalid_client" in body:
-            hints.append(
-                "eBay rejected the client id/secret pair (invalid_client). "
-                "Re-copy Production App ID + Cert ID from developer.ebay.com Production tab. "
-                "Confirm the keyset is enabled and Buy Browse is subscribed."
-            )
+            if settings.ebay_api_env == "production":
+                hints.append(
+                    "Production invalid_client is the documented result when the keyset is "
+                    "disabled pending Marketplace Account Deletion/Closure compliance. "
+                    "Do not regenerate keys. Expose GET/POST /webhooks/ebay/account-deletion "
+                    "over HTTPS, enter the endpoint + verification token in the Developer "
+                    "portal, then re-run make ebay-check after the dashboard shows the "
+                    "Production keyset enabled."
+                )
+            else:
+                hints.append(
+                    "eBay rejected the client id/secret pair (invalid_client). "
+                    "Re-copy App ID + Cert ID from developer.ebay.com."
+                )
         if status == 403:
             hints.append("Token endpoint 403: keyset may lack OAuth entitlement.")
         return hints
@@ -361,7 +387,7 @@ class EbayBrowseAdapter(SourceAdapter):
             except ValueError:
                 ends_at = None
         seller = item.get("seller") or {}
-        return NormalizedListing(
+        listing = NormalizedListing(
             source_id=self.source_id,
             external_id=str(item.get("itemId") or item.get("legacyItemId")),
             url=str(item.get("itemWebUrl") or ""),
@@ -405,3 +431,4 @@ class EbayBrowseAdapter(SourceAdapter):
             source_confidence=Decimal("0.90"),
             observed_at=datetime.now(timezone.utc),
         )
+        return minimise_normalized_listing(listing)

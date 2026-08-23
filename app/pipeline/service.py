@@ -51,6 +51,7 @@ from app.valuation.tiers import classify_tier
 from app.risk.engine import assess_risk
 from app.shipping.engine import estimate_inbound, estimate_outbound
 from app.sold.provider import search_sold_evidence
+from app.privacy.ebay_minimise import EBAY_SOURCE_ID, minimise_normalized_listing
 from app.sources.base import HealthProof, NormalizedListing
 from app.sources.ecb import EcbFxAdapter
 from app.sources.registry import adapter_map, all_adapters
@@ -177,6 +178,8 @@ def _eur_per_unit(rates: dict[str, Decimal], currency: str) -> Decimal:
 
 
 def persist_listing(session: Session, item: NormalizedListing) -> Listing:
+    if item.source_id == EBAY_SOURCE_ID:
+        item = minimise_normalized_listing(item)
     fp = _fingerprint(item.source_id, item.external_id, item.url)
     raw = session.scalar(
         select(RawListing).where(
@@ -195,6 +198,10 @@ def persist_listing(session: Session, item: NormalizedListing) -> Listing:
         )
         session.add(raw)
         session.flush()
+    else:
+        raw.payload = item.raw
+        raw.fetched_at = item.observed_at
+        raw.content_hash = fp
     listing = session.scalar(
         select(Listing).where(
             Listing.source_id == item.source_id,
@@ -262,6 +269,8 @@ def persist_listing(session: Session, item: NormalizedListing) -> Listing:
             extras["price_drop_needs_reeval"] = True
         extras.update(item.extras or {})
         listing.extras = extras
+        listing.seller = item.seller
+        listing.seller_location = item.seller_location
         listing.title = item.title
         listing.asking_price = item.asking_price
         listing.shipping_cost = item.shipping_cost
@@ -482,6 +491,7 @@ def evaluate_listing(
         asking_eur=costs.purchase_price_eur,
         expected_sale_eur=valuation.expected_sale_eur,
         seller=listing.seller,
+        seller_present=bool((listing.extras or {}).get("seller_present")),
         images=listing.images or [],
         is_lot=lot.is_lot,
     )

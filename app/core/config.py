@@ -83,6 +83,8 @@ class Settings(BaseSettings):
     ebay_client_secret: str = ""
     ebay_env: Literal["production", "sandbox"] = "production"
     ebay_marketplaces: str = "EBAY_IE,EBAY_GB,EBAY_DE,EBAY_FR,EBAY_IT,EBAY_ES,EBAY_NL"
+    ebay_notification_verification_token: str = ""
+    ebay_notification_endpoint_url: str = ""
 
     @property
     def ebay_api_env(self) -> Literal["production", "sandbox"]:

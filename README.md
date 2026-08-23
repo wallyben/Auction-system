@@ -37,6 +37,7 @@ make scan-source SOURCE=scryfall
 make validate
 make production-proof
 make ebay-check
+make ebay-notification-check
 make source-health
 make backtest
 ```

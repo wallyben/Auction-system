@@ -345,13 +345,50 @@ async def cmd_ebay_check() -> int:
             },
         },
     }
+    from app.privacy.ebay_health import notification_health
+
+    try:
+        session = _session()
+        try:
+            compliance = notification_health(session)
+        finally:
+            session.close()
+    except Exception:
+        compliance = notification_health(None)
+    payload["notification_compliance"] = compliance
     print(json.dumps(payload, indent=2, default=str))
     Path("artifacts").mkdir(exist_ok=True)
     Path("artifacts/ebay_check.json").write_text(json.dumps(payload, indent=2, default=str))
     Path("artifacts/ebay_production_activation.json").write_text(
         json.dumps(activation, indent=2, default=str)
     )
-    return 0 if proof.ok or proof.status.value == "BLOCKED_CREDENTIALS" else 1
+    honest = {"BLOCKED_CREDENTIALS", "PRODUCTION_KEYSET_DISABLED_COMPLIANCE"}
+    return 0 if proof.ok or proof.status.value in honest else 1
+
+
+def cmd_ebay_notification_check() -> int:
+    from app.privacy.ebay_health import notification_health
+
+    try:
+        session = _session()
+        try:
+            payload = notification_health(session)
+        finally:
+            session.close()
+    except Exception:
+        payload = notification_health(None)
+        payload["database"] = "down"
+        payload["ready"] = False
+    print(json.dumps(payload, indent=2, default=str))
+    return 0 if payload.get("ready") else 1
+
+
+def cmd_ebay_notification_token() -> int:
+    from app.privacy.ebay_challenge import write_token_to_env
+
+    result = write_token_to_env()
+    print(json.dumps(result, indent=2, default=str))
+    return 0
 
 
 def cmd_backtest() -> int:
@@ -393,6 +430,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("validate")
     sub.add_parser("production-proof")
     sub.add_parser("ebay-check")
+    sub.add_parser("ebay-notification-check")
+    sub.add_parser("ebay-notification-token")
     sub.add_parser("source-health")
     sub.add_parser("backtest")
     sub.add_parser("paper-trade")
@@ -407,6 +446,10 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(cmd_production_proof())
     if args.cmd == "ebay-check":
         return asyncio.run(cmd_ebay_check())
+    if args.cmd == "ebay-notification-check":
+        return cmd_ebay_notification_check()
+    if args.cmd == "ebay-notification-token":
+        return cmd_ebay_notification_token()
     if args.cmd == "source-health":
         return asyncio.run(cmd_validate())
     if args.cmd == "backtest":

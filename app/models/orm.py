@@ -49,7 +49,7 @@ class Source(Base, TimestampMixin):
     official_api: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     access_method: Mapped[str] = mapped_column(String(128), nullable=False)
     credentials_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="DISABLED")
+    status: Mapped[str] = mapped_column(String(64), nullable=False, default="DISABLED")
     status_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
     cadence_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -73,7 +73,7 @@ class SourceHealth(Base):
     checked_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
-    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(64), nullable=False)
     http_status: Mapped[int | None] = mapped_column(Integer)
     latency_ms: Mapped[int | None] = mapped_column(Integer)
     records: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -645,6 +645,52 @@ class AuditEvent(Base):
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
 
 
+class EbayDeletionNotification(Base):
+    """Idempotent record of an eBay Marketplace Account Deletion notice.
+
+    Does not store username, userId, or eiasToken — only hashes and counts.
+    """
+
+    __tablename__ = "ebay_deletion_notifications"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    notification_id: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
+    topic: Mapped[str] = mapped_column(String(128), nullable=False, default="MARKETPLACE_ACCOUNT_DELETION")
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="received", index=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    username_hash: Mapped[str | None] = mapped_column(String(64))
+    user_id_hash: Mapped[str | None] = mapped_column(String(64))
+    eias_hash: Mapped[str | None] = mapped_column(String(64))
+    payload_sha256: Mapped[str | None] = mapped_column(String(64))
+    records_deleted: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    records_anonymised: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    accountant_or_legal_review_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    last_error_class: Mapped[str | None] = mapped_column(String(128))
+    signature_kid: Mapped[str | None] = mapped_column(String(128))
+    schema_version: Mapped[str | None] = mapped_column(String(32))
+
+
+class EbayDeletionDeadLetter(Base):
+    """Retry/dead-letter row for failed deletion processing. No raw PII payload."""
+
+    __tablename__ = "ebay_deletion_dead_letters"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    notification_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error_class: Mapped[str] = mapped_column(String(128), nullable=False)
+    payload_sha256: Mapped[str | None] = mapped_column(String(64))
+    resolved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
 __all__ = [
     "AuctionLot",
     "Alert",
@@ -676,4 +722,20 @@ __all__ = [
     "TaxRule",
     "Valuation",
     "WatchlistItem",
+    "EbayDeletionNotification",
+    "EbayDeletionDeadLetter",
 ]
+
+# Compatibility aliases for notification/deletion naming variants.
+SourceHealth = SourceHealth
+SoldEvidence = SoldEvidence
+WatchlistItem = WatchlistItem
+ScanJob = ScanJob
+MetricEvent = MetricEvent
+LossPostmortem = LossPostmortem
+InventoryItem = InventoryItem
+OwnerSale = OwnerSale
+PaperTrade = PaperTrade
+EbayDeletionNotification = EbayDeletionNotification
+EbayDeletionDeadLetter = EbayDeletionDeadLetter
+AuditEvent = AuditEvent
