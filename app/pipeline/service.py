@@ -46,6 +46,8 @@ from app.observability.metrics import record_metric
 from app.observations.tracker import record_observation
 from app.opportunity.engine import score_opportunity
 from app.paper.service import open_paper_trade
+from app.sources.quality import describe_source
+from app.valuation.tiers import classify_tier
 from app.risk.engine import assess_risk
 from app.shipping.engine import estimate_inbound, estimate_outbound
 from app.sold.provider import search_sold_evidence
@@ -82,6 +84,8 @@ def seed_sources(session: Session) -> None:
                 row = session.get(Source, adapter.source_id)
                 if row is not None:
                     row.commercial_quality = "LOW" if settings.ebay_api_env == "sandbox" else row.commercial_quality
+                    quality = describe_source(adapter.source_id, technical_status=row.status)
+                    row.config = {**(row.config or {}), **quality}
             continue
         session.add(
             Source(
@@ -103,6 +107,7 @@ def seed_sources(session: Session) -> None:
                     or (adapter.source_id == "ebay_browse" and settings.ebay_api_env == "sandbox")
                     else "UNKNOWN"
                 ),
+                config=describe_source(adapter.source_id, technical_status="DISABLED"),
             )
         )
     session.flush()
@@ -120,6 +125,9 @@ async def record_health(session: Session, source_id: str | None = None) -> list[
             continue
         row.status = proof.status.value
         row.status_reason = proof.detail
+        quality = describe_source(adapter.source_id, technical_status=proof.status.value, records=proof.records)
+        row.config = {**(row.config or {}), **quality}
+        row.commercial_quality = str(quality.get("COMMERCIAL_DATA_QUALITY") or row.commercial_quality)
         if proof.ok:
             row.last_success_at = proof.checked_at
             row.last_proof_at = proof.checked_at
@@ -240,9 +248,25 @@ def persist_listing(session: Session, item: NormalizedListing) -> Listing:
         )
         session.add(listing)
     else:
+        extras = dict(listing.extras or {})
+        prev_ask = listing.asking_price
+        if prev_ask is not None and item.asking_price is not None and prev_ask != item.asking_price:
+            history = list(extras.get("ask_history") or [])
+            history.append({
+                "at": item.observed_at.isoformat(),
+                "from": str(prev_ask),
+                "to": str(item.asking_price),
+            })
+            extras["ask_history"] = history[-24:]
+            extras["price_drop"] = item.asking_price < prev_ask
+            extras["price_drop_needs_reeval"] = True
+        extras.update(item.extras or {})
+        listing.extras = extras
         listing.title = item.title
         listing.asking_price = item.asking_price
         listing.shipping_cost = item.shipping_cost
+        listing.current_bid = item.current_bid
+        listing.condition_raw = item.condition_raw or listing.condition_raw
         listing.last_seen_at = item.observed_at
         listing.observed_at = item.observed_at
         listing.images = item.images or listing.images
@@ -273,6 +297,7 @@ def persist_listing(session: Session, item: NormalizedListing) -> Listing:
 
 async def _comps_for(listing: Listing, rates: dict[str, Decimal], session=None) -> list[Comp]:
     comps: list[Comp] = []
+    rejected: list[dict[str, str]] = []
     identity = getattr(listing, "_identity", None)
     is_card = listing.category == "trading_cards" or (identity and getattr(identity, "category", None) == "trading_cards")
     fx = _eur_per_unit(rates, listing.currency)
@@ -283,6 +308,7 @@ async def _comps_for(listing: Listing, rates: dict[str, Decimal], session=None) 
             for hit in sold:
                 verdict = match_comp(listing.title, hit.title)
                 if not verdict.accepted:
+                    rejected.append({"title": hit.title, "reject_reason": verdict.reason, "source": hit.source})
                     continue
                 comps.append(
                     Comp(
@@ -324,7 +350,9 @@ async def _comps_for(listing: Listing, rates: dict[str, Decimal], session=None) 
             for peer in peers:
                 if not peer.asking_price or peer.url == listing.url:
                     continue
-                if not match_comp(listing.title, peer.title).accepted:
+                verdict = match_comp(listing.title, peer.title)
+                if not verdict.accepted:
+                    rejected.append({"title": peer.title, "reject_reason": verdict.reason, "source": "reverb"})
                     continue
                 peer_fx = _eur_per_unit(rates, peer.currency) if peer.currency else fx
                 comps.append(
@@ -366,6 +394,7 @@ async def _comps_for(listing: Listing, rates: dict[str, Decimal], session=None) 
                 )
         except Exception as exc:
             logger.warning("scryfall_comp_failed", error=str(exc))
+    listing._rejected_comps = rejected  # type: ignore[attr-defined]
     return comps
 
 
@@ -623,14 +652,25 @@ def evaluate_listing(
             "fastest": exits.fastest_exit,
             "safest": exits.safest_exit,
             "highest_net": exits.highest_net_exit,
+            "liquidation": exits.liquidation_exit,
         },
-        negotiation={"ask": str(nego.ask), "ideal": str(nego.ideal_offer), "acceptable": str(nego.acceptable_offer), "walk_away": str(nego.walk_away_price), "notes": nego.notes},
+        negotiation={
+            "ask": str(nego.ask),
+            "ideal": str(nego.ideal_offer),
+            "good_buy": str(nego.acceptable_offer),
+            "acceptable": str(nego.acceptable_offer),
+            "absolute_max": str(nego.walk_away_price),
+            "walk_away": str(nego.walk_away_price),
+            "notes": nego.notes,
+        },
         provenance_pack={
             "identity": {"level": identity.level.value, "confidence": str(identity.confidence), "key": identity.canonical_key, "brand": identity.brand, "model": identity.model, "variant": identity.variant},
             "condition": {"grade": condition.grade.value, "confidence": str(condition.confidence), "notes": condition.notes},
             "valuation": valuation.provenance,
             "tax_scenarios": [{"name": s.name, "import_vat": str(s.estimate.import_vat_eur), "notes": s.estimate.notes} for s in scenarios],
             "shipping": {"inbound": str(inbound.amount_eur), "outbound": str(outbound.amount_eur), "notes": outbound.notes},
+            "what_prevented_buy_ready": gates.failures,
+            "rejected_comps": getattr(listing, "_rejected_comps", []),
             "liquidity": {
                 "low": liquidity.expected_days_to_sale_low,
                 "expected": liquidity.expected_days_to_sale,
@@ -692,6 +732,33 @@ def evaluate_listing(
         for key, value in payload.items():
             setattr(existing, key, value)
     session.flush()
+    trade_ins = [c for c in comps if c.evidence_type.value == "trade_in"]
+    extras = dict(listing.extras or {})
+    extras["failed_gates"] = gates.failures
+    extras["what_prevented_buy_ready"] = gates.failures
+    extras["near_buy"] = existing.money_ready_decision in {"WATCH", "REVIEW"} and gates.gates.get("PRODUCTION_SOURCE_PASS", False)
+    extras["rejected_comps"] = getattr(listing, "_rejected_comps", [])
+    extras["accepted_comps"] = [c.title for c in comps[:8]]
+    if trade_ins:
+        extras["liquidation_floor"] = str(min(c.price_eur for c in trade_ins))
+        extras["liquidation_channel"] = trade_ins[0].source
+        extras["liquidation_confidence"] = "0.55"
+    else:
+        extras["liquidation_floor"] = None
+        extras["liquidation_channel"] = exits.liquidation_exit
+        extras["liquidation_confidence"] = "0"
+    if extras.get("price_drop") and existing.max_buy_eur and listing.asking_price is not None:
+        extras["price_drop_crossed_max_buy"] = listing.asking_price <= existing.max_buy_eur
+        extras["price_drop_alert_eligible"] = bool(existing.money_ready)
+    listing.extras = extras
+    existing.provenance_pack = {
+        **(existing.provenance_pack or {}),
+        "liquidation": {
+            "floor": extras.get("liquidation_floor"),
+            "channel": extras.get("liquidation_channel"),
+            "confidence": extras.get("liquidation_confidence"),
+        },
+    }
     record_observation(session, listing, asking=listing.asking_price)
     open_paper_trade(session, existing)
     record_metric(session, "valuation_count", run_id=str(listing.id))
@@ -729,7 +796,12 @@ async def run_scan(
     try:
         await record_health(session, source_id=source_id if source_id and source_id != "all" else None)
         rates = await refresh_fx(session)
-        queries = [query] if query else settings.query_list()[:6]
+        if query:
+            queries = [query]
+        elif trigger in {"production-proof", "cli", "dashboard", "red-team"}:
+            queries = settings.query_list()
+        else:
+            queries = settings.query_list()[:6]
         adapters = adapter_map()
         targets = [source_id] if source_id and source_id not in {None, "all"} else [
             sid for sid in settings.source_ids() if sid in adapters

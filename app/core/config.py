@@ -65,10 +65,9 @@ class Settings(BaseSettings):
         "collectibles,trading_cards,tools,sporting_goods,hobby,small_business"
     )
     scan_queries: str = (
-        "sony 24-70 gm,sony a7 iv,canon rf 24-70,"
-        "macbook pro 14,iphone 15 pro,playstation 5 slim,"
-        "rtx 4070,pioneer ddj-1000,shure sm7b,"
-        "force of will,rhystic study"
+        "Sony FE 24-70mm GM II,Sony A7 IV,Canon RF 24-70 f/2.8,"
+        "MacBook Pro 14 M3,iPhone 15 Pro 256GB,PlayStation 5,"
+        "RTX 4070,Pioneer DDJ-1000,Shure SM7B"
     )
     scan_enabled: bool = True
     fast_marketplace_minutes: int = 15
@@ -87,11 +86,13 @@ class Settings(BaseSettings):
 
     @property
     def ebay_api_env(self) -> Literal["production", "sandbox"]:
-        """Use sandbox hosts when the keyset is SBX, even if EBAY_ENV was left at production."""
+        """Host follows the keyset. Never send SBX keys to production or PRD keys to sandbox."""
         cid = (self.ebay_client_id or "").upper()
         secret = (self.ebay_client_secret or "").upper()
         if "SBX" in cid or secret.startswith("SBX-"):
             return "sandbox"
+        if "PRD" in cid or secret.startswith("PRD-"):
+            return "production"
         return self.ebay_env
 
     reverb_token: str = ""

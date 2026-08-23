@@ -137,3 +137,32 @@ def mark_sold(
         )
     session.flush()
     return sale
+
+
+def run_labelled_test_loop(session: Session, opportunity: Opportunity) -> dict:
+    """Exercise purchase → inventory → listed → sold → outcome. Labelled TEST only."""
+    item = mark_purchased(
+        session,
+        opportunity,
+        actual_purchase_price=opportunity.all_in_acquisition_eur or opportunity.max_buy_eur,
+        actual_shipping=Decimal("8.00"),
+        notes="TEST_TRANSACTION — not an owner purchase.",
+    )
+    item.notes = "TEST_TRANSACTION — not an owner purchase."
+    item.state = InventoryState.LISTED.value
+    sale = mark_sold(
+        session,
+        item,
+        sold_date=datetime.now(timezone.utc),
+        sale_price=opportunity.expected_resale_eur or Decimal("1"),
+        sale_channel="test_loop",
+        fees=Decimal("1.00"),
+        shipping=Decimal("6.00"),
+    )
+    return {
+        "label": "TEST_TRANSACTION",
+        "inventory_id": str(item.id),
+        "sale_id": str(sale.id),
+        "state": item.state,
+        "note": "Synthetic loop for software proof. Not a real owner buy/sell.",
+    }

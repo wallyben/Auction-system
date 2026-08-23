@@ -38,8 +38,24 @@
     <div><span>Expected value</span><strong>€{{ '%.0f'|format(opportunity.expected_value_eur or 0) }}</strong></div>
     <div><span>ROI</span><strong>{{ '%.0f'|format(opportunity.expected_roi * 100) }}%</strong></div>
     <div><span>Best exit</span><strong>{{ opportunity.best_exit_channel }}</strong></div>
+    <div><span>Liquidation</span><strong>{{ (opportunity.provenance_pack.liquidation.floor if opportunity.provenance_pack and opportunity.provenance_pack.liquidation else "n/a") }}</strong></div>
     <div><span>Days (band)</span><strong>{{ opportunity.expected_days_to_sale }}</strong></div>
     <div><span>Urgency</span><strong>{{ opportunity.urgency }}</strong></div>
+  </section>
+
+  <section>
+    <h2>What prevented BUY_READY?</h2>
+    {% if opportunity.money_ready_decision == "BUY_READY" %}
+    <p>All current money-ready gates passed.</p>
+    {% else %}
+    <ul>
+      {% for g in (opportunity.gate_results.failures or []) %}
+      <li class="warn">{{ g }}{% if g == "MAX_BUY_PASS" and opportunity.listing %} — ask {{ opportunity.listing.asking_price }} vs max €{{ '%.0f'|format(opportunity.max_buy_eur) }}{% endif %}{% if g == "PRICE_EVIDENCE_PASS" %} — no realised exact-SKU comp.{% endif %}{% if g == "CATEGORY_CERT_PASS" %} — category is not certified.{% endif %}{% if g == "PRODUCTION_SOURCE_PASS" %} — sandbox / non-production source.{% endif %}</li>
+      {% else %}
+      <li>{{ opportunity.why }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
   </section>
 
   <section>

@@ -10,7 +10,11 @@ Asking prices and dealer guides are not sold prices.
 | Marketplace export importer | eBay/PayPal-style CSV | High if owner file is genuine | LIVE parser |
 | Irish realised-price panel | DB table `sold_evidence` | High when populated | LIVE schema, empty at completion |
 | Scryfall / Cardmarket EUR | Official API | Dealer/market, not Irish sold | LIVE as comparable only |
-| eBay completed/sold | Marketplace Insights / seller export | High | BLOCKED_CREDENTIALS / owner export |
+| eBay Marketplace Insights | Official sold-item search if entitled | High | Probe implemented; ordinary Buy apps typically 403/404 |
+| eBay completed/sold (Finding) | Deprecated findCompletedItems | High | DO_NOT_CALL |
+| eBay Sell Fulfillment/Finances | User OAuth, owner orders only | High | Owner OAuth required |
+| Irish auction hammer archives | HTML only | High | No official public API; not scraped |
+| CeX / trade-in | Liquidation floor | Medium | No official public API; not implemented |
 | Reverb sold | Official API | Asking from this host | BLOCKED_TECHNICAL (403) |
 
 No universal public Irish sold-comp API was found that can be used without scraping, unofficial clients, or a paid licence.

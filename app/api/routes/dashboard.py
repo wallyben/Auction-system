@@ -81,6 +81,19 @@ def dashboard(request: Request, session: Session = Depends(get_db)) -> HTMLRespo
     jobs = session.scalars(select(ScanJob).order_by(ScanJob.created_at.desc()).limit(8)).all()
     inventory = session.scalars(select(InventoryItem).order_by(InventoryItem.purchased_at.desc()).limit(20)).all()
     buys = [o for o in opps if o.money_ready_decision == "BUY_READY"]
+
+    def _extras(row: Opportunity) -> dict:
+        listing = getattr(row, "listing", None)
+        return (listing.extras or {}) if listing else {}
+
+    near = [
+        o
+        for o in opps
+        if o.money_ready_decision in {"WATCH", "REVIEW"}
+        and (_extras(o).get("near_buy") or (o.gate_results or {}).get("failures"))
+    ]
+    closing = [o for o in opps if o.urgency in {"act_now", "bid_later"}]
+    drops = [o for o in opps if _extras(o).get("price_drop")]
     ctx = _ctx(session)
     ctx.update(
         {
@@ -88,8 +101,11 @@ def dashboard(request: Request, session: Session = Depends(get_db)) -> HTMLRespo
             "jobs": jobs,
             "inventory": inventory,
             "buys": buys,
+            "near": near,
             "watch": [o for o in opps if o.money_ready_decision == "WATCH"],
             "review": [o for o in opps if o.money_ready_decision == "REVIEW"],
+            "closing": closing,
+            "drops": drops,
         }
     )
     return templates.TemplateResponse(request, "dashboard.html", ctx)

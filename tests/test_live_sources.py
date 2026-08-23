@@ -64,6 +64,9 @@ async def test_ebay_sandbox_or_production_when_configured() -> None:
         assert items[0].title
         assert items[0].url
         assert items[0].source_id == "ebay_browse"
-    # Sandbox dummy inventory must never be treated as production sold evidence.
+    host = (proof.proof or {}).get("token_host") or ""
+    if settings.ebay_api_env == "production":
+        assert "api.ebay.com" in host
+        assert "sandbox" not in host
     if settings.ebay_api_env == "sandbox":
-        assert proof.proof.get("env") == "sandbox"
+        assert proof.proof.get("env") == "sandbox" or "sandbox" in host

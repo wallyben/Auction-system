@@ -60,6 +60,58 @@
 </section>
 
 <section>
+  <h2>NEAR BUY_READY</h2>
+  {% if near %}
+  <table>
+    <thead><tr><th>Item</th><th>Ask</th><th>Max buy</th><th>What prevented BUY_READY?</th></tr></thead>
+    <tbody>
+    {% for o in near %}
+    <tr>
+      <td><a href="/opportunities/{{ o.id }}/view">{{ (o.listing.title if o.listing else "")[:80] }}</a></td>
+      <td>{% if o.listing %}{{ o.listing.currency }} {{ '%.0f'|format(o.listing.asking_price or 0) }}{% endif %}</td>
+      <td>€{{ '%.0f'|format(o.max_buy_eur) }}</td>
+      <td class="warn">{{ (o.gate_results.failures or o.listing.extras.what_prevented_buy_ready if o.listing else []) | join(", ") }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="meta">No near-buy candidates.</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>WATCH</h2>
+  <p class="meta">{{ watch|length }} items</p>
+</section>
+
+<section>
+  <h2>CLOSING SOON</h2>
+  {% if closing %}
+  <ul>
+    {% for o in closing %}
+    <li><a href="/opportunities/{{ o.id }}/view">{{ (o.listing.title if o.listing else "")[:70] }}</a> · {{ o.urgency }} · max hammer €{{ '%.0f'|format(o.max_hammer_eur or 0) }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="meta">No timed auctions currently flagged.</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>PRICE DROPS</h2>
+  {% if drops %}
+  <ul>
+    {% for o in drops %}
+    <li><a href="/opportunities/{{ o.id }}/view">{{ (o.listing.title if o.listing else "")[:70] }}</a> · ask now {% if o.listing %}{{ o.listing.asking_price }}{% endif %} · max €{{ '%.0f'|format(o.max_buy_eur) }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="meta">No observed ask reductions yet.</p>
+  {% endif %}
+</section>
+
+<section>
   <h2>Source health</h2>
   <table>
     <thead>

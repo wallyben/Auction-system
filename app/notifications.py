@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.models.enums import Decision
-from app.models.orm import Alert, Opportunity
+from app.models.orm import Alert, Listing, Opportunity
 
 logger = get_logger("arie.notifications")
 
@@ -29,15 +29,37 @@ def notify_opportunity(session: Session, opp: Opportunity) -> None:
     """Persist a dashboard alert and fan out to optional channels. Never raises."""
     if not _should_notify(opp):
         return
-    title = f"{opp.decision} €{opp.expected_profit_eur}  max buy €{opp.max_buy_eur}"
-    body = opp.why or "Opportunity crossed owner thresholds."
+    listing = session.get(Listing, opp.listing_id)
+    if listing and listing.source_id == "ebay_browse" and settings.ebay_api_env == "sandbox":
+        return
+    title = f"BUY_READY {listing.title[:80] if listing else opp.decision}"
+    body = (
+        f"item={listing.title if listing else ''} source={listing.source_id if listing else ''} "
+        f"country={listing.country if listing else ''} ask={listing.asking_price if listing else ''} "
+        f"ideal={opp.ideal_offer_eur} max_buy={opp.max_buy_eur} expected_sale={opp.expected_resale_eur} "
+        f"best_exit={opp.best_exit_channel} profit={opp.expected_profit_eur} roi={opp.expected_roi} "
+        f"days={opp.expected_days_to_sale} confidence={opp.valuation_confidence} "
+        f"url={listing.url if listing else ''}"
+    )
     payload = {
         "opportunity_id": str(opp.id),
-        "decision": opp.decision,
-        "expected_profit_eur": str(opp.expected_profit_eur),
-        "expected_roi": str(opp.expected_roi),
-        "max_buy_eur": str(opp.max_buy_eur),
-        "score": str(opp.score),
+        "item": listing.title if listing else None,
+        "source": listing.source_id if listing else None,
+        "country": listing.country if listing else None,
+        "ask": str(listing.asking_price) if listing and listing.asking_price is not None else None,
+        "current_bid": str(listing.current_bid) if listing and listing.current_bid is not None else None,
+        "ideal_offer": str(opp.ideal_offer_eur),
+        "max_buy": str(opp.max_buy_eur),
+        "expected_sale": str(opp.expected_resale_eur),
+        "quick_sale": None,
+        "best_exit": opp.best_exit_channel,
+        "profit": str(opp.expected_profit_eur),
+        "roi": str(opp.expected_roi),
+        "days": opp.expected_days_to_sale,
+        "confidence": str(opp.valuation_confidence),
+        "risk": opp.risks,
+        "url": listing.url if listing else None,
+        "sandbox": False,
     }
     alert = Alert(
         opportunity_id=opp.id,

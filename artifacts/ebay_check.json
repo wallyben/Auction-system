@@ -1,8 +1,8 @@
 {
   "credentials": {
     "configured": true,
-    "env": "sandbox",
-    "configured_ebay_env": "sandbox",
+    "env": "production",
+    "configured_ebay_env": "production",
     "marketplaces": [
       "EBAY_IE",
       "EBAY_GB",
@@ -22,9 +22,9 @@
     ]
   },
   "health": {
-    "status": "LIVE",
-    "ok": true,
-    "detail": "Browse search succeeded across configured marketplaces.",
-    "records": 3
+    "status": "BLOCKED_CREDENTIALS",
+    "ok": false,
+    "detail": "HTTP 401 for https://api.ebay.com/identity/v1/oauth2/token: {\"error\":\"invalid_client\",\"error_description\":\"client authentication failed\"}",
+    "records": 0
   }
 }

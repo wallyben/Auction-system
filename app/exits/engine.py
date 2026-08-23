@@ -31,6 +31,7 @@ class ExitComparison:
     fastest_exit: str
     safest_exit: str
     highest_net_exit: str
+    liquidation_exit: str
 
 
 _GROSS_HAIRCUT = {
@@ -117,12 +118,14 @@ def compare_exits(
     fastest = min(quotes, key=lambda q: q.expected_days)
     safest = max(quotes, key=lambda q: q.confidence)
     highest = max(quotes, key=lambda q: q.net_proceeds)
+    liq = next((q for q in quotes if q.channel in {"cex_trade_in", "dealer"}), safest)
     return ExitComparison(
         quotes=quotes,
         best_expected_exit=best.channel,
         fastest_exit=fastest.channel,
         safest_exit=safest.channel,
         highest_net_exit=highest.channel,
+        liquidation_exit=liq.channel,
     )
 
 

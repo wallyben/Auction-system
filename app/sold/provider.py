@@ -144,5 +144,14 @@ async def search_sold_evidence(
     return hits[:limit]
 
 
+async def sold_provider_health(session: Session) -> list[dict[str, object]]:
+    from app.sold.insights import EbayMarketplaceInsightsProvider
+
+    rows = []
+    for provider in (OwnerSalesProvider(session), IrishPanelProvider(session), EbayMarketplaceInsightsProvider()):
+        rows.append(await provider.healthcheck())
+    return rows
+
+
 def empty_freshness() -> datetime:
     return datetime(1970, 1, 1, tzinfo=timezone.utc)

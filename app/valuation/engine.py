@@ -10,6 +10,7 @@ from app.core.money import ZERO, money
 from app.models.enums import EvidenceType
 from app.valuation.irish import EVIDENCE_WEIGHT, TERRITORY_WEIGHT, irish_net_proceeds
 from app.valuation.stats import display_money, percentile, recency_weight, reject_outliers, weighted_median
+from app.valuation.tiers import STRONG_TIERS, classify_tier
 
 
 @dataclass(slots=True)
@@ -25,6 +26,7 @@ class Comp:
     observed_at: datetime
     outlier: bool = False
     notes: str = ""
+    evidence_tier: str = ""
 
 
 @dataclass(slots=True)
@@ -82,17 +84,28 @@ def value_from_comps(comps: list[Comp], *, now: datetime | None = None) -> Valua
             expected_days=None,
             provenance={"reason": "No comparables. Fail closed."},
         )
-    prices = [c.price_eur for c in comps]
+    for comp in comps:
+        if not comp.evidence_tier:
+            comp.evidence_tier = classify_tier(
+                comp.evidence_type,
+                exact_sku=comp.product_score >= Decimal("0.85"),
+                locality_ok=comp.country.upper() == "IE",
+            )
+    strong = [c for c in comps if c.evidence_tier in STRONG_TIERS]
+    candidate = strong if strong else comps
+    prices = [c.price_eur for c in candidate]
     kept_prices, rejected = reject_outliers(prices)
     rejected_set = set(rejected)
-    usable = [c for c in comps if c.price_eur not in rejected_set]
+    usable = [c for c in candidate if c.price_eur not in rejected_set]
     for comp in comps:
-        comp.outlier = comp.price_eur in rejected_set
+        comp.outlier = comp.price_eur in rejected_set and comp in candidate
     if not usable:
-        usable = comps
-    pairs = [(c.price_eur, _weight(c, now)) for c in usable]
+        usable = candidate
+    # Strong realised/hammer evidence wins. A pile of asking prices cannot average it away.
+    priced = usable
+    pairs = [(c.price_eur, _weight(c, now)) for c in priced]
     expected = weighted_median(pairs)
-    ordered = sorted(c.price_eur for c in usable)
+    ordered = sorted(c.price_eur for c in priced)
     low = ordered[0]
     high = ordered[-1]
     quick = money(expected * Decimal("0.88"))
@@ -133,11 +146,14 @@ def value_from_comps(comps: list[Comp], *, now: datetime | None = None) -> Valua
                 "country": c.country,
                 "outlier": c.outlier,
                 "weight": str(_weight(c, now)),
+                "tier": c.evidence_tier,
             }
             for c in comps
         ],
         "rejected_outliers": [str(value) for value in rejected],
         "method": method,
+        "strong_tier_count": len(strong),
+        "priced_from": "strong_realised" if strong else "weak_or_asking",
         "warning": "Asking prices are not realised Irish sales." if asking_only else "",
         "percentiles": {"p10": str(p10), "p25": str(p25), "median": str(p50), "p75": str(p75), "p90": str(p90)},
         "display": {

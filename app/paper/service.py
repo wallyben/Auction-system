@@ -10,8 +10,25 @@ from sqlalchemy.orm import Session
 from app.models.orm import Listing, Opportunity, PaperTrade
 
 
+def should_open_paper(opportunity: Opportunity) -> tuple[bool, str]:
+    if opportunity.money_ready:
+        return True, "BUY_READY"
+    if opportunity.engine_decision == "BUY" or opportunity.decision == "BUY":
+        return True, "ENGINE_BUY"
+    failures = (opportunity.gate_results or {}).get("failures") or []
+    production_ok = "PRODUCTION_SOURCE_PASS" not in failures
+    if (
+        opportunity.money_ready_decision == "WATCH"
+        and production_ok
+        and (opportunity.expected_profit_eur or 0) > 0
+    ):
+        return True, "NEAR_BUY"
+    return False, ""
+
+
 def open_paper_trade(session: Session, opportunity: Opportunity) -> PaperTrade | None:
-    if not opportunity.money_ready:
+    ok, reason = should_open_paper(opportunity)
+    if not ok:
         return None
     existing = session.scalar(select(PaperTrade).where(PaperTrade.opportunity_id == opportunity.id))
     if existing:
@@ -28,7 +45,10 @@ def open_paper_trade(session: Session, opportunity: Opportunity) -> PaperTrade |
         predicted_days=opportunity.expected_days_to_sale,
         status="open",
         observed_outcome=None,
-        notes="Opened because money_ready BUY_READY. Outcome unknown until observed.",
+        notes=(
+            f"Opened as {reason}. Disappearance is not a sale. "
+            "Outcome unknown until observed evidence exists."
+        ),
     )
     session.add(trade)
     session.flush()

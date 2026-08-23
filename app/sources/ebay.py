@@ -13,6 +13,7 @@ from app.core.http import SourceHttpError, build_client, request_json
 from app.core.logging import get_logger
 from app.models.enums import SourceKind, SourceStatus
 from app.sources.base import HealthProof, NormalizedListing, SourceAdapter
+from app.sources.ebay_filters import browse_filter, reject_title
 
 logger = get_logger("arie.sources.ebay")
 
@@ -30,6 +31,10 @@ ITEM_URL = {
 }
 
 SCOPE = "https://api.ebay.com/oauth/api_scope"
+
+
+def api_root(env: str) -> str:
+    return "https://api.ebay.com" if env == "production" else "https://api.sandbox.ebay.com"
 
 
 class EbayBrowseAdapter(SourceAdapter):
@@ -66,6 +71,18 @@ class EbayBrowseAdapter(SourceAdapter):
         }
 
     async def healthcheck(self) -> HealthProof:
+        host_token = TOKEN_URL[settings.ebay_api_env]
+        host_search = SEARCH_URL[settings.ebay_api_env]
+        sandbox_used = "sandbox" in host_token or "sandbox" in host_search
+        base_proof = {
+            **self.credential_status(),
+            "token_host": host_token,
+            "search_host": host_search,
+            "sandbox_used": sandbox_used,
+            "api_root": api_root(settings.ebay_api_env),
+            "fail_closed": True,
+            "silent_sandbox_fallback": False,
+        }
         if self._missing_credentials():
             return HealthProof(
                 status=SourceStatus.BLOCKED_CREDENTIALS,
@@ -74,19 +91,43 @@ class EbayBrowseAdapter(SourceAdapter):
                 latency_ms=None,
                 records=0,
                 detail="EBAY_CLIENT_ID / EBAY_CLIENT_SECRET not configured. Create an app at developer.ebay.com.",
-                proof=self.credential_status(),
+                proof=base_proof,
             )
         started = time.perf_counter()
+        oauth = await self._oauth_probe()
+        base_proof["oauth"] = oauth
+        if not oauth.get("ok"):
+            return HealthProof(
+                status=SourceStatus.BLOCKED_CREDENTIALS,
+                ok=False,
+                http_status=oauth.get("http_status"),
+                latency_ms=int((time.perf_counter() - started) * 1000),
+                records=0,
+                detail=str(oauth.get("error") or "OAuth failed"),
+                proof=base_proof,
+            )
         try:
-            listings = await self.search("iphone", limit=3)
+            listings = await self.search("sony a7 iv", limit=3)
+            from app.sold.insights import EbayMarketplaceInsightsProvider
+
+            insights = await EbayMarketplaceInsightsProvider(self._token).probe()
             return HealthProof(
                 status=SourceStatus.LIVE if listings else SourceStatus.DEGRADED,
-                ok=bool(listings),
+                ok=True,
                 http_status=200,
                 latency_ms=int((time.perf_counter() - started) * 1000),
                 records=len(listings),
                 detail="Browse search succeeded across configured marketplaces.",
-                proof={"sample": listings[0].external_id if listings else None, **self.credential_status()},
+                proof={
+                    **base_proof,
+                    "sample": listings[0].external_id if listings else None,
+                    "sample_url": listings[0].url if listings else None,
+                    "sample_item_ids": [item.external_id for item in listings[:3]],
+                    "sample_urls": [item.url for item in listings[:3]],
+                    "currencies": sorted({item.currency for item in listings}),
+                    "countries": sorted({item.country for item in listings if item.country}),
+                    "marketplace_insights": insights,
+                },
             )
         except Exception as exc:
             logger.warning("ebay_health_failed", error=str(exc))
@@ -101,29 +142,109 @@ class EbayBrowseAdapter(SourceAdapter):
                 latency_ms=int((time.perf_counter() - started) * 1000),
                 records=0,
                 detail=str(exc),
-                proof=self.credential_status(),
+                proof=base_proof,
             )
+
+    async def _oauth_probe(self) -> dict[str, Any]:
+        """Client-credentials grant against the environment-selected host only."""
+        import httpx
+
+        url = TOKEN_URL[settings.ebay_api_env]
+        basic = base64.b64encode(
+            f"{settings.ebay_client_id}:{settings.ebay_client_secret}".encode()
+        ).decode()
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                response = await client.post(
+                    url,
+                    headers={
+                        "Authorization": f"Basic {basic}",
+                        "Content-Type": "application/x-www-form-urlencoded",
+                    },
+                    data={"grant_type": "client_credentials", "scope": SCOPE},
+                )
+        except httpx.HTTPError as exc:
+            return {"ok": False, "http_status": None, "host": url, "error": type(exc).__name__}
+        body = response.text[:220]
+        if "access_token" in body:
+            body = '{"access_token":"[REDACTED]"}'
+        if response.status_code == 200:
+            payload = response.json()
+            self._token = payload["access_token"]
+            self._token_expires = time.time() + int(payload.get("expires_in") or 7200)
+            return {
+                "ok": True,
+                "http_status": 200,
+                "host": url,
+                "token_type": payload.get("token_type"),
+                "expires_in": payload.get("expires_in"),
+            }
+        return {
+            "ok": False,
+            "http_status": response.status_code,
+            "host": url,
+            "error": body,
+            "diagnosis": self._diagnose_oauth(response.status_code, body),
+        }
+
+    def _diagnose_oauth(self, status: int, body: str) -> list[str]:
+        hints = [
+            f"EBAY_ENV={settings.ebay_env} effective={settings.ebay_api_env}",
+            "OAuth host is production" if settings.ebay_api_env == "production" else "OAuth host is sandbox",
+            "Grant = client_credentials, scope = public Browse scope",
+            "No silent sandbox fallback",
+        ]
+        if status == 401 and "invalid_client" in body:
+            hints.append(
+                "eBay rejected the client id/secret pair (invalid_client). "
+                "Re-copy Production App ID + Cert ID from developer.ebay.com Production tab. "
+                "Confirm the keyset is enabled and Buy Browse is subscribed."
+            )
+        if status == 403:
+            hints.append("Token endpoint 403: keyset may lack OAuth entitlement.")
+        return hints
 
     async def _token_header(self) -> dict[str, str]:
         if self._token and time.time() < self._token_expires - 60:
             return {"Authorization": f"Bearer {self._token}"}
-        basic = base64.b64encode(
-            f"{settings.ebay_client_id}:{settings.ebay_client_secret}".encode()
-        ).decode()
-        async with build_client() as client:
-            _, payload = await request_json(
-                client,
-                "POST",
-                TOKEN_URL[settings.ebay_api_env],
-                headers={
-                    "Authorization": f"Basic {basic}",
-                    "Content-Type": "application/x-www-form-urlencoded",
-                },
-                data=f"grant_type=client_credentials&scope={SCOPE}",
-            )
-        self._token = payload["access_token"]
-        self._token_expires = time.time() + int(payload.get("expires_in") or 7200)
+        oauth = await self._oauth_probe()
+        if not oauth.get("ok") or not self._token:
+            raise SourceHttpError(int(oauth.get("http_status") or 401), TOKEN_URL[settings.ebay_api_env], str(oauth.get("error") or "oauth"))
         return {"Authorization": f"Bearer {self._token}"}
+
+    async def marketplace_sweep(self, *, queries: list[str] | None = None, per_market: int = 6) -> list[dict[str, Any]]:
+        queries = queries or [
+            "Sony FE 24-70mm GM II",
+            "Sony A7 IV",
+            "Canon RF 24-70 f/2.8",
+            "MacBook Pro M3",
+            "iPhone 15 Pro 256GB",
+            "RTX 4070",
+            "PlayStation 5",
+            "Pioneer DDJ-1000",
+            "Shure SM7B",
+        ]
+        rows: list[dict[str, Any]] = []
+        for marketplace in settings.ebay_marketplace_list():
+            for query in queries:
+                try:
+                    listings = await self.search(query, limit=per_market, marketplaces=[marketplace])
+                except Exception as exc:
+                    rows.append({"marketplace": marketplace, "query": query, "ok": False, "error": type(exc).__name__})
+                    continue
+                rows.append({
+                    "marketplace": marketplace,
+                    "query": query,
+                    "ok": True,
+                    "count": len(listings),
+                    "currencies": sorted({item.currency for item in listings}),
+                    "countries": sorted({item.country for item in listings if item.country}),
+                    "conditions": sorted({item.condition_raw or "" for item in listings if item.condition_raw}),
+                    "sample_ids": [item.external_id for item in listings[:2]],
+                    "sample_urls": [item.url for item in listings[:2]],
+                    "search_host": SEARCH_URL[settings.ebay_api_env],
+                })
+        return rows
 
     async def search(
         self,
@@ -163,7 +284,12 @@ class EbayBrowseAdapter(SourceAdapter):
                         "GET",
                         SEARCH_URL[settings.ebay_api_env],
                         headers=headers,
-                        params={"q": query, "limit": str(page), "offset": str(offset)},
+                        params={
+                            "q": query,
+                            "limit": str(page),
+                            "offset": str(offset),
+                            "filter": browse_filter(),
+                        },
                     )
                 except SourceHttpError as exc:
                     if exc.status_code == 429:
@@ -172,7 +298,13 @@ class EbayBrowseAdapter(SourceAdapter):
             batch = payload.get("itemSummaries") or []
             if not batch:
                 break
-            items.extend(self._normalize(item, marketplace) for item in batch)
+            for raw in batch:
+                listing = self._normalize(raw, marketplace)
+                reason = reject_title(query, listing.title)
+                if reason:
+                    listing.extras["rejected_reason"] = reason
+                    continue
+                items.append(listing)
             offset += len(batch)
             if len(batch) < page:
                 break
