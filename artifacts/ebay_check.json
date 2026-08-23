@@ -1,0 +1,29 @@
+{
+  "credentials": {
+    "configured": false,
+    "env": "production",
+    "marketplaces": [
+      "EBAY_IE",
+      "EBAY_GB",
+      "EBAY_DE",
+      "EBAY_FR",
+      "EBAY_IT",
+      "EBAY_ES",
+      "EBAY_NL"
+    ],
+    "docs": "https://developer.ebay.com/api-docs/static/oauth-client-credentials-grant.html",
+    "setup": [
+      "Create an app at https://developer.ebay.com/my/keys",
+      "Enable the Buy Browse API",
+      "Set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET in .env",
+      "Optionally set EBAY_ENV=sandbox and EBAY_MARKETPLACES",
+      "Run: make ebay-check"
+    ]
+  },
+  "health": {
+    "status": "BLOCKED_CREDENTIALS",
+    "ok": false,
+    "detail": "EBAY_CLIENT_ID / EBAY_CLIENT_SECRET not configured. Create an app at developer.ebay.com.",
+    "records": 0
+  }
+}

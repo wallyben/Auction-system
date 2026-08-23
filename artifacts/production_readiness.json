@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-23T17:54:15.071340+00:00",
+  "generated_at": "2026-08-23T18:21:07.418624+00:00",
   "scan_status": "partial",
   "listings_seen": 24,
   "live_sources": [
@@ -31,5 +31,18 @@
     "wilsons"
   ],
   "buy_count": 0,
-  "verdict_hint": "NO_CURRENT_OPPORTUNITY_PASSED_THRESHOLDS"
+  "buy_ready_count": 0,
+  "certification_level": "LEVEL_1_LIVE_DATA",
+  "verdict": "ARIE_SOFTWARE_COMPLETE_EMPIRICAL_VALIDATION_REQUIRED",
+  "real_money_answer": "NO",
+  "gates": {
+    "G00_REPO_HEALTH": "PASS",
+    "G05_LIVE_ACQUISITION": "PARTIAL",
+    "G06_REAL_SALES_EVIDENCE": "FAIL_EMPTY_PANEL",
+    "G22_BUY_READY": "PASS_FAIL_CLOSED",
+    "G33_BACKTEST": "INSUFFICIENT_DATA",
+    "G34_PAPER_TRADE": "NO_BUY_READY",
+    "G35_CATEGORY_CERTIFICATION": "NOT_CERTIFIED",
+    "G37_REAL_MONEY_SAFETY": "SAFE_START_DEFAULT"
+  }
 }

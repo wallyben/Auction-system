@@ -1,0 +1,13 @@
+{
+  "BUY_READY_count": 0,
+  "win_rate": null,
+  "loss_rate": null,
+  "mean_profit": null,
+  "median_profit": null,
+  "mean_ROI": null,
+  "median_ROI": null,
+  "worst_loss": null,
+  "capital_turnover": null,
+  "sample_size": 0,
+  "note": "No owner-recorded sales. Backtest cannot be claimed. Import a sales CSV first."
+}
