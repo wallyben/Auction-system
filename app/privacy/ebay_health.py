@@ -7,22 +7,15 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
+from app.core.config import get_settings
 from app.privacy.ebay_signature import signature_verifier_ready
 from app.privacy.identifiers import token_is_valid
 
 
 def notification_health(session: Session | None = None) -> dict[str, Any]:
-    token = (
-        getattr(settings, "ebay_notification_verification_token", None)
-        or getattr(settings, "ebay_notification_verification_token", None)
-        or ""
-    ).strip()
-    endpoint = (
-        getattr(settings, "ebay_notification_endpoint_url", None)
-        or getattr(settings, "ebay_notification_endpoint_url", None)
-        or ""
-    ).strip()
+    current = get_settings()
+    token = (getattr(current, "ebay_notification_verification_token", None) or "").strip()
+    endpoint = (getattr(current, "ebay_notification_endpoint_url", None) or "").strip()
     token_ok = token_is_valid(token)
     endpoint_ok = endpoint.startswith("https://")
     db = "skipped"
@@ -35,6 +28,7 @@ def notification_health(session: Session | None = None) -> dict[str, Any]:
     ready = token_ok and endpoint_ok and signature_verifier_ready() and db != "down"
     return {
         "ready": ready,
+        "ready_for_ebay_challenge": token_ok and endpoint_ok,
         "endpoint_configured": bool(endpoint),
         "endpoint_https": endpoint_ok,
         "verification_token_configured": bool(token),

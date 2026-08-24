@@ -31,9 +31,9 @@ CANDIDATES = [
         "name": "eBay Sell Fulfillment / Finances / Analytics",
         "classification": "REALIZED_SOLD",
         "access": "user_oauth",
-        "status": "owner_oauth_required",
+        "status": "implemented_awaiting_owner_consent",
         "docs": "https://developer.ebay.com/api-docs/sell/static/selling-ig-landing.html",
-        "provides": "Owner-only orders and payouts after user consent. Not general market sold comps.",
+        "provides": "Owner-only orders and payouts after user consent. Not general market sold comps. Flow: /oauth/ebay/start and `make ebay-owner-oauth-url`.",
     },
     {
         "name": "eBay seller hub / Terapeak export",

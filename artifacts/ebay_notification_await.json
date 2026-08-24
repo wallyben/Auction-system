@@ -1,0 +1,14 @@
+{
+  "health_status": "BLOCKED_CREDENTIALS",
+  "health_ok": false,
+  "http_status": null,
+  "records": 0,
+  "oauth_ok": false,
+  "oauth_http_status": null,
+  "browse_ok": false,
+  "sandbox_used": false,
+  "sample_urls": null,
+  "detail": "EBAY_CLIENT_ID / EBAY_CLIENT_SECRET not configured. Create an app at developer.ebay.com.",
+  "attempt": 1,
+  "activated": false
+}

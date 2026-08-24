@@ -38,6 +38,10 @@ make validate
 make production-proof
 make ebay-check
 make ebay-notification-check
+make ebay-notification-token
+make ebay-notification-show-token
+make ebay-notification-watch
+make ebay-notification-activate
 make source-health
 make backtest
 ```

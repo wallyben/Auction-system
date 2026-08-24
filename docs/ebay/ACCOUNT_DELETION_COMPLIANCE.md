@@ -56,49 +56,47 @@ The GET challenge does **not** need OAuth. Signature verification on POST
 **does** need Production client-credentials to fetch eBay public keys. That
 works after the keyset is enabled.
 
-## Owner actions in the eBay Developer Portal
-
-Do this **after** the HTTPS URL is live and
-`EBAY_NOTIFICATION_VERIFICATION_TOKEN` is in `.env` (never commit it).
-
-Generate a token if needed:
+## Activate (agent + one portal Save)
 
 ```bash
-make ebay-notification-token
+make ebay-notification-activate
+make ebay-notification-watch
 ```
 
-Confirm readiness (does **not** claim eBay subscription is active):
+Owner paste sheet (exact URL + token command + click sequence):
+
+`docs/ebay/OWNER_PORTAL_ACTION.md` and `artifacts/ebay_owner_portal_action.txt`
+
+Retrieve the token only when you are pasting it:
 
 ```bash
-make ebay-notification-check
+make ebay-notification-show-token
 ```
 
-Then, in the Developer Portal:
-
-1. Open the application whose **Production** keyset is disabled.
-2. Open **Alerts & Notifications** (wording may be **Notifications** /
-   **Marketplace Account Deletion**).
-3. Select topic **`MARKETPLACE_ACCOUNT_DELETION`**.
-4. Notification Endpoint URL (exactly, HTTPS, no trailing slash unless that
-   is how the server is mounted):
-
-   `https://<your-https-host>/webhooks/ebay/account-deletion`
-
-   That value must equal `EBAY_NOTIFICATION_ENDPOINT_URL` in `.env`.
-5. Paste **Verification Token** from `.env` key
-   `EBAY_NOTIFICATION_VERIFICATION_TOKEN`. Do not put the token in git,
-   docs, or chat logs.
-6. Enter the destination **email** eBay should use for notification
-   problems (your operator email).
-7. Save / verify / subscribe. eBay will GET the endpoint with
-   `challenge_code`. ARIE must return HTTP 200 and JSON
-   `challengeResponse`.
-8. Confirm the Production keyset shows **enabled**.
-9. Then run:
+If a persistent HTTPS host is added later:
 
 ```bash
-make ebay-check
+make ebay-notification-set-endpoint URL=https://<host>/webhooks/ebay/account-deletion
+make ebay-notification-proof
 ```
+
+Do not tick the exemption. Do not regenerate Production keys.
+
+After Save, the agent polls Production OAuth with `make ebay-notification-await`.
+
+## Configuration (`.env` only)
+
+```
+EBAY_NOTIFICATION_VERIFICATION_TOKEN=<32-80 chars, A-Z a-z 0-9 _ ->
+EBAY_NOTIFICATION_ENDPOINT_URL=https://<your-https-host>/webhooks/ebay/account-deletion
+```
+
+Health:
+
+- `GET /health/ebay-notifications`
+- `make ebay-notification-check`
+
+`ebay_subscription_active` stays `false` until the portal subscription is confirmed.
 
 Expected only **after** the keyset is enabled:
 
@@ -110,21 +108,6 @@ Expected only **after** the keyset is enabled:
 Until the dashboard shows the keyset enabled, Production OAuth may still
 return `401 invalid_client`. That is the disabled-keyset state, not a cue
 to rotate credentials.
-
-## Configuration (`.env` only)
-
-```
-EBAY_NOTIFICATION_VERIFICATION_TOKEN=<32-80 chars, A-Za-z0-9_->
-EBAY_NOTIFICATION_ENDPOINT_URL=https://<your-https-host>/webhooks/ebay/account-deletion
-```
-
-Health:
-
-- `GET /health/ebay-notifications`
-- `make ebay-notification-check`
-
-`ebay_subscription_active` stays `false` until you confirm the portal
-subscription yourself. ARIE cannot see the Developer Portal.
 
 ## Deletion behaviour
 

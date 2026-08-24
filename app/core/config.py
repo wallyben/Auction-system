@@ -85,6 +85,9 @@ class Settings(BaseSettings):
     ebay_marketplaces: str = "EBAY_IE,EBAY_GB,EBAY_DE,EBAY_FR,EBAY_IT,EBAY_ES,EBAY_NL"
     ebay_notification_verification_token: str = ""
     ebay_notification_endpoint_url: str = ""
+    ebay_ru_name: str = ""
+    ebay_oauth_redirect_uri: str = ""
+    ebay_refresh_token: str = ""
 
     @property
     def ebay_api_env(self) -> Literal["production", "sandbox"]:

@@ -1,0 +1,18 @@
+{
+  "generated_at": "2026-08-24T17:15:09.873043+00:00",
+  "endpoint_url": null,
+  "token_configured": true,
+  "token_length": 48,
+  "secrets_included": false,
+  "public": false,
+  "https_certificate_valid": null,
+  "get_status": null,
+  "post_unsigned_status": null,
+  "health_status": null,
+  "challenge_match": false,
+  "redirect": false,
+  "auth_blocked": false,
+  "latency_ms": null,
+  "hostname_matches_config": false,
+  "blocked_reason": "no_public_https_endpoint"
+}

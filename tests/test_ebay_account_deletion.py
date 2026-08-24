@@ -8,6 +8,7 @@ import json
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives import hashes, serialization
@@ -83,7 +84,6 @@ def client(engine, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     fresh = get_settings()
     monkeypatch.setattr("app.core.config.settings", fresh)
     monkeypatch.setattr("app.api.routes.ebay_webhooks.settings", fresh)
-    monkeypatch.setattr("app.privacy.ebay_health.settings", fresh)
     monkeypatch.setattr("app.db.session.settings", fresh)
     monkeypatch.setattr("app.db.session._engine", None, raising=False)
     monkeypatch.setattr("app.db.session._session_factory", None, raising=False)
@@ -243,10 +243,21 @@ def test_challenge_matches_ebay_hash() -> None:
     assert challenge_response("abc", TOKEN, ENDPOINT) == expected
 
 
-def test_get_challenge(client: TestClient) -> None:
+def test_watch_events_on_challenge(client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    log = tmp_path / "events.jsonl"
+    monkeypatch.setenv("EBAY_NOTIFICATION_WATCH_LOG", str(log))
     response = client.get(ROUTE, params={"challenge_code": "abc"})
     assert response.status_code == 200
     assert response.json()["challengeResponse"] == challenge_response("abc", TOKEN, ENDPOINT)
+    events = [json.loads(line)["event"] for line in log.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert events == [
+        "EBAY_CHALLENGE_RECEIVED",
+        "EBAY_CHALLENGE_RESPONDED_200",
+        "EBAY_NOTIFICATION_ENDPOINT_VERIFIED",
+    ]
+    assert TOKEN not in log.read_text(encoding="utf-8")
+    unsigned = client.post(ROUTE, content=b"{}")
+    assert unsigned.status_code == 412
 
 
 def test_get_challenge_camel_case(client: TestClient) -> None:
@@ -265,6 +276,7 @@ def test_health_does_not_claim_subscription(client: TestClient) -> None:
     body = response.json()
     assert body["ebay_subscription_active"] is False
     assert body["verification_token_configured"] is True
+    assert body["ready_for_ebay_challenge"] is True
 
 
 def test_valid_notification_anonymises_and_acks(

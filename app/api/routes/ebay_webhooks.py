@@ -17,6 +17,7 @@ from app.core.logging import get_logger
 from app.db.session import get_db_session
 from app.privacy.ebay_challenge import challenge_response
 from app.privacy.ebay_processor import process_verified_notification, record_unparseable_notice
+from app.privacy.ebay_watch import record_watch_event
 from app.privacy.ebay_signature import (
     SignatureError,
     decode_signature_header,
@@ -32,7 +33,7 @@ router = APIRouter(tags=["ebay-webhooks"])
 _RATE_LIMIT = 180
 _RATE_WINDOW = 60.0
 _hits: dict[str, deque[float]] = defaultdict(deque)
-_ACCEPTED_TOPICS = {"MARKETPLACE_ACCOUNT_DELETION", "MARKETPLACE_ACCOUNT_DELETION"}
+_ACCEPTED_TOPICS = {"MARKETPLACE_ACCOUNT_DELETION"}
 
 
 def get_db():
@@ -55,19 +56,11 @@ def reset_rate_limiter() -> None:
 
 
 def _endpoint_url() -> str:
-    return (
-        getattr(settings, "ebay_notification_endpoint_url", None)
-        or getattr(settings, "ebay_notification_endpoint_url", None)
-        or ""
-    ).strip()
+    return (getattr(settings, "ebay_notification_endpoint_url", None) or "").strip()
 
 
 def _token() -> str:
-    return (
-        getattr(settings, "ebay_notification_verification_token", None)
-        or getattr(settings, "ebay_notification_verification_token", None)
-        or ""
-    ).strip()
+    return (getattr(settings, "ebay_notification_verification_token", None) or "").strip()
 
 
 @router.get("/webhooks/ebay/account-deletion")
@@ -85,6 +78,7 @@ async def ebay_account_deletion_challenge(request: Request) -> JSONResponse:
     challenge_code = params.get("challenge_code") or params.get("challengeCode")
     if not challenge_code:
         return JSONResponse({"error": "missing_challenge_code"}, status_code=400)
+    record_watch_event("EBAY_CHALLENGE_RECEIVED", endpoint_host=_host(_endpoint_url()))
     token = _token()
     endpoint = _endpoint_url()
     if not token_is_valid(token) or not endpoint:
@@ -92,6 +86,8 @@ async def ebay_account_deletion_challenge(request: Request) -> JSONResponse:
         return JSONResponse({"error": "endpoint_not_configured"}, status_code=500)
     response_hash = challenge_response(challenge_code, token, endpoint)
     logger.info("ebay_challenge_ok", endpoint_host=_host(endpoint))
+    record_watch_event("EBAY_CHALLENGE_RESPONDED_200", endpoint_host=_host(endpoint))
+    record_watch_event("EBAY_NOTIFICATION_ENDPOINT_VERIFIED", endpoint_host=_host(endpoint))
     return JSONResponse({"challengeResponse": response_hash}, status_code=200)
 
 
@@ -113,6 +109,7 @@ async def ebay_account_deletion_notice(
     body = await request.body()
     if not x_ebay_signature:
         logger.warning("ebay_deletion_missing_signature")
+        record_watch_event("EBAY_POST_REJECTED_412", reason="missing_signature")
         return Response(status_code=412)
     try:
         header = decode_signature_header(x_ebay_signature)

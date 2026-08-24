@@ -1,7 +1,7 @@
 PYTHON ?= python3
 export DATABASE_URL ?= postgresql+psycopg://arie:arie@localhost:5432/arie
 
-.PHONY: dev test test-live scan scan-source validate production-proof migrate install ebay-check ebay-notification-check ebay-notification-token source-health backtest
+.PHONY: dev test test-live scan scan-source validate production-proof migrate install ebay-check ebay-notification-check ebay-notification-token ebay-notification-show-token ebay-notification-watch ebay-notification-set-endpoint ebay-notification-proof ebay-notification-activate ebay-notification-await ebay-owner-oauth-url source-health backtest
 
 install:
 	$(PYTHON) -m pip install -e ".[dev]"
@@ -39,6 +39,27 @@ ebay-notification-check:
 
 ebay-notification-token:
 	$(PYTHON) -m app.cli ebay-notification-token
+
+ebay-notification-show-token:
+	$(PYTHON) -m app.cli ebay-notification-show-token
+
+ebay-notification-watch:
+	$(PYTHON) -m app.cli ebay-notification-watch
+
+ebay-notification-set-endpoint:
+	$(PYTHON) -m app.cli ebay-notification-set-endpoint $(URL)
+
+ebay-notification-proof:
+	$(PYTHON) -m app.cli ebay-notification-proof
+
+ebay-notification-activate:
+	$(PYTHON) -m app.cli ebay-notification-activate
+
+ebay-notification-await:
+	$(PYTHON) -m app.cli ebay-notification-await
+
+ebay-owner-oauth-url:
+	$(PYTHON) -m app.cli ebay-owner-oauth-url
 
 source-health:
 	$(PYTHON) -m app.cli source-health

@@ -145,10 +145,16 @@ async def search_sold_evidence(
 
 
 async def sold_provider_health(session: Session) -> list[dict[str, object]]:
+    from app.sold.ebay_owner_oauth import EbayOwnerOrdersProvider
     from app.sold.insights import EbayMarketplaceInsightsProvider
 
     rows = []
-    for provider in (OwnerSalesProvider(session), IrishPanelProvider(session), EbayMarketplaceInsightsProvider()):
+    for provider in (
+        OwnerSalesProvider(session),
+        IrishPanelProvider(session),
+        EbayMarketplaceInsightsProvider(),
+        EbayOwnerOrdersProvider(),
+    ):
         rows.append(await provider.healthcheck())
     return rows
 
