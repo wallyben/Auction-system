@@ -56,7 +56,11 @@
     "endpoint_url": "https://auction-system-l6je.onrender.com/webhooks/ebay/account-deletion",
     "blocked_reason": "public_challenge_mismatch_or_unreachable",
     "get_status": 500,
-    "challenge_match": false
+    "get_error": "endpoint_not_configured",
+    "challenge_match": false,
+    "post_unsigned_status": 412,
+    "health_status": 200,
+    "https_certificate_valid": true
   },
   "production": {
     "health_status": "BLOCKED_CREDENTIALS",
