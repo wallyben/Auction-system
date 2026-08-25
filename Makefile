@@ -1,13 +1,16 @@
 PYTHON ?= python3
 export DATABASE_URL ?= postgresql+psycopg://arie:arie@localhost:5432/arie
 
-.PHONY: dev test test-live scan scan-source validate production-proof migrate install ebay-check ebay-notification-check ebay-notification-token ebay-notification-show-token ebay-notification-watch ebay-notification-set-endpoint ebay-notification-proof ebay-notification-activate ebay-notification-await ebay-owner-oauth-url source-health backtest
+.PHONY: dev test test-live scan scan-source validate production-proof migrate install db-check ebay-check ebay-notification-check ebay-notification-token ebay-notification-show-token ebay-notification-watch ebay-notification-set-endpoint ebay-notification-proof ebay-notification-activate ebay-notification-await ebay-owner-oauth-url source-health backtest
 
 install:
 	$(PYTHON) -m pip install -e ".[dev]"
 
 migrate:
 	$(PYTHON) -m alembic upgrade head
+
+db-check:
+	$(PYTHON) -m app.cli db-check
 
 dev:
 	$(PYTHON) -m alembic upgrade head

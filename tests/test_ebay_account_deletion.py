@@ -24,7 +24,7 @@ from app.api.routes.ebay_webhooks import get_db as ebay_get_db
 from app.api.routes.ops import get_db as ops_get_db
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.session import get_db_session
+from app.db.session import get_db_session, reset_engine
 from app.main import create_app
 from app.models.enums import SourceStatus
 from app.models.orm import AuditEvent, EbayDeletionNotification, Listing, RawListing, Source
@@ -84,9 +84,7 @@ def client(engine, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     fresh = get_settings()
     monkeypatch.setattr("app.core.config.settings", fresh)
     monkeypatch.setattr("app.api.routes.ebay_webhooks.settings", fresh)
-    monkeypatch.setattr("app.db.session.settings", fresh)
-    monkeypatch.setattr("app.db.session._engine", None, raising=False)
-    monkeypatch.setattr("app.db.session._session_factory", None, raising=False)
+    reset_engine()
 
     factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 

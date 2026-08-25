@@ -479,6 +479,36 @@ def cmd_ebay_owner_oauth_url() -> int:
     return 0 if payload.get("ok") else 1
 
 
+def cmd_db_check() -> int:
+    from app.db.session import probe_database, reset_engine
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    reset_engine()
+    result = probe_database()
+    configured = "yes" if result["configured"] else "no"
+    scheme = result.get("scheme") or "none"
+    sqlalchemy_scheme = result.get("sqlalchemy_scheme") or "none"
+    if scheme == sqlalchemy_scheme:
+        driver_line = scheme
+    else:
+        driver_line = f"{scheme} -> {sqlalchemy_scheme}"
+    lines = [
+        f"DATABASE_URL configured: {configured}",
+        f"driver/scheme: {driver_line}",
+        f"host present: {'yes' if result.get('host_present') else 'no'}",
+        f"database present: {'yes' if result.get('database_present') else 'no'}",
+        f"connection: {'ok' if result.get('connection') == 'ok' else 'fail'}",
+        f"SELECT 1: {'ok' if result.get('select_1') == 'ok' else 'fail'}",
+        f"schema check: {'ok' if result.get('schema') == 'ok' else 'fail'}",
+        f"current migration head: {result.get('migration_head') or 'none'}",
+    ]
+    if result.get("reason") and not result.get("ok"):
+        lines.append(f"reason: {result['reason']}")
+    print("\n".join(lines))
+    return 0 if result.get("ok") else 1
+
+
 def cmd_backtest() -> int:
     from app.validation.backtest import run_backtest
 
@@ -532,6 +562,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("source-health")
     sub.add_parser("backtest")
     sub.add_parser("paper-trade")
+    sub.add_parser("db-check")
     args = parser.parse_args(argv)
     if args.cmd == "scan":
         return asyncio.run(cmd_scan(args.source, args.query, args.limit))
@@ -568,6 +599,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_backtest()
     if args.cmd == "paper-trade":
         return cmd_paper()
+    if args.cmd == "db-check":
+        return cmd_db_check()
     return 1
 
 

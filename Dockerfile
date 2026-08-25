@@ -9,10 +9,12 @@ COPY pyproject.toml README.md alembic.ini /app/
 COPY app /app/app
 COPY alembic /app/alembic
 COPY tests /app/tests
+COPY scripts /app/scripts
 
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir ".[dev]"
+    && pip install --no-cache-dir ".[dev]" \
+    && chmod +x /app/scripts/start.sh
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/app/scripts/start.sh"]

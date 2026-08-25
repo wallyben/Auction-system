@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +17,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
+        env_ignore_empty=True,
     )
 
     app_name: str = "ARIE"
@@ -126,14 +127,26 @@ class Settings(BaseSettings):
     http_user_agent: str = "ARIE/2.0 (Irish reseller intelligence; local operator)"
     request_timeout_seconds: float = 20.0
 
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _strip_database_url(cls, value: object) -> str | None:
+        from app.db.url import clean_database_url
+
+        if value is None:
+            return None
+        return clean_database_url(str(value))
+
     @property
     def database_url_required(self) -> str:
-        """Return configured database URL or raise a descriptive error."""
-        if not self.database_url:
+        """Return a driver-correct SQLAlchemy URL or raise a descriptive error."""
+        from app.db.url import clean_database_url, normalize_database_url
+
+        raw = clean_database_url(self.database_url)
+        if not raw:
             raise RuntimeError(
                 "DATABASE_URL environment variable is required for database operations."
             )
-        return self.database_url
+        return normalize_database_url(raw)
 
     def source_ids(self) -> list[str]:
         return [part.strip() for part in self.enabled_sources.split(",") if part.strip()]
