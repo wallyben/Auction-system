@@ -7,7 +7,7 @@ Verified 2026-08-23 from this runtime. LIVE means a real request returned invent
 | Reverb | US/EU | Acquisition + asks | Public JSON | `GET /api/listings` | Optional token | BLOCKED_TECHNICAL | HTTP 403 Akamai/HTML 2026-08-23 | CSV / retry from residential IP / token |
 | Scryfall | EU guide | Comparables (Cardmarket EUR) | Public JSON | `api.scryfall.com` | No | LIVE | Sol Ring named lookup 200 | None needed |
 | ECB FX | EU | EUR reference rates | Public XML | eurofxref-daily.xml | No | LIVE | GBP+USD present 2026-08-23 | Manual rate |
-| eBay Browse | IE/GB/EU | Acquisition + asks | Official Browse | OAuth client credentials | Yes | BLOCKED_CREDENTIALS | No keys in env | Owner keys |
+| eBay Browse | IE/GB/EU | Acquisition + asks | Official Browse | OAuth client credentials | Yes | PRODUCTION_KEYSET_DISABLED_COMPLIANCE when Production keys exist and OAuth returns `401 invalid_client`; BLOCKED_CREDENTIALS when keys are missing | Production keyset disabled pending Marketplace Account Deletion compliance (not a typo in App ID/Cert ID) | Complete `/webhooks/ebay/account-deletion` in the Developer portal; then `make ebay-check` |
 | CSV import | IE | Owner capture | n/a | Upload | No | LIVE | Parser always on | — |
 | Manual | IE | Paste listing | n/a | Form | No | LIVE | Always on | — |
 | RSS generic | EU | Owner feeds | RSS/Atom | feedparser | No | DISABLED until `RSS_URLS` | — | Configure permitted feeds |

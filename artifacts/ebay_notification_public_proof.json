@@ -1,0 +1,28 @@
+{
+  "generated_at": "2026-08-25T19:06:30.560210+00:00",
+  "endpoint_url": "https://auction-system-l6je.onrender.com/webhooks/ebay/account-deletion",
+  "token_configured": true,
+  "token_length": 48,
+  "secrets_included": false,
+  "public": false,
+  "https_certificate_valid": true,
+  "get_status": 500,
+  "post_unsigned_status": 412,
+  "health_status": 200,
+  "challenge_match": false,
+  "redirect": false,
+  "auth_blocked": false,
+  "latency_ms": 253,
+  "hostname_matches_config": true,
+  "blocked_reason": "public_challenge_mismatch_or_unreachable",
+  "hostname": "auction-system-l6je.onrender.com",
+  "get_error": "endpoint_not_configured",
+  "challenge_response_length": 0,
+  "health": {
+    "ready": false,
+    "ebay_subscription_active": false,
+    "endpoint_https": false,
+    "verification_token_valid": false
+  },
+  "post_unsigned_expected_412": true
+}

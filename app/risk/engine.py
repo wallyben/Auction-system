@@ -34,6 +34,7 @@ def assess_risk(
     seller: str | None,
     images: list[str],
     is_lot: bool,
+    seller_present: bool = False,
 ) -> RiskResult:
     flags: list[RiskFlag] = []
     score = Decimal("0.15")
@@ -62,7 +63,9 @@ def assess_risk(
     if is_lot:
         flags.append(RiskFlag("lot", "medium", "Job lot: residue and labour risk."))
         score += Decimal("0.10")
-    if seller and seller.lower() in {"unknown", ""}:
+    if seller_present:
+        pass
+    elif not seller or seller.lower() in {"unknown", ""}:
         flags.append(RiskFlag("unknown_seller", "low", "Seller identity missing."))
         score += Decimal("0.05")
     if any(word in blob for word in ("cash only", "whatsapp only", "outside ebay", "off platform")):

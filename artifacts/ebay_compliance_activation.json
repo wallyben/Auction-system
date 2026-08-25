@@ -1,0 +1,79 @@
+{
+  "generated_at": "2026-08-25T19:04:33.790706+00:00",
+  "automation_status": "EBAY_COMPLIANCE_BLOCKED_EXTERNAL",
+  "token": {
+    "configured": true,
+    "length": 48,
+    "valid": true,
+    "action": "unchanged",
+    "show_command": "make ebay-notification-show-token"
+  },
+  "hosting": {
+    "endpoint_url": "https://auction-system-l6je.onrender.com/webhooks/ebay/account-deletion",
+    "endpoint_public_https": true,
+    "deploy_credential_names_present": [],
+    "files": {
+      "dockerfile": true,
+      "docker_compose": true,
+      "fly_toml": false,
+      "render_yaml": false,
+      "procfile": false,
+      "caddyfile": false,
+      "nginx_conf": false,
+      "github_workflows": false
+    },
+    "cursor_agent_url_is_not_webhook": true,
+    "ngrok_forbidden": true,
+    "can_auto_deploy": false,
+    "note": "Public HTTPS endpoint URL is configured."
+  },
+  "health": {
+    "ready": true,
+    "ready_for_ebay_challenge": true,
+    "endpoint_https": true,
+    "verification_token_valid": true,
+    "verification_token_length": 48,
+    "ebay_subscription_active": false,
+    "database": "skipped"
+  },
+  "notification_api": {
+    "attempted": true,
+    "portal_only_bootstrap": true,
+    "oauth_http_status": null,
+    "oauth_error": "client_credentials_missing_in_this_environment",
+    "destination_created": false,
+    "subscription_created": false,
+    "topic": "MARKETPLACE_ACCOUNT_DELETION",
+    "docs": [
+      "https://developer.ebay.com/marketplace-account-deletion",
+      "https://developer.ebay.com/api-docs/commerce/notification/overview.html"
+    ],
+    "secrets_included": false,
+    "note": "This environment has no EBAY_CLIENT_ID/SECRET injected. Previous production-proof artifacts recorded Production OAuth 401 invalid_client with keys present. Do not regenerate keys."
+  },
+  "public_proof": {
+    "public": false,
+    "endpoint_url": "https://auction-system-l6je.onrender.com/webhooks/ebay/account-deletion",
+    "blocked_reason": "public_challenge_mismatch_or_unreachable",
+    "get_status": 500,
+    "get_error": "endpoint_not_configured",
+    "challenge_match": false,
+    "post_unsigned_status": 412,
+    "health_status": 200,
+    "https_certificate_valid": true
+  },
+  "production": {
+    "health_status": "BLOCKED_CREDENTIALS",
+    "health_ok": false,
+    "http_status": null,
+    "records": 0,
+    "oauth_ok": false,
+    "oauth_http_status": null,
+    "browse_ok": false,
+    "sandbox_used": false,
+    "sample_urls": null,
+    "detail": "EBAY_CLIENT_ID / EBAY_CLIENT_SECRET not configured. Create an app at developer.ebay.com."
+  },
+  "owner_portal_sheet": "artifacts/ebay_owner_portal_action.txt",
+  "secrets_included": false
+}

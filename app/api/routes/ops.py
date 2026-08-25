@@ -8,16 +8,19 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.session import get_db_session
+from app.db.session import get_db_session, get_session_factory, probe_database
+from app.db.url import classify_db_error
 from app.jobs.scheduler import scheduler_status
 from app.models.orm import Listing, Opportunity, Purchase, ScanJob, Source, WatchlistItem
 from app.pipeline.service import evaluate_listing, persist_listing, record_health, refresh_fx, run_scan, seed_sources
 from app.pipeline.service import _comps_for
+from app.privacy.ebay_health import notification_health
 from app.sources.manual import CsvImportAdapter
 
 router = APIRouter()
@@ -41,14 +44,28 @@ class OutcomeRequest(BaseModel):
 
 
 @router.get("/health")
+@router.head("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
 @router.get("/health/db")
-def health_db(session: Session = Depends(get_db)) -> dict[str, Any]:
-    session.execute(select(Source).limit(1))
-    return {"status": "ok", "database": "up"}
+def health_db() -> JSONResponse:
+    """Real database probe. 200 only when connection and a schema query succeed."""
+    result = probe_database()
+    if result["ok"]:
+        return JSONResponse({"status": "ok", "database": "up"}, status_code=200)
+    body = {
+        "status": "error",
+        "database": "down",
+        "reason": result["reason"],
+        "configured": result["configured"],
+        "scheme": result["scheme"],
+        "sqlalchemy_scheme": result["sqlalchemy_scheme"],
+        "host_present": result["host_present"],
+        "database_present": result["database_present"],
+    }
+    return JSONResponse(body, status_code=503)
 
 
 @router.get("/health/sources")
@@ -75,6 +92,28 @@ def health_sources(session: Session = Depends(get_db)) -> dict[str, Any]:
 @router.get("/health/workers")
 def health_workers() -> dict[str, Any]:
     return {"status": "ok", **scheduler_status()}
+
+
+@router.get("/health/ebay-notifications")
+def health_ebay_notifications() -> dict[str, Any]:
+    """Local readiness for the deletion webhook. Does not claim eBay subscription.
+
+    GET challenge verification does not need the database. A down database is
+    reported honestly and does not 500 this probe.
+    """
+    try:
+        session = get_session_factory()()
+    except Exception as exc:  # noqa: BLE001 — never leak the connection URL
+        payload = notification_health(None)
+        payload["database"] = "down"
+        payload["processor"] = "database_unavailable"
+        payload["ready"] = False
+        payload["database_reason"] = classify_db_error(exc)
+        return payload
+    try:
+        return notification_health(session)
+    finally:
+        session.close()
 
 
 @router.post("/scans")

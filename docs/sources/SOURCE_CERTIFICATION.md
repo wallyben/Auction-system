@@ -1,6 +1,8 @@
 # Source certification
 
-Statuses: LIVE, DEGRADED, BLOCKED_CREDENTIALS, BLOCKED_POLICY, BLOCKED_TECHNICAL, DISABLED, plus `commercial_quality` HIGH/MEDIUM/LOW/UNKNOWN.
+Statuses: LIVE, DEGRADED, BLOCKED_CREDENTIALS, BLOCKED_POLICY, BLOCKED_TECHNICAL, DISABLED, PRODUCTION_KEYSET_DISABLED_COMPLIANCE, plus `commercial_quality` HIGH/MEDIUM/LOW/UNKNOWN.
+
+`PRODUCTION_KEYSET_DISABLED_COMPLIANCE` is not a bad-credentials status. eBay Production OAuth `401 invalid_client` is the documented result when the Production keyset is disabled pending Marketplace Account Deletion/Closure notification compliance. Do not regenerate keys. Complete the notification endpoint in the eBay Developer portal, then re-run `make ebay-check`.
 
 A source may be technically LIVE and commercially LOW. Scryfall is the example: official, fresh, and not an Irish realised sale.
 

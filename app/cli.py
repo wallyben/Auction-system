@@ -345,13 +345,168 @@ async def cmd_ebay_check() -> int:
             },
         },
     }
+    from app.privacy.ebay_health import notification_health
+
+    try:
+        session = _session()
+        try:
+            compliance = notification_health(session)
+        finally:
+            session.close()
+    except Exception:
+        compliance = notification_health(None)
+    payload["notification_compliance"] = compliance
     print(json.dumps(payload, indent=2, default=str))
     Path("artifacts").mkdir(exist_ok=True)
     Path("artifacts/ebay_check.json").write_text(json.dumps(payload, indent=2, default=str))
     Path("artifacts/ebay_production_activation.json").write_text(
         json.dumps(activation, indent=2, default=str)
     )
-    return 0 if proof.ok or proof.status.value == "BLOCKED_CREDENTIALS" else 1
+    honest = {"BLOCKED_CREDENTIALS", "PRODUCTION_KEYSET_DISABLED_COMPLIANCE"}
+    return 0 if proof.ok or proof.status.value in honest else 1
+
+
+def cmd_ebay_notification_check() -> int:
+    from app.privacy.ebay_health import notification_health
+
+    try:
+        session = _session()
+        try:
+            payload = notification_health(session)
+        finally:
+            session.close()
+    except Exception:
+        payload = notification_health(None)
+        payload["database"] = "down"
+        payload["processor"] = "database_unavailable"
+        payload["ready"] = False
+    print(json.dumps(payload, indent=2, default=str))
+    return 0 if payload.get("ready") else 1
+
+
+def cmd_ebay_notification_token() -> int:
+    from app.privacy.ebay_challenge import write_token_to_env
+
+    result = write_token_to_env()
+    print(json.dumps(result, indent=2, default=str))
+    return 0
+
+
+def cmd_ebay_notification_show_token() -> int:
+    """Owner-requested display. Ordinary logs/tests must never call this."""
+    from app.privacy.ebay_challenge import read_verification_token, token_is_valid
+
+    token = read_verification_token()
+    if not token_is_valid(token):
+        print("EBAY_NOTIFICATION_VERIFICATION_TOKEN is not configured.", file=sys.stderr)
+        return 1
+    print(token)
+    return 0
+
+
+def cmd_ebay_notification_watch() -> int:
+    from app.privacy.ebay_watch import watch_events
+
+    timeout = float(getattr(cmd_ebay_notification_watch, "_timeout", 0) or 0)
+    return watch_events(timeout_seconds=timeout)
+
+
+def cmd_ebay_notification_set_endpoint(url: str) -> int:
+    from app.core.config import get_settings
+    from app.privacy.ebay_challenge import write_endpoint_to_env
+
+    result = write_endpoint_to_env(url)
+    get_settings.cache_clear()
+    print(json.dumps(result, indent=2, default=str))
+    return 0 if result.get("action") == "written" else 1
+
+
+def cmd_ebay_notification_proof() -> int:
+    from app.privacy.ebay_activation import prove_public_endpoint
+
+    payload = prove_public_endpoint()
+    Path("artifacts").mkdir(exist_ok=True)
+    Path("artifacts/ebay_notification_public_proof.json").write_text(
+        json.dumps(payload, indent=2, default=str), encoding="utf-8"
+    )
+    print(json.dumps(payload, indent=2, default=str))
+    return 0 if payload.get("public") else 1
+
+
+def cmd_ebay_notification_activate() -> int:
+    from app.privacy.ebay_activation import run_activation
+
+    payload = asyncio.run(run_activation())
+    print(json.dumps(payload, indent=2, default=str))
+    status = payload.get("automation_status")
+    return 0 if status in {
+        "EBAY_COMPLIANCE_FULLY_ACTIVATED",
+        "EBAY_COMPLIANCE_READY_FOR_ONE_OWNER_PORTAL_ACTION",
+        "EBAY_COMPLIANCE_BLOCKED_EXTERNAL",
+    } else 1
+
+
+def cmd_ebay_notification_await() -> int:
+    from app.privacy.ebay_activation import STATUS_BLOCKED, await_production_activation, detect_hosting
+
+    hosting = detect_hosting()
+    attempts = 8 if hosting.get("endpoint_public_https") else 1
+    delay = 15.0 if attempts > 1 else 0.0
+    payload = asyncio.run(await_production_activation(attempts=attempts, delay_seconds=delay or 0.1))
+    Path("artifacts").mkdir(exist_ok=True)
+    Path("artifacts/ebay_notification_await.json").write_text(
+        json.dumps(payload, indent=2, default=str), encoding="utf-8"
+    )
+    print(json.dumps(payload, indent=2, default=str))
+    if payload.get("activated"):
+        return asyncio.run(_continue_production_programme())
+    return 0
+
+
+async def _continue_production_programme() -> int:
+    """When Production Browse is LIVE, continue the real-money path immediately."""
+    scan_rc = await cmd_scan(None, None, 12)
+    health_rc = await cmd_validate()
+    proof_rc = await cmd_production_proof()
+    return 0 if min(scan_rc, health_rc, proof_rc) == 0 else 1
+
+
+def cmd_ebay_owner_oauth_url() -> int:
+    from app.sold.ebay_owner_oauth import start_consent
+
+    payload = start_consent()
+    print(json.dumps(payload, indent=2, default=str))
+    return 0 if payload.get("ok") else 1
+
+
+def cmd_db_check() -> int:
+    from app.db.session import probe_database, reset_engine
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    reset_engine()
+    result = probe_database()
+    configured = "yes" if result["configured"] else "no"
+    scheme = result.get("scheme") or "none"
+    sqlalchemy_scheme = result.get("sqlalchemy_scheme") or "none"
+    if scheme == sqlalchemy_scheme:
+        driver_line = scheme
+    else:
+        driver_line = f"{scheme} -> {sqlalchemy_scheme}"
+    lines = [
+        f"DATABASE_URL configured: {configured}",
+        f"driver/scheme: {driver_line}",
+        f"host present: {'yes' if result.get('host_present') else 'no'}",
+        f"database present: {'yes' if result.get('database_present') else 'no'}",
+        f"connection: {'ok' if result.get('connection') == 'ok' else 'fail'}",
+        f"SELECT 1: {'ok' if result.get('select_1') == 'ok' else 'fail'}",
+        f"schema check: {'ok' if result.get('schema') == 'ok' else 'fail'}",
+        f"current migration head: {result.get('migration_head') or 'none'}",
+    ]
+    if result.get("reason") and not result.get("ok"):
+        lines.append(f"reason: {result['reason']}")
+    print("\n".join(lines))
+    return 0 if result.get("ok") else 1
 
 
 def cmd_backtest() -> int:
@@ -393,9 +548,21 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("validate")
     sub.add_parser("production-proof")
     sub.add_parser("ebay-check")
+    sub.add_parser("ebay-notification-check")
+    sub.add_parser("ebay-notification-token")
+    sub.add_parser("ebay-notification-show-token")
+    sub.add_parser("ebay-notification-activate")
+    sub.add_parser("ebay-notification-proof")
+    sub.add_parser("ebay-notification-await")
+    sub.add_parser("ebay-owner-oauth-url")
+    watch = sub.add_parser("ebay-notification-watch")
+    watch.add_argument("--timeout", type=float, default=0)
+    set_ep = sub.add_parser("ebay-notification-set-endpoint")
+    set_ep.add_argument("url")
     sub.add_parser("source-health")
     sub.add_parser("backtest")
     sub.add_parser("paper-trade")
+    sub.add_parser("db-check")
     args = parser.parse_args(argv)
     if args.cmd == "scan":
         return asyncio.run(cmd_scan(args.source, args.query, args.limit))
@@ -407,12 +574,33 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(cmd_production_proof())
     if args.cmd == "ebay-check":
         return asyncio.run(cmd_ebay_check())
+    if args.cmd == "ebay-notification-check":
+        return cmd_ebay_notification_check()
+    if args.cmd == "ebay-notification-token":
+        return cmd_ebay_notification_token()
+    if args.cmd == "ebay-notification-show-token":
+        return cmd_ebay_notification_show_token()
+    if args.cmd == "ebay-notification-watch":
+        cmd_ebay_notification_watch._timeout = args.timeout  # type: ignore[attr-defined]
+        return cmd_ebay_notification_watch()
+    if args.cmd == "ebay-notification-set-endpoint":
+        return cmd_ebay_notification_set_endpoint(args.url)
+    if args.cmd == "ebay-notification-proof":
+        return cmd_ebay_notification_proof()
+    if args.cmd == "ebay-notification-activate":
+        return cmd_ebay_notification_activate()
+    if args.cmd == "ebay-notification-await":
+        return cmd_ebay_notification_await()
+    if args.cmd == "ebay-owner-oauth-url":
+        return cmd_ebay_owner_oauth_url()
     if args.cmd == "source-health":
         return asyncio.run(cmd_validate())
     if args.cmd == "backtest":
         return cmd_backtest()
     if args.cmd == "paper-trade":
         return cmd_paper()
+    if args.cmd == "db-check":
+        return cmd_db_check()
     return 1
 
 
