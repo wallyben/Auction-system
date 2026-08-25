@@ -33,7 +33,7 @@ def get_db() -> Any:
 class ScanRequest(BaseModel):
     source_id: str | None = None
     query: str | None = None
-    limit: int = Field(default=12, ge=1, le=50)
+    limit: int = Field(default=12, ge=1, le=80)
 
 
 class OutcomeRequest(BaseModel):
@@ -162,7 +162,7 @@ def list_opportunities(decision: str | None = None, session: Session = Depends(g
     stmt = select(Opportunity).order_by(Opportunity.score.desc())
     if decision:
         stmt = stmt.where(Opportunity.decision == decision.upper())
-    rows = session.scalars(stmt.limit(100)).all()
+    rows = session.scalars(stmt.limit(250)).all()
     return {"opportunities": [_summary(session, row) for row in rows]}
 
 
@@ -272,6 +272,12 @@ def _summary(session: Session, row: Opportunity) -> dict[str, Any]:
         "identity_confidence": str(row.identity_confidence),
         "why": row.why,
         "ignored": row.ignored,
+        "money_ready_decision": row.money_ready_decision,
+        "engine_decision": row.engine_decision or row.decision,
+        "ideal_offer_eur": str(row.ideal_offer_eur) if row.ideal_offer_eur is not None else None,
+        "best_exit_channel": row.best_exit_channel,
+        "downside_profit_eur": str(row.downside_profit_eur) if row.downside_profit_eur is not None else None,
+        "failed_gates": (row.gate_results or {}).get("failures") or [],
     }
 
 

@@ -18,10 +18,30 @@ def test_rtx_rejects_laptop_and_super() -> None:
     assert reject_title("RTX 4080", "RTX 4080 Laptop GPU 12GB") == "accessory"
     assert reject_title("RTX 4080", "NVIDIA GeForce RTX 4080 SUPER") == "4080_super_mismatch"
     assert reject_title("RTX 4080", "NVIDIA GeForce RTX 4080 16GB") is None
+    assert reject_title("RTX 4070", "Gigabyte RTX 4070 SUPER WINDFORCE") == "4070_super_mismatch"
+    assert reject_title("RTX 4070", "HP RTX 4070 Super PC Omen 40L Desktop") == "4070_super_mismatch"
+
+
+def test_rejects_dj_accessories_empty_box_and_wrong_sony() -> None:
+    assert reject_title("Pioneer DDJ-FLX10", "Pioneer DDJ-FLX10 Stand") == "accessory"
+    assert reject_title("Pioneer DDJ-1000", "Pioneer DDJ-1000 SRT Skin Protective Decal") == "accessory"
+    assert reject_title("Pioneer DDJ-1000", "Power socket for Pioneer DDJ-1000 DKN1649") == "accessory"
+    assert reject_title("iPhone 16 Pro 256GB", "BOITE iPhone 16 PRO max 256gb") == "accessory"
+    assert reject_title("PlayStation 5", "PS5 APU Foam Pad Insulation") == "accessory"
+    assert reject_title("PlayStation 5", "Playstation 5 PRO 2 TB come nuova") == "ps5_pro_mismatch"
+    assert reject_title("PlayStation 5", "Playstation 5 PRO Faceplates") == "accessory"
+    assert reject_title("Sony A7 IV", "Sony A7R IV ILCE-7RM4") == "wrong_generation_a7r"
+    assert reject_title("Sony A7 IV", "Kit de lentes Sony A7IV ILCE-7M4") == "bundle_or_kit"
+    assert reject_title("iPhone 15 Pro 256GB", "Apple iPhone 14 Pro 256GB") == "wrong_iphone_generation"
+    assert reject_title("iPhone 15 Pro 256GB", "iPhone 15 Pro Max 256GB") == "iphone_pro_max_mismatch"
+    assert reject_title("Pioneer DDJ-FLX10", "Pioneer DDJ-FLX10 4-Channel DJ Controller") is None
+    assert reject_title("Shure SM7B", "Shure SM7B Cardioid Dynamic Vocal Microphone") is None
 
 
 def test_browse_filter_price_band() -> None:
     assert "price:[80..2500]" in browse_filter()
+    assert "priceCurrency:EUR" in browse_filter()
+    assert "priceCurrency:GBP" in browse_filter(currency="GBP")
 
 
 def test_prd_keys_use_production_host() -> None:

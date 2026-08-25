@@ -43,3 +43,17 @@ def test_paper_skips_ignore() -> None:
     )
     ok, _ = should_open_paper(opp)
     assert ok is False
+
+
+def test_paper_skips_accessory_title() -> None:
+    opp = SimpleNamespace(
+        money_ready=True,
+        engine_decision="BUY",
+        decision="BUY",
+        money_ready_decision="BUY_READY",
+        gate_results={"failures": []},
+        expected_profit_eur=Decimal("80"),
+        title="Pioneer DDJ-FLX10 Stand",
+    )
+    ok, _ = should_open_paper(opp)
+    assert ok is False

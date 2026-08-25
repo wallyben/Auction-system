@@ -19,3 +19,11 @@ def test_unknown_junk_title_is_not_forced_exact() -> None:
     identity = identify_listing(title="job lot mixed cables", description="")
     assert identity.level in {IdentityLevel.UNKNOWN, IdentityLevel.CATEGORY, IdentityLevel.FAMILY}
     assert identity.confidence < Decimal("0.80")
+
+
+def test_accessory_is_not_exact_parent_product() -> None:
+    from app.identity.resolvers import identify_with_resolvers
+
+    identity = identify_with_resolvers(title="Pioneer DDJ-FLX10 Stand")
+    assert identity.level in {IdentityLevel.UNKNOWN, IdentityLevel.CATEGORY, IdentityLevel.FAMILY}
+    assert identity.confidence <= Decimal("0.35")

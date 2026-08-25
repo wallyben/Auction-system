@@ -9,9 +9,14 @@ from decimal import Decimal
 from app.catalogue.store import lookup_catalogue
 
 _REJECT = (
-    (re.compile(r"\b(battery only|charger only|strap|hood only|body cap|lens cap only|case|cover|screen protector|empty box|cooling block)\b", re.I), "accessory"),
+    (re.compile(
+        r"\b(battery only|charger only|strap|hood only|body cap|lens cap only|case|cover|"
+        r"screen protector|empty box|boite|stand|skin|decal|sticker|faceplate|foam pad|"
+        r"power socket|repair part|cooling block|dualsense|manette)\b",
+        re.I,
+    ), "accessory"),
     (re.compile(r"\b(for parts|spares|broken|faulty|not working)\b", re.I), "broken"),
-    (re.compile(r"\b(bundle|kit \+|with lens|plus extras|job lot)\b", re.I), "bundle"),
+    (re.compile(r"\b(bundle|kit \+|kit de lentes|with lens|plus extras|job lot)\b", re.I), "bundle"),
     (re.compile(r"\b(psa|bgs|cgc)\s*\d+\b", re.I), "graded"),
     (re.compile(r"\b(refurb(?:ished)?|renewed)\b", re.I), "refurbished"),
 )
@@ -30,6 +35,10 @@ class CompMatch:
 def reject_reason(subject_title: str, comp_title: str) -> str | None:
     blob = f"{comp_title}"
     subject = subject_title.lower()
+    from app.sources.ebay_filters import ACCESSORY_RE
+
+    if ACCESSORY_RE.search(subject):
+        return "subject_is_accessory"
     for pattern, code in _REJECT:
         if pattern.search(blob) and not pattern.search(subject):
             return code

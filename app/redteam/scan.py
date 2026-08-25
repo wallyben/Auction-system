@@ -8,7 +8,9 @@ from typing import Any
 from app.sources.ebay_filters import reject_title
 
 _ACCESSORY = re.compile(
-    r"\b(case|cover|screen protector|charger|cable|hood|cap|bag|filter|empty box)\b",
+    r"\b(case|cover|screen protector|charger|cable|hood|cap|bag|filter|empty box|"
+    r"stand|skin|decal|sticker|faceplate|foam pad|power socket|repair part|"
+    r"dualsense|manette|boite)\b",
     re.I,
 )
 

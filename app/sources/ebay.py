@@ -14,7 +14,12 @@ from app.core.logging import get_logger
 from app.models.enums import SourceKind, SourceStatus
 from app.privacy.ebay_minimise import minimise_normalized_listing
 from app.sources.base import HealthProof, NormalizedListing, SourceAdapter
-from app.sources.ebay_filters import browse_filter, reject_title
+from app.sources.ebay_filters import (
+    browse_filter,
+    marketplace_currency,
+    price_band_for_query,
+    reject_title,
+)
 
 logger = get_logger("arie.sources.ebay")
 
@@ -287,7 +292,8 @@ class EbayBrowseAdapter(SourceAdapter):
             markets = list(markets) + ["EBAY_US"]
         out: list[NormalizedListing] = []
         remaining = min(limit, 80)
-        per_market = max(1, remaining // max(1, len(markets)))
+        # Fetch a usable page per marketplace instead of splitting 2-wide across seven sites.
+        per_market = max(6, remaining // max(1, len(markets)))
         for market in markets:
             if remaining <= 0:
                 break
@@ -302,6 +308,8 @@ class EbayBrowseAdapter(SourceAdapter):
         items: list[NormalizedListing] = []
         offset = 0
         page = min(limit, 50)
+        min_price, max_price = price_band_for_query(query)
+        currency = marketplace_currency(marketplace)
         while len(items) < limit:
             async with build_client() as client:
                 try:
@@ -314,7 +322,11 @@ class EbayBrowseAdapter(SourceAdapter):
                             "q": query,
                             "limit": str(page),
                             "offset": str(offset),
-                            "filter": browse_filter(),
+                            "filter": browse_filter(
+                                min_price=min_price,
+                                max_price=max_price,
+                                currency=currency,
+                            ),
                         },
                     )
                 except SourceHttpError as exc:
@@ -329,6 +341,11 @@ class EbayBrowseAdapter(SourceAdapter):
                 reason = reject_title(query, listing.title)
                 if reason:
                     listing.extras["rejected_reason"] = reason
+                    continue
+                if listing.asking_price is not None and (
+                    listing.asking_price < min_price or listing.asking_price > max_price
+                ):
+                    listing.extras["rejected_reason"] = "price_band"
                     continue
                 items.append(listing)
             offset += len(batch)

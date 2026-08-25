@@ -284,6 +284,17 @@ def identify_with_resolvers(
         category=category,
     )
     blob = f"{title}\n{description}\n{brand_hint or ''}\n{model_hint or ''}".lower()
+    from app.sources.ebay_filters import ACCESSORY_RE, KIT_RE
+
+    if ACCESSORY_RE.search(blob) or KIT_RE.search(blob):
+        missing = list(base.missing) + ["accessory_or_kit"]
+        return _finish(
+            base,
+            level=IdentityLevel.CATEGORY,
+            confidence=min(base.confidence, Decimal("0.35")),
+            missing=missing,
+            canonical_key=f"accessory|{base.canonical_key}",
+        )
     for pattern, resolver in _DISPATCH:
         if pattern.search(blob):
             return resolver(base, blob)
