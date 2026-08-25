@@ -157,6 +157,38 @@ def list_scans(session: Session = Depends(get_db)) -> dict[str, Any]:
     }
 
 
+@router.get("/listings")
+def list_listings(limit: int = 500, session: Session = Depends(get_db)) -> dict[str, Any]:
+    rows = session.scalars(select(Listing).order_by(Listing.last_seen_at.desc()).limit(min(max(limit, 1), 1000))).all()
+    return {
+        "count": len(rows),
+        "listings": [
+            {
+                "id": str(row.id),
+                "source_id": row.source_id,
+                "external_id": row.external_id,
+                "title": row.title,
+                "url": row.url,
+                "asking_price": str(row.asking_price) if row.asking_price is not None else None,
+                "currency": row.currency,
+                "country": row.country,
+                "condition_raw": row.condition_raw,
+                "condition_grade": row.condition_grade,
+                "category": row.category,
+                "brand": row.brand,
+                "model": row.model,
+                "variant": row.variant,
+                "extras": {
+                    "marketplace": (row.extras or {}).get("marketplace"),
+                    "conditionId": (row.extras or {}).get("conditionId"),
+                    "sandbox": (row.extras or {}).get("sandbox"),
+                },
+            }
+            for row in rows
+        ],
+    }
+
+
 @router.get("/opportunities")
 def list_opportunities(decision: str | None = None, session: Session = Depends(get_db)) -> dict[str, Any]:
     stmt = select(Opportunity).order_by(Opportunity.score.desc())

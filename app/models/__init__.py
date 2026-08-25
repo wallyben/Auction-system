@@ -13,6 +13,7 @@ from app.models.enums import (
     SourceKind,
     SourceStatus,
 )
+from app.models.oauth import OAuthCredential
 from app.models.orm import (
     Alert,
     AuditEvent,
@@ -54,6 +55,7 @@ __all__ = [
     "InventoryState",
     "Listing",
     "ListingComponent",
+    "OAuthCredential",
     "Opportunity",
     "Outcome",
     "Product",

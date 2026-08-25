@@ -155,6 +155,11 @@ def value_from_comps(comps: list[Comp], *, now: datetime | None = None) -> Valua
         "strong_tier_count": len(strong),
         "priced_from": "strong_realised" if strong else "weak_or_asking",
         "warning": "Asking prices are not realised Irish sales." if asking_only else "",
+        "localisation": (
+            "Irish realised used at full weight."
+            if local
+            else "No Irish realised sales. Foreign evidence haircut via territory weight. No Ireland premium invented."
+        ),
         "percentiles": {"p10": str(p10), "p25": str(p25), "median": str(p50), "p75": str(p75), "p90": str(p90)},
         "display": {
             "expected": str(display_money(expected, confidence=confidence)),

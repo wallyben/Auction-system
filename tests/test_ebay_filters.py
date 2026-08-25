@@ -42,6 +42,30 @@ def test_browse_filter_price_band() -> None:
     assert "price:[80..2500]" in browse_filter()
     assert "priceCurrency:EUR" in browse_filter()
     assert "priceCurrency:GBP" in browse_filter(currency="GBP")
+    assert "conditions:" in browse_filter()
+    assert "buyingOptions:" in browse_filter()
+    assert "FOR_PARTS_OR_NOT_WORKING" not in browse_filter()
+
+
+def test_rejects_repair_lens_body_and_currency() -> None:
+    from decimal import Decimal
+    from app.sources.ebay_filters import reject_listing_fields
+
+    assert reject_title("Sony A7 IV", "Sony A7 IV doesn't work shutter jammed") == "repair_or_parts"
+    assert reject_title("Sony A7 IV", "Sony FE 24-70mm GM II Lens") == "lens_when_searching_body"
+    assert reject_title("RTX 4070", "HP Omen 40L Desktop Gaming PC RTX 4070") == "not_desktop_gpu"
+    assert (
+        reject_listing_fields(
+            "iPhone 15 Pro",
+            title="Apple iPhone 15 Pro 256GB",
+            currency="EUR",
+            marketplace="EBAY_GB",
+            asking_price=Decimal("400"),
+            min_price=Decimal("220"),
+            max_price=Decimal("1400"),
+        )
+        == "currency_mismatch"
+    )
 
 
 def test_prd_keys_use_production_host() -> None:

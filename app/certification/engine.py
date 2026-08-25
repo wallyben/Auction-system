@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from decimal import Decimal
+
 from app.core.config import settings
 from app.models.enums import CategoryCert, CertificationLevel
 
@@ -17,6 +20,7 @@ CATEGORY_DEFAULTS = {
     "trading_cards": CategoryCert.NOT_CERTIFIED,
     "collectibles": CategoryCert.NOT_CERTIFIED,
     "tools": CategoryCert.NOT_CERTIFIED,
+    "consumer_electronics": CategoryCert.NOT_CERTIFIED,
 }
 
 EXIT_DEFAULTS = {
@@ -28,6 +32,59 @@ EXIT_DEFAULTS = {
     "cex_trade_in": CategoryCert.NOT_CERTIFIED,
     "dealer": CategoryCert.NOT_CERTIFIED,
 }
+
+
+@dataclass(slots=True)
+class CategoryMetrics:
+    category: str
+    listings: int
+    false_positive_rate: Decimal
+    identity_exact_or_variant_rate: Decimal
+    condition_reliable_rate: Decimal
+    realised_comp_coverage: Decimal
+    valuation_error_ok: bool
+    exit_channel_credible: bool
+    risk_controls_pass: bool
+
+
+@dataclass(slots=True)
+class CertificationVerdict:
+    category: str
+    certified: bool
+    reasons: list[str]
+    metrics: CategoryMetrics
+
+
+def evaluate_category_certification(metrics: CategoryMetrics) -> CertificationVerdict:
+    """Certify only when FP, identity, condition, realised coverage, and exit all pass.
+
+    This never writes CERTIFIED into CATEGORY_DEFAULTS. Owner config
+    `certified_categories` is the only runtime override, and it should stay empty
+    until this evaluator returns certified=True with evidence.
+    """
+    reasons: list[str] = []
+    if metrics.listings < 20:
+        reasons.append("too_few_listings")
+    if metrics.false_positive_rate >= Decimal("0.05"):
+        reasons.append(f"fp_rate {metrics.false_positive_rate} >= 0.05")
+    if metrics.identity_exact_or_variant_rate < Decimal("0.90"):
+        reasons.append(f"identity {metrics.identity_exact_or_variant_rate} < 0.90")
+    if metrics.condition_reliable_rate < Decimal("0.80"):
+        reasons.append(f"condition {metrics.condition_reliable_rate} < 0.80")
+    if metrics.realised_comp_coverage < Decimal("0.50"):
+        reasons.append(f"realised_coverage {metrics.realised_comp_coverage} < 0.50")
+    if not metrics.valuation_error_ok:
+        reasons.append("valuation_error_not_acceptable")
+    if not metrics.exit_channel_credible:
+        reasons.append("exit_channel_not_credible")
+    if not metrics.risk_controls_pass:
+        reasons.append("risk_controls_failed")
+    return CertificationVerdict(
+        category=metrics.category,
+        certified=not reasons,
+        reasons=reasons or ["all_certification_bars_met"],
+        metrics=metrics,
+    )
 
 
 def category_is_certified(category: str | None) -> bool:

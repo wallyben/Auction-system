@@ -32,6 +32,10 @@ OPTIONAL = {
     "payment_fee",
     "shipping_out",
     "return_cost",
+    "currency",
+    "territory",
+    "trade_floor",
+    "notes",
 }
 
 
@@ -137,6 +141,9 @@ def import_owner_sales(session: Session, text: str) -> dict[str, int | list[str]
             shipping_out=_d(row.get("shipping_out")),
             return_cost=_d(row.get("return_cost")),
             sale_date=_date(row["sale_date"]) or datetime.now(timezone.utc),
+            currency=(row.get("currency") or "EUR")[:3].upper(),
+            territory=(row.get("territory") or "IE")[:8].upper(),
+            notes=row.get("notes") or "",
             fingerprint=fp,
             raw=row,
         )
@@ -146,13 +153,24 @@ def import_owner_sales(session: Session, text: str) -> dict[str, int | list[str]
                 canonical_product_id=identity.canonical_key,
                 condition=sale.condition,
                 channel=sale.sale_platform or "owner",
-                territory="IE",
+                territory=sale.territory or "IE",
                 sold_price=sale.sale_price,
+                currency=sale.currency or "EUR",
+                shipping_charged=sale.shipping_out or None,
+                fees_if_known=sale.platform_fee + sale.payment_fee if (sale.platform_fee or sale.payment_fee) else None,
                 sold_date=sale.sale_date,
                 source="owner_recorded",
                 evidence_quality="high",
                 url_or_reference=None,
                 fingerprint=fp,
+                extras={
+                    "title": row["product"],
+                    "variant": sale.variant,
+                    "provenance": "owner_csv",
+                    "market": sale.territory,
+                    "trade_floor": row.get("trade_floor") or None,
+                    "asking_relabelled": False,
+                },
             )
         )
         written += 1

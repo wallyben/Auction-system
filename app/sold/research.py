@@ -14,10 +14,11 @@ CANDIDATES = [
     {
         "name": "eBay Marketplace Insights item_sales/search",
         "classification": "REALIZED_SOLD",
-        "access": "official_api_enterprise",
-        "status": "probe_required",
-        "docs": "https://developer.ebay.com/api-docs/buy/marketplace-insights/overview.html",
-        "provides": "Completed sales if the keyset is entitled. Typically 403/404 on ordinary Buy apps.",
+        "access": "official_api_limited_release",
+        "status": "not_entitled_403",
+        "docs": "https://developer.ebay.com/api-docs/buy/marketplace-insights/resources/item_sales/methods/search",
+        "provides": "Completed sales for the last 90 days if the keyset is entitled. Official endpoint is v1_beta with required category_ids. Ordinary Buy apps receive 403. Apply via Buy APIs Requirements. v1 (non-beta) is not probed.",
+        "owner_action": "https://developer.ebay.com/develop/guides-v2/buy-apis-requirements",
     },
     {
         "name": "eBay Finding findCompletedItems",
@@ -33,7 +34,7 @@ CANDIDATES = [
         "access": "user_oauth",
         "status": "implemented_awaiting_owner_consent",
         "docs": "https://developer.ebay.com/api-docs/sell/static/selling-ig-landing.html",
-        "provides": "Owner-only orders and payouts after user consent. Not general market sold comps. Flow: /oauth/ebay/start and `make ebay-owner-oauth-url`.",
+        "provides": "Owner-only orders and payouts after user consent. Not general market sold comps. Flow: GET /oauth/ebay/status then /oauth/ebay/start. Refresh token stored in Postgres.",
     },
     {
         "name": "eBay seller hub / Terapeak export",
@@ -48,7 +49,7 @@ CANDIDATES = [
         "classification": "REALIZED_SOLD",
         "access": "owner_export",
         "status": "live_empty",
-        "docs": "in-repo /import/owner-sales",
+        "docs": "in-repo GET /sold/template and POST /import/owner-sales",
         "provides": "Highest-weight local realised evidence.",
     },
     {

@@ -40,7 +40,16 @@ _INBOUND = {
     Corridor.ROW_TO_IE: Decimal("38.00"),
 }
 
-_INSURE = Decimal("2.50")
+_INSURE = {
+    "cameras": Decimal("6.00"),
+    "lenses": Decimal("6.00"),
+    "gpu": Decimal("4.00"),
+    "computing": Decimal("5.00"),
+    "consumer_electronics": Decimal("4.00"),
+    "gaming": Decimal("3.50"),
+    "music_dj": Decimal("8.00"),
+    "default": Decimal("2.50"),
+}
 _PACK = Decimal("1.80")
 
 
@@ -88,7 +97,7 @@ def estimate_outbound(
     if channel == "ebay_gb":
         base = money(base + Decimal("8.00"))
         service = "ie_to_gb_tracked"
-    insure = _INSURE if (base or Decimal("0")) >= Decimal("8") else Decimal("0")
+    insure = _INSURE.get(category or "", _INSURE["default"]) if (base or Decimal("0")) >= Decimal("8") else Decimal("0")
     return ShippingEstimate(
         money(base),
         insure,
