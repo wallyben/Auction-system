@@ -37,7 +37,17 @@ _ACCEPTED_TOPICS = {"MARKETPLACE_ACCOUNT_DELETION"}
 
 
 def get_db():
-    yield from get_db_session()
+    """Yield a session, or None if the database is not configured.
+
+    Signature rejection (412) must not depend on Postgres being up. eBay Save
+    only needs GET. POST processing still returns 500 when the DB is down so
+    eBay retries after a valid signature.
+    """
+    try:
+        yield from get_db_session()
+    except Exception:
+        logger.warning("ebay_webhook_db_unavailable")
+        yield None
 
 
 def _rate_limit(key: str) -> bool:
@@ -56,11 +66,21 @@ def reset_rate_limiter() -> None:
 
 
 def _endpoint_url() -> str:
-    return (getattr(settings, "ebay_notification_endpoint_url", None) or "").strip()
+    import os
+
+    return (
+        (os.environ.get("EBAY_NOTIFICATION_ENDPOINT_URL") or "").strip()
+        or (getattr(settings, "ebay_notification_endpoint_url", None) or "").strip()
+    )
 
 
 def _token() -> str:
-    return (getattr(settings, "ebay_notification_verification_token", None) or "").strip()
+    import os
+
+    return (
+        (os.environ.get("EBAY_NOTIFICATION_VERIFICATION_TOKEN") or "").strip()
+        or (getattr(settings, "ebay_notification_verification_token", None) or "").strip()
+    )
 
 
 @router.get("/webhooks/ebay/account-deletion")
@@ -94,7 +114,7 @@ async def ebay_account_deletion_challenge(request: Request) -> JSONResponse:
 @router.post("/webhooks/ebay/account-deletion")
 async def ebay_account_deletion_notice(
     request: Request,
-    session: Session = Depends(get_db),
+    session: Session | None = Depends(get_db),
     x_ebay_signature: str | None = Header(default=None, alias="X-EBAY-SIGNATURE"),
 ) -> Response:
     """Verify signature then persist+process. 2xx only after durable processing.
@@ -125,6 +145,9 @@ async def ebay_account_deletion_notice(
     if not verify_payload(body, x_ebay_signature, public_key):
         logger.warning("ebay_deletion_invalid_signature", kid=kid)
         return Response(status_code=412)
+    if session is None:
+        logger.warning("ebay_deletion_db_unavailable")
+        return Response(status_code=500)
     try:
         try:
             payload = _parse_json(body)

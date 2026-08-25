@@ -260,6 +260,19 @@ def test_watch_events_on_challenge(client: TestClient, tmp_path: Path, monkeypat
     assert unsigned.status_code == 412
 
 
+def test_unsigned_post_412_when_db_unavailable(client: TestClient) -> None:
+    from app.api.routes.ebay_webhooks import get_db as ebay_get_db
+
+    def _none():
+        yield None
+
+    client.app.dependency_overrides[ebay_get_db] = _none
+    try:
+        assert client.post(ROUTE, content=b"{}").status_code == 412
+    finally:
+        client.app.dependency_overrides.pop(ebay_get_db, None)
+
+
 def test_get_challenge_camel_case(client: TestClient) -> None:
     response = client.get(ROUTE, params={"challengeCode": "xyz"})
     assert response.status_code == 200

@@ -2,7 +2,7 @@
 
 ```
 ENDPOINT URL:
-NOT SET — deploy ARIE on a persistent HTTPS host, then: make ebay-notification-set-endpoint URL=https://<host>/webhooks/ebay/account-deletion
+https://auction-system-l6je.onrender.com/webhooks/ebay/account-deletion
 
 VERIFICATION TOKEN:
 make ebay-notification-show-token
@@ -13,7 +13,13 @@ MARKETPLACE_ACCOUNT_DELETION
 OPERATOR EMAIL:
 walshe.ben@gmail.com
 
-CLICK SEQUENCE:
+RENDER ENVIRONMENT (same token and URL the app uses to hash the challenge):
+1. Auction-system → Environment → Add:
+   EBAY_NOTIFICATION_ENDPOINT_URL=https://auction-system-l6je.onrender.com/webhooks/ebay/account-deletion
+   EBAY_NOTIFICATION_VERIFICATION_TOKEN=<paste `make ebay-notification-show-token`>
+2. Save. Wait until the service is Live.
+
+EBAY PORTAL:
 1. Open https://developer.ebay.com/my/keys and sign in (MFA if asked).
 2. Open the Production application whose keyset is disabled.
 3. Alerts & Notifications → Marketplace Account Deletion.

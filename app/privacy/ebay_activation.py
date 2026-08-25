@@ -71,11 +71,12 @@ def detect_hosting() -> dict[str, Any]:
         "ngrok_forbidden": True,
         "can_auto_deploy": bool(deploy_keys_present) and files["dockerfile"],
         "note": (
-            "No existing public HTTPS host is configured. This Cursor agent is not a "
-            "stable webhook. Deploy ARIE (docker-compose) behind a persistent HTTPS "
-            "hostname, then set EBAY_NOTIFICATION_ENDPOINT_URL."
-            if not public
-            else "Public HTTPS endpoint URL is configured."
+            "Public HTTPS endpoint URL is configured."
+            if public
+            else (
+                "No EBAY_NOTIFICATION_ENDPOINT_URL yet. If ARIE is already live on "
+                "Render, set it to https://<service>.onrender.com/webhooks/ebay/account-deletion."
+            )
         ),
     }
 
@@ -149,6 +150,8 @@ def prove_public_endpoint(url: str | None = None) -> dict[str, Any]:
             except ValueError:
                 artifact["get_body_is_json"] = False
             if isinstance(body, dict):
+                if body.get("error"):
+                    artifact["get_error"] = str(body.get("error"))
                 actual = str(body.get("challengeResponse") or "")
                 artifact["challenge_response_length"] = len(actual)
                 artifact["challenge_match"] = (
@@ -317,21 +320,34 @@ def write_owner_portal_sheet(*, endpoint: str | None, status: str) -> Path:
         or (get_settings().alert_email_to if hasattr(get_settings(), "alert_email_to") else "")
         or "walshe.ben@gmail.com"
     )
-    text = "\n".join(
+    lines = [
+        "ENDPOINT URL:",
+        endpoint_line,
+        "",
+        "VERIFICATION TOKEN:",
+        "make ebay-notification-show-token",
+        "",
+        "TOPIC:",
+        TOPIC,
+        "",
+        "OPERATOR EMAIL:",
+        email,
+        "",
+    ]
+    if endpoint and "onrender.com" in endpoint:
+        lines.extend(
+            [
+                "RENDER ENVIRONMENT (same token and URL the app uses to hash the challenge):",
+                "1. Auction-system → Environment → Add:",
+                f"   EBAY_NOTIFICATION_ENDPOINT_URL={endpoint}",
+                "   EBAY_NOTIFICATION_VERIFICATION_TOKEN=<paste `make ebay-notification-show-token`>",
+                "2. Save. Wait until the service is Live.",
+                "",
+            ]
+        )
+    lines.extend(
         [
-            "ENDPOINT URL:",
-            endpoint_line,
-            "",
-            "VERIFICATION TOKEN:",
-            "make ebay-notification-show-token",
-            "",
-            "TOPIC:",
-            TOPIC,
-            "",
-            "OPERATOR EMAIL:",
-            email,
-            "",
-            "CLICK SEQUENCE:",
+            "EBAY PORTAL:",
             f"1. Open {PORTAL_KEYS_URL} and sign in (MFA if asked).",
             "2. Open the Production application whose keyset is disabled.",
             "3. Alerts & Notifications → Marketplace Account Deletion.",
@@ -347,6 +363,7 @@ def write_owner_portal_sheet(*, endpoint: str | None, status: str) -> Path:
             f"AUTOMATION_STATUS: {status}",
         ]
     )
+    text = "\n".join(lines)
     path = Path("artifacts/ebay_owner_portal_action.txt")
     path.write_text(text + "\n", encoding="utf-8")
     Path("docs/ebay/OWNER_PORTAL_ACTION.md").write_text(

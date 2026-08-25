@@ -42,6 +42,7 @@ class OutcomeRequest(BaseModel):
 
 
 @router.get("/health")
+@router.head("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
@@ -79,9 +80,26 @@ def health_workers() -> dict[str, Any]:
 
 
 @router.get("/health/ebay-notifications")
-def health_ebay_notifications(session: Session = Depends(get_db)) -> dict[str, Any]:
-    """Local readiness for the deletion webhook. Does not claim eBay subscription."""
-    return notification_health(session)
+def health_ebay_notifications() -> dict[str, Any]:
+    """Local readiness for the deletion webhook. Does not claim eBay subscription.
+
+    GET challenge verification does not need the database. A down database is
+    reported honestly and does not 500 this probe.
+    """
+    try:
+        gen = get_db()
+        session = next(gen)
+    except Exception:
+        payload = notification_health(None)
+        payload["database"] = "down"
+        return payload
+    try:
+        return notification_health(session)
+    finally:
+        try:
+            next(gen, None)
+        except Exception:
+            pass
 
 
 @router.post("/scans")
