@@ -13,13 +13,22 @@ from app.api.routes.ebay_oauth import router as ebay_oauth_router
 from app.api.routes.ebay_webhooks import router as ebay_webhook_router
 from app.api.routes.ops import router as ops_router
 from app.core.config import settings
-from app.core.logging import configure_logging
+from app.core.logging import configure_logging, get_logger
 from app.jobs.scheduler import start_scheduler
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    import sys
+
     configure_logging()
+    if "pytest" not in sys.modules:
+        from app.db.migrate import run_startup_migrations
+
+        try:
+            run_startup_migrations()
+        except Exception:
+            get_logger("arie.startup").exception("startup_migrations_failed")
     start_scheduler()
     yield
 
