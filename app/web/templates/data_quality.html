@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Data quality · ARIE{% endblock %}
+{% block body %}
+<h1>Data quality</h1>
+<ul>
+  <li>Listings sampled: {{ listing_count }}</li>
+  <li>Missing price: {{ missing_price }}</li>
+  <li>Unknown identity (no brand/model): {{ unknown_id }}</li>
+  <li>Low-confidence valuations: {{ low_val }}</li>
+</ul>
+<h2>Sources</h2>
+<table>
+  <thead><tr><th>Source</th><th>Status</th><th>Error</th></tr></thead>
+  <tbody>
+    {% for s in sources %}
+    <tr><td>{{ s.id }}</td><td>{{ s.status }}</td><td class="warn">{{ s.last_error or "" }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

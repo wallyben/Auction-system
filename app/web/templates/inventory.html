@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Inventory · ARIE{% endblock %}
+{% block body %}
+<h1>Inventory</h1>
+<p class="meta">Capital tied (unsold): €{{ '%.2f'|format(capital) }} · Certification {{ cert_level }}</p>
+<table>
+  <thead>
+    <tr><th>State</th><th>Item</th><th>Paid</th><th>Capital</th><th>Expected profit</th><th>List</th><th>Min accept</th><th>Exit</th><th>Sold</th></tr>
+  </thead>
+  <tbody>
+    {% for i in items %}
+    <tr>
+      <td><span class="pill">{{ i.state }}</span></td>
+      <td>{{ i.title[:80] }}</td>
+      <td>€{{ '%.2f'|format(i.actual_purchase_price) }}</td>
+      <td>€{{ '%.2f'|format(i.capital_tied_eur) }}</td>
+      <td>€{{ '%.2f'|format(i.expected_profit_eur or 0) }}</td>
+      <td>€{{ '%.2f'|format(i.recommended_list_price or 0) }}</td>
+      <td>€{{ '%.2f'|format(i.minimum_accept_price or 0) }}</td>
+      <td>{{ i.where_to_list }}</td>
+      <td>
+        {% if i.state != 'sold' %}
+        <form method="post" action="/inventory/{{ i.id }}/sold">
+          <input name="sale_price" placeholder="sale €" size="6" required>
+          <input name="sale_channel" value="ebay_ie" size="8">
+          <button>Mark sold</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="9">No purchases yet. Open an opportunity and Mark purchased.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

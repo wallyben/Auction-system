@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Performance · ARIE{% endblock %}
+{% block body %}
+<h1>Model performance</h1>
+<p>Certification {{ cert_level }}. Empty outcomes mean the model has not been empirically validated. That is not a pass.</p>
+
+<section>
+  <h2>Import realised sales</h2>
+  <p>
+    <a href="/sold/template">Download CSV template</a>
+    ·
+    <a href="/oauth/ebay/status">eBay owner OAuth status</a>
+  </p>
+  <form method="post" action="/import/owner-sales" enctype="multipart/form-data">
+    <label>Owner sales CSV <input type="file" name="file" required></label>
+    <button>Import owner sales</button>
+  </form>
+  <form method="post" action="/import/marketplace-sales" enctype="multipart/form-data">
+    <label>Marketplace export <input type="file" name="file" required></label>
+    <button>Import marketplace export</button>
+  </form>
+</section>
+
+<section>
+  <h2>Outcomes</h2>
+  <table>
+    <thead><tr><th>Predicted resale</th><th>Actual</th><th>Pred profit</th><th>Actual profit</th><th>Val error</th></tr></thead>
+    <tbody>
+      {% for o in outcomes %}
+      <tr>
+        <td>{{ o.predicted_resale }}</td><td>{{ o.actual_resale }}</td>
+        <td>{{ o.predicted_profit }}</td><td>{{ o.actual_profit }}</td><td>{{ o.valuation_error }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5">No sale outcomes yet. MAE unknown.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Paper trades</h2>
+  <pre class="json">{{ paper | tojson(indent=2) }}</pre>
+</section>
+
+<section>
+  <h2>Category certification</h2>
+  <pre class="json">{{ categories | tojson(indent=2) }}</pre>
+  <h2>Exit certification</h2>
+  <pre class="json">{{ exits | tojson(indent=2) }}</pre>
+</section>
+{% endblock %}

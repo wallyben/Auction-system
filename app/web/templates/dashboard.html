@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Best buys now · ARIE{% endblock %}
+{% block body %}
+<section class="hero">
+  <h1>Best buys now</h1>
+  <p>BUY_READY is harder than engine BUY. Asking prices are not sold prices. Certification: <strong>{{ cert_level }}</strong>{% if safe_start %} · SAFE_START on{% endif %}.</p>
+</section>
+
+<section class="controls wrap">
+  <form method="post" action="/scan-now"><button type="submit" class="primary">Scan all now</button></form>
+  <form method="post" action="/scan-source">
+    <input name="source_id" placeholder="source id" required>
+    <button>Scan source</button>
+  </form>
+  <form method="post" action="/scan-category">
+    <input name="category" placeholder="category / keywords" required>
+    <button>Scan category</button>
+  </form>
+  <form method="post" action="/scan-search">
+    <input name="query" placeholder="search" required>
+    <button>Scan search</button>
+  </form>
+  <form method="post" action="/self-audit"><button>Run self-audit</button></form>
+</section>
+
+<section class="controls wrap">
+  <form method="post" action="/value-url">
+    <input name="url" placeholder="Value this URL (Scryfall / eBay if allowed)" size="48">
+    <button>Value URL</button>
+  </form>
+  <form method="post" action="/value-item">
+    <input name="title" placeholder="Title" required>
+    <input name="asking" placeholder="Ask €">
+    <input name="country" value="IE" size="4">
+    <input name="condition" placeholder="condition">
+    <button class="primary">Value this item</button>
+  </form>
+</section>
+
+<p class="meta">Home {{ settings.home_country }} · capital €{{ settings.available_capital_eur }} · min profit €{{ settings.min_profit_eur }} · min ROI {{ settings.min_roi }} · scheduler {{ scheduler.scheduler_running }}</p>
+
+<section>
+  <h2>BUY_READY</h2>
+  {% if buys %}
+  <div class="cards">
+    {% for o in buys %}
+    <article class="card">
+      <span class="pill BUY_READY">BUY_READY</span>
+      <h3><a href="/opportunities/{{ o.id }}/view">{{ (o.listing.title if o.listing else "")[:80] }}</a></h3>
+      <p>Acquire: €{{ '%.0f'|format(o.all_in_acquisition_eur) }} · Max buy: €{{ '%.0f'|format(o.max_buy_eur) }}</p>
+      <p>Expected exit: €{{ '%.0f'|format(o.expected_resale_eur) }} · Net profit: €{{ '%.0f'|format(o.expected_profit_eur) }}</p>
+      <p>ROI {{ '%.0f'|format(o.expected_roi * 100) }}% · {{ o.expected_days_to_sale }} days · conf {{ '%.0f'|format(o.valuation_confidence * 100) }}%</p>
+      <p class="meta">Exit: {{ o.best_exit_channel }} / {{ o.fastest_exit_channel }}</p>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="warn">NO_CURRENT_BUY_READY_OPPORTUNITIES — that is a valid commercial result.</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>NEAR BUY_READY</h2>
+  {% if near %}
+  <table>
+    <thead><tr><th>Item</th><th>Ask</th><th>Max buy</th><th>What prevented BUY_READY?</th></tr></thead>
+    <tbody>
+    {% for o in near %}
+    <tr>
+      <td><a href="/opportunities/{{ o.id }}/view">{{ (o.listing.title if o.listing else "")[:80] }}</a></td>
+      <td>{% if o.listing %}{{ o.listing.currency }} {{ '%.0f'|format(o.listing.asking_price or 0) }}{% endif %}</td>
+      <td>€{{ '%.0f'|format(o.max_buy_eur) }}</td>
+      <td class="warn">{{ (o.gate_results.failures or o.listing.extras.what_prevented_buy_ready if o.listing else []) | join(", ") }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="meta">No near-buy candidates.</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>WATCH</h2>
+  <p class="meta">{{ watch|length }} items</p>
+</section>
+
+<section>
+  <h2>CLOSING SOON</h2>
+  {% if closing %}
+  <ul>
+    {% for o in closing %}
+    <li><a href="/opportunities/{{ o.id }}/view">{{ (o.listing.title if o.listing else "")[:70] }}</a> · {{ o.urgency }} · max hammer €{{ '%.0f'|format(o.max_hammer_eur or 0) }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="meta">No timed auctions currently flagged.</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>PRICE DROPS</h2>
+  {% if drops %}
+  <ul>
+    {% for o in drops %}
+    <li><a href="/opportunities/{{ o.id }}/view">{{ (o.listing.title if o.listing else "")[:70] }}</a> · ask now {% if o.listing %}{{ o.listing.asking_price }}{% endif %} · max €{{ '%.0f'|format(o.max_buy_eur) }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="meta">No observed ask reductions yet.</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Source health</h2>
+  <table>
+    <thead>
+      <tr><th>Source</th><th>Status</th><th>Quality</th><th>Last success</th><th>Records</th><th>Error</th></tr>
+    </thead>
+    <tbody>
+      {% for s in sources %}
+      <tr>
+        <td>{{ s.display_name }} <span class="muted">{{ s.id }}</span></td>
+        <td><span class="pill {{ s.status }}">{{ s.status }}</span></td>
+        <td>{{ s.commercial_quality }}</td>
+        <td>{{ s.last_success_at or "—" }}</td>
+        <td>{{ s.records_ingested }}</td>
+        <td class="warn">{{ s.last_error or "" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Recent scans</h2>
+  <ul class="scans">
+    {% for j in jobs %}
+    <li><strong>{{ j.status }}</strong> {{ j.trigger }} · listings {{ j.listings_seen }} · opportunities {{ j.opportunities_written }}</li>
+    {% else %}
+    <li>No scans yet.</li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section>
+  <h2>Watch / review / other</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Money</th><th>Engine</th><th>Item</th><th>Ask</th><th>Max buy</th>
+        <th>Expected</th><th>Profit</th><th>Downside</th><th>ROI</th><th>Days</th><th>Conf</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for o in opportunities %}
+      <tr>
+        <td><a href="/opportunities/{{ o.id }}/view"><span class="pill {{ o.money_ready_decision }}">{{ o.money_ready_decision }}</span></a></td>
+        <td><span class="pill {{ o.engine_decision or o.decision }}">{{ o.engine_decision or o.decision }}</span></td>
+        <td><a href="/opportunities/{{ o.id }}/view">{{ (o.listing.title if o.listing else "")[:70] }}</a></td>
+        <td>{% if o.listing %}{{ o.listing.currency }} {{ '%.0f'|format(o.listing.asking_price or 0) }}{% endif %}</td>
+        <td>€{{ '%.0f'|format(o.max_buy_eur) }}</td>
+        <td>€{{ '%.0f'|format(o.expected_resale_eur) }}</td>
+        <td>€{{ '%.0f'|format(o.expected_profit_eur) }}</td>
+        <td>€{{ '%.0f'|format(o.downside_profit_eur) }}</td>
+        <td>{{ '%.0f'|format(o.expected_roi * 100) }}%</td>
+        <td>{{ o.expected_days_to_sale }}</td>
+        <td>{{ '%.0f'|format(o.valuation_confidence * 100) }}%</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="11">No opportunities stored. Run a scan or value an item.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

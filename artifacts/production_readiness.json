@@ -1,0 +1,25 @@
+{
+  "generated_at": "2026-08-25T22:41:30+00:00",
+  "scan_status": "success",
+  "listings_seen": 224,
+  "live_sources": ["ebay_browse", "ecb_fx", "reverb", "scryfall"],
+  "blocked_sources": [],
+  "buy_count": 0,
+  "buy_ready_count": 0,
+  "certification_level": "LEVEL_1_LIVE_DATA",
+  "verdict": "ARIE_PRODUCTION_LIVE_NOT_COMMERCIALLY_USEFUL_YET",
+  "real_money_answer": "NO",
+  "ebay_production_live": true,
+  "sandbox_used": false,
+  "host": "https://auction-system-l6je.onrender.com",
+  "gates": {
+    "G00_REPO_HEALTH": "PASS",
+    "G05_LIVE_ACQUISITION": "PASS_EBAY_PRODUCTION_LIVE",
+    "G06_REAL_SALES_EVIDENCE": "FAIL_EMPTY_PANEL",
+    "G22_BUY_READY": "PASS_FAIL_CLOSED_ZERO_BUY_READY",
+    "G33_BACKTEST": "INSUFFICIENT_DATA",
+    "G34_PAPER_TRADE": "OPEN_REVIEW_ONLY",
+    "G35_CATEGORY_CERTIFICATION": "NOT_CERTIFIED",
+    "G37_REAL_MONEY_SAFETY": "SAFE_START_DEFAULT_NO_BUY"
+  }
+}

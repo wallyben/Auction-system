@@ -1,0 +1,1 @@
+"""Programmatic opportunity red-team."""

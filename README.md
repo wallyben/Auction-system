@@ -1,99 +1,61 @@
-# ARIE Backend - Phase 1 Scaffold
+# ARIE
 
-Production-ready FastAPI scaffold for **ARIE (Automated Reseller Intelligence Engine)**.
+**Automated Reseller Intelligence Engine** for an Irish reseller.
 
-## Stack
+ARIE answers: *what can I buy, from where, for how much, and what is it realistically worth after every cost if I resell from Ireland?*
 
-- Python 3.11
-- FastAPI
-- SQLAlchemy 2.0
-- Alembic
-- PostgreSQL
-- Docker / Docker Compose
-- Pytest
+It is not a toy dashboard. It is a decision engine that fails closed when evidence is weak.
 
-## Project Structure
+## What is live today
 
-```text
-.
-├── app
-│   ├── api
-│   │   └── routes
-│   │       └── health.py
-│   ├── core
-│   │   └── config.py
-│   ├── db
-│   │   ├── base.py
-│   │   └── session.py
-│   ├── models
-│   │   └── auction_lot.py
-│   └── main.py
-├── alembic
-│   ├── env.py
-│   ├── script.py.mako
-│   └── versions
-│       └── 20260223_0001_create_auction_lots_table.py
-├── tests
-│   └── test_health.py
-├── alembic.ini
-├── docker-compose.yml
-├── Dockerfile
-└── pyproject.toml
-```
+| Capability | Status |
+|---|---|
+| Scan / identify / value / cost / decide pipeline | Working |
+| Owner dashboard | Working |
+| Continuous APScheduler scans | Working when `SCAN_ENABLED=true` |
+| Scryfall + ECB FX | **LIVE** (real HTTP in this environment) |
+| Reverb public listings | **BLOCKED_TECHNICAL** (HTTP 403 from this host) |
+| eBay Browse | **LIVE (sandbox)** with owner SBX keys — dummy listings only, cannot be BUY_READY |
+| DoneDeal, Adverts.ie, auction houses, CeX | **BLOCKED_POLICY** — no scraping |
+| CSV / manual capture | LIVE fallback |
+| Asking prices labelled as realised Irish sales | Never |
 
-## Environment
-
-Set `DATABASE_URL` for any database operation outside Docker:
+## Quick start
 
 ```bash
-export DATABASE_URL="postgresql+psycopg://postgres:postgres@localhost:5432/arie"
+cp .env.example .env   # then set DATABASE_URL
+make install
+make migrate
+make dev               # http://127.0.0.1:8000
 ```
-
-## Run with Docker Compose (recommended)
 
 ```bash
-docker compose up --build
+make test              # unit + contract (no network)
+make test-live         # ECB / Scryfall / Reverb
+make scan
+make scan-source SOURCE=scryfall
+make validate
+make production-proof
+make ebay-check
+make ebay-notification-check
+make ebay-notification-token
+make ebay-notification-show-token
+make ebay-notification-watch
+make ebay-notification-activate
+make source-health
+make backtest
 ```
 
-This starts:
+Dashboard: open `/`. Scan, value a URL/item, inspect gates, mark purchased. `BUY_READY` is not engine `BUY`.
 
-- `db` (PostgreSQL 16)
-- `app` (FastAPI at `http://localhost:8000`)
+## Owner knobs
 
-The app container runs migrations automatically before starting Uvicorn.
+All ordinary configuration is in `.env`. You do not edit Python to change thresholds, sources, or queries.
 
-Health check:
+## Honest limits
 
-```bash
-curl http://localhost:8000/health
-```
-
-Expected response:
-
-```json
-{"status":"ok"}
-```
-
-Stop services:
-
-```bash
-docker compose down -v
-```
-
-## Run locally without Docker
-
-```bash
-python3.11 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -e ".[dev]"
-export DATABASE_URL="postgresql+psycopg://postgres:postgres@localhost:5432/arie"
-alembic upgrade head
-uvicorn app.main:app --reload
-```
-
-## Run tests
-
-```bash
-pytest
-```
+- Irish *realised* sold comps are not available from a public API in this programme.
+- Asking prices are haircut and capped at 0.48 confidence.
+- Tax figures are operational estimates. An accountant must confirm VAT/margin-scheme treatment.
+- Do not trust ARIE with real money until you have recorded actual buys and sales in the outcome loop.
+- Current honest status: software complete; empirical validation required. SAFE_START stays on.

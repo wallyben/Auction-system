@@ -1,0 +1,772 @@
+{
+  "generated_at": "2026-08-25T23:40:24.957199+00:00",
+  "host": "https://auction-system-l6je.onrender.com",
+  "sandbox_used": false,
+  "A_REALISED_SALES_SOURCES": [
+    {
+      "name": "eBay Browse API",
+      "classification": "ACTIVE_ASKING",
+      "access": "official_api",
+      "status": "depends_on_production_oauth",
+      "docs": "https://developer.ebay.com/api-docs/buy/browse/overview.html",
+      "provides": "Active listings only. Not sold evidence."
+    },
+    {
+      "name": "eBay Marketplace Insights item_sales/search",
+      "classification": "REALIZED_SOLD",
+      "access": "official_api_limited_release",
+      "status": "not_entitled_403",
+      "docs": "https://developer.ebay.com/api-docs/buy/marketplace-insights/resources/item_sales/methods/search",
+      "provides": "Completed sales for the last 90 days if the keyset is entitled. Official endpoint is v1_beta with required category_ids. Ordinary Buy apps receive 403. Apply via Buy APIs Requirements. v1 (non-beta) is not probed.",
+      "owner_action": "https://developer.ebay.com/develop/guides-v2/buy-apis-requirements"
+    },
+    {
+      "name": "eBay Finding findCompletedItems",
+      "classification": "REALIZED_SOLD",
+      "access": "deprecated",
+      "status": "do_not_call",
+      "docs": "https://developer.ebay.com/api-docs/user-guides/static/finding-user-guide-landing.html",
+      "provides": "Historical completed items. Deprecated. Not implemented."
+    },
+    {
+      "name": "eBay Sell Fulfillment / Finances / Analytics",
+      "classification": "REALIZED_SOLD",
+      "access": "user_oauth",
+      "status": "implemented_awaiting_owner_consent",
+      "docs": "https://developer.ebay.com/api-docs/sell/static/selling-ig-landing.html",
+      "provides": "Owner-only orders and payouts after user consent. Not general market sold comps. Flow: GET /oauth/ebay/status then /oauth/ebay/start. Refresh token stored in Postgres."
+    },
+    {
+      "name": "eBay seller hub / Terapeak export",
+      "classification": "REALIZED_SOLD",
+      "access": "owner_export",
+      "status": "importer_ready",
+      "docs": "https://www.ebay.com/help/selling/selling-tools/terapeak-research",
+      "provides": "Owner download. Parser live. Empty until the owner uploads a file."
+    },
+    {
+      "name": "Owner recorded sales CSV",
+      "classification": "REALIZED_SOLD",
+      "access": "owner_export",
+      "status": "live_empty",
+      "docs": "in-repo GET /sold/template and POST /import/owner-sales",
+      "provides": "Highest-weight local realised evidence."
+    },
+    {
+      "name": "Scryfall Cardmarket EUR",
+      "classification": "DEALER_RETAIL",
+      "access": "official_api",
+      "status": "live",
+      "docs": "https://scryfall.com/docs/api",
+      "provides": "Dealer/market guide. Not an Irish realised sale."
+    },
+    {
+      "name": "Reverb listings",
+      "classification": "ACTIVE_ASKING",
+      "access": "official_api",
+      "status": "blocked_technical_from_this_host",
+      "docs": "https://reverb.com/api",
+      "provides": "Asking prices when HTTP 200. 403 from this datacentre is not scraped around."
+    },
+    {
+      "name": "CeX / trade-in store quotes",
+      "classification": "TRADE_BUY",
+      "access": "no_official_public_api",
+      "status": "not_implemented",
+      "docs": null,
+      "provides": "Would be a liquidation floor. No official public API found; website internals are not called."
+    },
+    {
+      "name": "Irish auction houses (Wilsons, John Pye, Whyte's, Adams)",
+      "classification": "AUCTION_HAMMER",
+      "access": "no_official_public_api",
+      "status": "not_implemented",
+      "docs": null,
+      "provides": "Hammer archives exist as HTML. No permitted structured feed found. Not scraped."
+    },
+    {
+      "name": "BidSpotter / i-bidder",
+      "classification": "AUCTION_HAMMER",
+      "access": "credentials_or_policy",
+      "status": "blocked_policy",
+      "docs": null,
+      "provides": "Login/CAPTCHA surfaces. Not bypassed."
+    },
+    {
+      "name": "DoneDeal / Adverts.ie",
+      "classification": "ACTIVE_ASKING",
+      "access": "blocked_policy",
+      "status": "blocked_policy",
+      "docs": null,
+      "provides": "Irish private-sale asking. No official API; not scraped."
+    }
+  ],
+  "B_OWNER_OAUTH_STATUS": {
+    "implemented": true,
+    "live_host_deployed": false,
+    "consent_url": "https://auction-system-l6je.onrender.com/oauth/ebay/start",
+    "status_url": "https://auction-system-l6je.onrender.com/oauth/ebay/status",
+    "scope": "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
+    "token_storage": "Postgres oauth_credentials (not Render disk)",
+    "owner_steps": [
+      "Create a Production RuName whose Auth Accepted URL is https://auction-system-l6je.onrender.com/oauth/ebay/callback",
+      "Set EBAY_RU_NAME to that RuName",
+      "Deploy this branch so GET /oauth/ebay/status exists",
+      "Open the consent URL, sign in to eBay, click Agree",
+      "ARIE stores the refresh token and ingests sold orders"
+    ],
+    "password_requested": false,
+    "refresh_token_on_live_host": "unknown_until_deploy_and_consent"
+  },
+  "C_FP_RATE": {
+    "before_top100": 0.28,
+    "after_on_same_top100_window": 0.27,
+    "caught_in_window": 27,
+    "window_n": 100,
+    "reject_reasons": {
+      "accessory": 6,
+      "multi_variant_listing": 1,
+      "4070_super_mismatch": 5,
+      "iphone_pro_max_mismatch": 7,
+      "bundle_or_kit": 1,
+      "wrong_generation_a7r": 1,
+      "wrong_iphone_generation": 1,
+      "ps5_accessory": 5
+    },
+    "target": 0.05,
+    "note": "After filters, former accessory/wrong-variant FPs are rejected before ranking. Residual FP among retained titles is not fully labelled; realised coverage still required before certification."
+  },
+  "D_IDENTITY_ACCURACY": {
+    "retained": 73,
+    "exact_or_variant_pass_rate": 0.9041,
+    "target": 0.9
+  },
+  "E_CONDITION_ACCURACY": {
+    "structured_used_confidence": 0.82,
+    "buy_ready_min_condition_unchanged": 0.75,
+    "pass_rate_on_structured_used": 1.0,
+    "previous_fail_rate": 0.99,
+    "note": "eBay structured Used is no longer keyword-mapped to 0.55."
+  },
+  "F_CATEGORY_CERTIFICATION": {
+    "certified": [],
+    "evaluations": [
+      {
+        "category": "lenses",
+        "n": 27,
+        "certified": false,
+        "reasons": [
+          "realised_coverage 0 < 0.50",
+          "valuation_error_not_acceptable"
+        ],
+        "identity_rate": 1.0,
+        "condition_rate": 1.0
+      },
+      {
+        "category": "music_dj",
+        "n": 11,
+        "certified": false,
+        "reasons": [
+          "too_few_listings",
+          "realised_coverage 0 < 0.50",
+          "valuation_error_not_acceptable"
+        ],
+        "identity_rate": 1.0,
+        "condition_rate": 1.0
+      },
+      {
+        "category": "pro_av",
+        "n": 6,
+        "certified": false,
+        "reasons": [
+          "too_few_listings",
+          "realised_coverage 0 < 0.50",
+          "valuation_error_not_acceptable"
+        ],
+        "identity_rate": 1.0,
+        "condition_rate": 1.0
+      },
+      {
+        "category": "consumer_electronics",
+        "n": 6,
+        "certified": false,
+        "reasons": [
+          "too_few_listings",
+          "realised_coverage 0 < 0.50",
+          "valuation_error_not_acceptable"
+        ],
+        "identity_rate": 1.0,
+        "condition_rate": 1.0
+      },
+      {
+        "category": "gpu",
+        "n": 6,
+        "certified": false,
+        "reasons": [
+          "too_few_listings",
+          "realised_coverage 0 < 0.50",
+          "valuation_error_not_acceptable"
+        ],
+        "identity_rate": 1.0,
+        "condition_rate": 1.0
+      },
+      {
+        "category": "computing",
+        "n": 6,
+        "certified": false,
+        "reasons": [
+          "too_few_listings",
+          "identity 0.1666666666666666666666666667 < 0.90",
+          "realised_coverage 0 < 0.50",
+          "valuation_error_not_acceptable"
+        ],
+        "identity_rate": 0.16666666666666666,
+        "condition_rate": 1.0
+      },
+      {
+        "category": "gaming",
+        "n": 5,
+        "certified": false,
+        "reasons": [
+          "too_few_listings",
+          "realised_coverage 0 < 0.50",
+          "valuation_error_not_acceptable"
+        ],
+        "identity_rate": 1.0,
+        "condition_rate": 1.0
+      },
+      {
+        "category": "cameras",
+        "n": 4,
+        "certified": false,
+        "reasons": [
+          "too_few_listings",
+          "realised_coverage 0 < 0.50",
+          "valuation_error_not_acceptable"
+        ],
+        "identity_rate": 1.0,
+        "condition_rate": 1.0
+      },
+      {
+        "category": "unknown",
+        "n": 2,
+        "certified": false,
+        "reasons": [
+          "too_few_listings",
+          "identity 0 < 0.90",
+          "realised_coverage 0 < 0.50",
+          "valuation_error_not_acceptable"
+        ],
+        "identity_rate": 0.0,
+        "condition_rate": 1.0
+      }
+    ],
+    "note": "None certified: realised_comp_coverage is 0."
+  },
+  "G_LIVE_SCAN_RESULTS": {
+    "prior_production_listings_seen": 224,
+    "api_window_rescored": 100,
+    "additional_500_scan": "blocked_this_session \u2014 live host timed out under scan load; GET /listings not deployed yet. New filters scored locally on the proven 100-window plus prior 224 scan count. Re-run scripts/collect_and_score_live.py after deploy.",
+    "markets": [
+      "IE",
+      "GB",
+      "DE",
+      "FR",
+      "IT",
+      "ES",
+      "NL"
+    ],
+    "retained_after_new_filters": 73,
+    "rejected_after_new_filters": 27,
+    "BUY_READY": 0,
+    "WATCH": 0,
+    "REVIEW": 73,
+    "IGNORE": 27,
+    "identity_pass": 0.9041,
+    "condition_pass": 1.0,
+    "realised_comp_coverage": 0
+  },
+  "H_BUY_READY": 0,
+  "I_TOP_20": [
+    {
+      "title": "Obiettivo Sony FE 24-70mm f/2.8 GM II SEL2470GM2 [Ottimo come nuovo] #3024089",
+      "query": "Sony FE 24-70mm GM II",
+      "ask": "1439.47",
+      "currency": "EUR",
+      "country": "JP",
+      "url": "https://www.ebay.it/itm/366616523647?_skw=Sony+FE+24-70mm+GM+II&hash=item555c0c337f:g:J6MAAeSw-95qhfNZ",
+      "identity": "exact",
+      "identity_confidence": 0.92,
+      "category": "lenses",
+      "condition_confidence": 0.82,
+      "canonical_key": "sony|fe-24-70-gm-ii",
+      "old_expected_resale": "0.00",
+      "old_max_buy": "0.00",
+      "old_profit": "-1823.15",
+      "old_val_conf": "0.0000"
+    },
+    {
+      "title": "Lente Sony FE 24-70 mm f/2,8 GM II (montura Sony E) -COMO NUEVA",
+      "query": "Sony FE 24-70mm GM II",
+      "ask": "1397.45",
+      "currency": "EUR",
+      "country": "KR",
+      "url": "https://www.ebay.it/itm/327259180653?_skw=Sony+FE+24-70mm+GM+II&hash=item4c322ace6d:g:fVAAAeSw2VhqVMkT",
+      "identity": "exact",
+      "identity_confidence": 0.92,
+      "category": "lenses",
+      "condition_confidence": 0.82,
+      "canonical_key": "sony|fe-24-70-gm-ii",
+      "old_expected_resale": "0.00",
+      "old_max_buy": "0.00",
+      "old_profit": "-1796.37",
+      "old_val_conf": "0.0000"
+    },
+    {
+      "title": "Sony FE 24-70mm f/2.8 GM II SEL2470GM2 E mount [Exc+3]",
+      "query": "Sony FE 24-70mm GM II",
+      "ask": "1256.86",
+      "currency": "EUR",
+      "country": "JP",
+      "url": "https://www.ebay.ie/itm/307131009620?_skw=Sony+FE+24-70mm+GM+II&hash=item47826f4a54:g:sewAAeSwZjlqOe48&amdata=enc%3AAQALAAAA8ACCtXRWQnOEpyOqnQQ8KGYafK8VfLLWZ9n8zr6LqWZVmVCTGDbyQvw5km78lZmCftG7v%2BYMkr5uBUm9svPV7saLVqJ0nabYr3mYHbrarbC20YeQVULhZfxuq4LqYvL94qQXegoRlEZqmR6vNrDwFKbenYbmLVYbnUeKs3BxGNxoR2zbdetSSjjdHc4yB5Z5svy1R%2BhmjTbskE759uLBdp2ZUT4uWgh0MzCICGlCjhjNFFv5z2vQsVz2ZkHeM4fwCsNlRSG9WqM7K4WUU2tx%2FwGWyN4uIvxvC3x2U%2FnRV7c0FjPzJgPC3r%2B%2B6W7eBOZPsw%3D%3D",
+      "identity": "exact",
+      "identity_confidence": 0.92,
+      "category": "lenses",
+      "condition_confidence": 0.82,
+      "canonical_key": "sony|fe-24-70-gm-ii",
+      "old_expected_resale": "0.00",
+      "old_max_buy": "0.00",
+      "old_profit": "-1595.07",
+      "old_val_conf": "0.0000"
+    },
+    {
+      "title": "Apple iPhone 15 Pro 256GB - Unlocked - Black  - 96% Battery Health",
+      "query": "iPhone 15 Pro 256GB",
+      "ask": "339.99",
+      "currency": "GBP",
+      "country": "GB",
+      "url": "https://www.ebay.co.uk/itm/188835553143?_skw=iPhone+15+Pro+256GB&hash=item2bf779df77:g:qd0AAeSwcXFqjHeO",
+      "identity": "exact",
+      "identity_confidence": 0.92,
+      "category": "consumer_electronics",
+      "condition_confidence": 0.82,
+      "canonical_key": "apple|iphone 15 pro|256gb",
+      "old_expected_resale": "0.00",
+      "old_max_buy": "0.00",
+      "old_profit": "-526.40",
+      "old_val_conf": "0.0000"
+    },
+    {
+      "title": "English OK!! Sony a7 IV ILCE-7M4 Mirrorless Camera \u3010NEAR MINT S/C:13,931\u3011 Japan",
+      "query": "Sony A7 IV",
+      "ask": "1406.03",
+      "currency": "EUR",
+      "country": "JP",
+      "url": "https://www.ebay.ie/itm/366606362994?_skw=Sony+A7+IV&hash=item555b712972:g:qjEAAeSwDhxqcKVa&amdata=enc%3AAQALAAAA8ACCtXRWQnOEpyOqnQQ8KGadNksSD8%2BXbsAN5NoDPjn4liSmF3ESEae7txETmHLPmObURUdF4o2Wv3Jhmq5P5%2FRbcyE10Jy1trpzboq3sPAdD983C1KWvyB4relisidsdxlSNf3K1HAswrXTZ3mKNaaspXBTF37kM6liuahP2e5wlxI2XOqNs%2BJ1VAdqlzrasGaMQL0iL%2F7jfe2EmK67ZiQFWQeKOgvVhnHx%2B4fVYqhdk19mNimXknHsaIrVvbjHgXNtj9BXMq9%2Fts%2FDF1GA96SzW%2FnENgOyW%2FWL679HVkUkvThCxZ9wZWr1%2BmXRf2ED1A%3D%3D",
+      "identity": "exact",
+      "identity_confidence": 0.92,
+      "category": "cameras",
+      "condition_confidence": 0.82,
+      "canonical_key": "sony|a7-iv|body",
+      "old_expected_resale": "0.00",
+      "old_max_buy": "0.00",
+      "old_profit": "-1781.38",
+      "old_val_conf": "0.0000"
+    },
+    {
+      "title": "Sony Alpha A7 IV 33MP Mirrorless Camera Black (Body Only) 3749 SC!",
+      "query": "Sony A7 IV",
+      "ask": "1154.20",
+      "currency": "GBP",
+      "country": "GB",
+      "url": "https://www.ebay.co.uk/itm/298584265953?_skw=Sony+A7+IV&hash=item45850254e1:g:0s0AAeSwOwdqfYWN",
+      "identity": "exact",
+      "identity_confidence": 0.92,
+      "category": "cameras",
+      "condition_confidence": 0.82,
+      "canonical_key": "sony|a7-iv|body",
+      "old_expected_resale": "0.00",
+      "old_max_buy": "0.00",
+      "old_profit": "-1745.16",
+      "old_val_conf": "0.0000"
+    },
+    {
+      "title": "Apple iPhone 16 Pro 256GB Desert Titanium (Unlocked) 91% Battery Health",
+      "query": "iPhone 16 Pro 256GB",
+      "ask": "540.00",
+      "currency": "GBP",
+      "country": "GB",
+      "url": "https://www.ebay.co.uk/itm/188839626354?_skw=iPhone+16+Pro+256GB&hash=item2bf7b80672:g:-gMAAeSwS7Zqja2f",
+      "identity": "exact",
+      "identity_confidence": 0.92,
+      "category": "consumer_electronics",
+      "condition_confidence": 0.82,
+      "canonical_key": "apple|iphone 16 pro|256gb",
+      "old_expected_resale": "0.00",
+      "old_max_buy": "0.00",
+      "old_profit": "-835.17",
+      "old_val_conf": "0.0000"
+    },
+    {
+      "title": "Sony FE 24-70mm f2.8 GM II Standard Zoom Lens SEL2470GM2 E-mount Camera Master",
+      "query": "Sony FE 24-70mm GM II",
+      "ask": "1687.24",
+      "currency": "EUR",
+      "country": "JP",
+      "url": "https://www.ebay.ie/itm/364854327691?_skw=Sony+FE+24-70mm+GM+II&hash=item54f303398b:g:dG4AAeSw4hlpWORs&amdata=enc%3AAQALAAAA8ACCtXRWQnOEpyOqnQQ8KGbICy9bmKQ3DawPpeYemIH5oyXg5%2B0dhebN9ihJ7tCtW6EFz%2Bx2N%2Fem%2BFmEAqIL%2FdiXS3%2B8Waa6RaiqAGEPFaQUXgyH%2BBwGbankgR3BFZVCI%2BcCNxU%2BWBLDL%2BhWRcr1pWQr%2BIiftm2OXQvB5MG5IJJAdZp2x1R6YB7B8lEAB2wzCxCKrkms4gc6jdm%2B0cDrj1Rz5YImbFwPf0qtFDIOaWDt3nT%2FdJHxMllgVU4Vb8GkOfGLAhDfgNaVrS41hrgbMAgEFJrWnp2FvvDLcVyF46AZdmcgUDoFwxEYilqYl1dX5A%3D%3D",
+      "identity": "exact",
+      "identity_confidence": 0.92,
+      "category": "lenses",
+      "condition_confidence": 0.82,
+      "canonical_key": "sony|fe-24-70-gm-ii",
+      "old_expected_resale": "0.00",
+      "old_max_buy": "0.00",
+      "old_profit": "-2127.62",
+      "old_val_conf": "0.0000"
+    },
+    {
+      "title": "Brand New Sony FE 24-70mm F2.8 GM II Lens SEL2470GM2",
+      "query": "Sony FE 24-70mm GM II",
+      "ask": "1299.00",
+      "currency": "GBP",
+      "country": "GB",
+      "url": "https://www.ebay.co.uk/itm/298592280523?_skw=Sony+FE+24-70mm+GM+II&hash=item45857c9fcb:g:DM0AAeSwbqVqgWdk",
+      "identity": "exact",
+      "identity_confidence": 0.92,
+      "category": "lenses",
+      "condition_confidence": 0.82,
+      "canonical_key": "sony|fe-24-70-gm-ii",
+      "old_expected_resale": "0.00",
+      "old_max_buy": "0.00",
+      "old_profit": "-1934.96",
+      "old_val_conf": "0.0000"
+    },
+    {
+      "title": "Sony FE 24-70mm f2.8 GM II GM2 Lens SEL2470GM2 Brand New G Master Lens",
+      "query": "Sony FE 24-70mm GM II",
+      "ask": "1349.00",
+      "currency": "GBP",
+      "country": "GB",
+      "url": "https://www.ebay.co.uk/itm/128010557687?_skw=Sony+FE+24-70mm+GM+II&hash=item1dce0618f7:g:nCUAAeSwW0Zqcf0d",
+      "identity": "exact",
+      "identity_confidence": 0.92,
+      "category": "lenses",
+      "condition_confidence": 0.82,
+      "canonical_key": "sony|fe-24-70-gm-ii",
+      "old_expected_resale": "0.00",
+      "old_max_buy": "0.00",
+      "old_profit": "-2008.67",
+      "old_val_conf": "0.0000"
+    },
+    {
+      "title": "Sony FE 24-70mm f2.8 GM II \u2013 Wie Neu",
+      "query": "Sony FE 24-70mm GM II",
+      "ask": "1600.00",
+      "currency": "EUR",
+      "country": "DE",
+      "url": "https://www.ebay.de/itm/206486372931?_skw=Sony+FE+24-70mm+GM+II&hash=item30138c0243:g:U6MAAeSw1WFqfPQy",
+      "identity": "exact",
+      "identity_confidence": 0.92,
+      "category": "lenses",
+      "condition_confidence": 0.82,
+      "canonical_key": "sony|fe-24-70-gm-ii",
+      "old_expected_resale": "0.00",
+      "old_max_buy": "0.00",
+      "old_profit": "-1656.84",
+      "old_val_conf": "0.0000"
+    },
+    {
+      "title": "Sony FE 24-70mm F2.8 GM II Objektiv - Sehr Gut - OVP - Gew\u00e4hrleistung",
+      "query": "Sony FE 24-70mm GM II",
+      "ask": "1659.99",
+      "currency": "EUR",
+      "country": "DE",
+      "url": "https://www.ebay.de/itm/147490972597?_skw=Sony+FE+24-70mm+GM+II&hash=item225725a3b5:g:ez8AAeSw7Ddqdw-W",
+      "identity": "exact",
+      "identity_confidence": 0.92,
+      "category": "lenses",
+      "condition_confidence": 0.82,
+      "canonical_key": "sony|fe-24-70-gm-ii",
+      "old_expected_resale": "0.00",
+      "old_max_buy": "0.00",
+      "old_profit": "-1711.78",
+      "old_val_conf": "0.0000"
+    },
+    {
+      "title": "\u3010Presque inutilis\u00e9\u3011Sony FE 24-70mm F2.8 GM II SEL2470GM2 G Master Lens...",
+      "query": "Sony FE 24-70mm GM II",
+      "ask": "2129.77",
+      "currency": "EUR",
+      "country": "JP",
+      "url": "https://www.ebay.fr/itm/358891879674?_skw=Sony+FE+24-70mm+GM+II&hash=item538f9f7cfa:g:-pcAAeSwBidqdJrr",
+      "identity": "exact",
+      "identity_confidence": 0.92,
+      "category": "lenses",
+      "condition_confidence": 0.82,
+      "canonical_key": "sony|fe-24-70-gm-ii",
+      "old_expected_resale": "0.00",
+      "old_max_buy": "0.00",
+      "old_profit": "-2680.34",
+      "old_val_conf": "0.0000"
+    },
+    {
+      "title": "Objectif zoom Sony FE 24-70mm f/2.8 GM II - comme neuf",
+      "query": "Sony FE 24-70mm GM II",
+      "ask": "1849.00",
+      "currency": "EUR",
+      "country": "NL",
+      "url": "https://www.ebay.fr/itm/227481166372?_skw=Sony+FE+24-70mm+GM+II&hash=item34f6ef2224:g:fX4AAeSwRAVqhGgD",
+      "identity": "exact",
+      "identity_confidence": 0.92,
+      "category": "lenses",
+      "condition_confidence": 0.82,
+      "canonical_key": "sony|fe-24-70-gm-ii",
+      "old_expected_resale": "0.00",
+      "old_max_buy": "0.00",
+      "old_profit": "-1929.38",
+      "old_val_conf": "0.0000"
+    },
+    {
+      "title": "Apple iPhone 15 Pro 256GB Titan Schwarz StoreDeal #69",
+      "query": "iPhone 15 Pro 256GB",
+      "ask": "629.00",
+      "currency": "EUR",
+      "country": "DE",
+      "url": "https://www.ebay.nl/itm/137567637357?_skw=iPhone+15+Pro+256GB&hash=item2007ab8f6d:g:qP0AAeSwVopqd2Z3&amdata=enc%3AAQALAAAA8ACCtXRWQnOEpyOqnQQ8KGZz9XgPgZKkqGC2d60TSvEit%2Bj%2FOPGyQXia16Zc8bUHDpniPgy7Rw58chujnKFKLBEmqrGyMqXmSbYh21rT55SbVqMSU7GE1pd9kCNzp32fgKl0KQmtJfPchImLFftpY4X%2BFDFCmFbxcu4oPrQF5d%2FLQzsirjr%2B31jtLHx4I5WBrsFOTleOpEpJMX1aIqWB0RV5IK8D08EjPqaNUC8oKTQ9jsSr7H3RRQIhdpIzVpVbrFjuZQYiB1HCLd7j9R2vQuNdjps%2FMY0H7kt%2BMXEUrl8c99tAIrw4dzrJJo4TWESguA%3D%3D",
+      "identity": "exact",
+      "identity_confidence": 0.92,
+      "category": "consumer_electronics",
+      "condition_confidence": 0.82,
+      "canonical_key": "apple|iphone 15 pro|256gb",
+      "old_expected_resale": "0.00",
+      "old_max_buy": "0.00",
+      "old_profit": "-675.20",
+      "old_val_conf": "0.0000"
+    },
+    {
+      "title": "Apple iPhone 16 Pro 256 GB | Black Titanium | 92% Batt. | Zustand Sehr gut",
+      "query": "iPhone 16 Pro 256GB",
+      "ask": "744.90",
+      "currency": "EUR",
+      "country": "DE",
+      "url": "https://www.ebay.de/itm/287545872521?_skw=iPhone+16+Pro+256GB&hash=item42f311d089:g:0R0AAeSw69pqhJLY",
+      "identity": "exact",
+      "identity_confidence": 0.92,
+      "category": "consumer_electronics",
+      "condition_confidence": 0.82,
+      "canonical_key": "apple|iphone 16 pro|256gb",
+      "old_expected_resale": "0.00",
+      "old_max_buy": "0.00",
+      "old_profit": "-779.30",
+      "old_val_conf": "0.0000"
+    },
+    {
+      "title": "Apple iPhone 16 Pro (256GB) - Titanium Black",
+      "query": "iPhone 16 Pro 256GB",
+      "ask": "1125.00",
+      "currency": "EUR",
+      "country": "FR",
+      "url": "https://www.ebay.fr/itm/396411370927?_skw=iPhone+16+Pro+256GB&hash=item5c4bf57daf:g:jEQAAOSw65xn8o~k",
+      "identity": "exact",
+      "identity_confidence": 0.92,
+      "category": "consumer_electronics",
+      "condition_confidence": 0.82,
+      "canonical_key": "apple|iphone 16 pro|256gb",
+      "old_expected_resale": "0.00",
+      "old_max_buy": "0.00",
+      "old_profit": "-1166.63",
+      "old_val_conf": "0.0000"
+    },
+    {
+      "title": "Apple iPhone 16 Pro 256 GB [PO192076]",
+      "query": "iPhone 16 Pro 256GB",
+      "ask": "799.00",
+      "currency": "EUR",
+      "country": "ES",
+      "url": "https://www.ebay.es/itm/267766786074?_skw=iPhone+16+Pro+256GB&hash=item3e5824e81a:g:D7EAAeSwo8JqjZMv",
+      "identity": "exact",
+      "identity_confidence": 0.92,
+      "category": "consumer_electronics",
+      "condition_confidence": 0.82,
+      "canonical_key": "apple|iphone 16 pro|256gb",
+      "old_expected_resale": "0.00",
+      "old_max_buy": "0.00",
+      "old_profit": "-834.43",
+      "old_val_conf": "0.0000"
+    },
+    {
+      "title": "Bo\u00eetier sans miroir SONY a7 IV ILCE-7M4 (nombre d'obturateurs 244 100)...",
+      "query": "Sony A7 IV",
+      "ask": "1501.99",
+      "currency": "EUR",
+      "country": "JP",
+      "url": "https://www.ebay.fr/itm/398323318436?_skw=Sony+A7+IV&hash=item5cbdeb7ea4:g:RowAAeSwKVhqjbLv",
+      "identity": "exact",
+      "identity_confidence": 0.92,
+      "category": "cameras",
+      "condition_confidence": 0.82,
+      "canonical_key": "sony|a7-iv|body",
+      "old_expected_resale": "0.00",
+      "old_max_buy": "0.00",
+      "old_profit": "-1896.24",
+      "old_val_conf": "0.0000"
+    },
+    {
+      "title": "Sony Alpha A7 IV ILCE-7M4,33 MP, nur 1705 Ausl\u00f6sungen, wie neu, Origin. Verpackt",
+      "query": "Sony A7 IV",
+      "ask": "1550.00",
+      "currency": "EUR",
+      "country": "DE",
+      "url": "https://www.ebay.de/itm/257699289504?_skw=Sony+A7+IV&hash=item3c001319a0:g:NCoAAeSwxKZqjBrj",
+      "identity": "exact",
+      "identity_confidence": 0.92,
+      "category": "cameras",
+      "condition_confidence": 0.82,
+      "canonical_key": "sony|a7-iv|body",
+      "old_expected_resale": "0.00",
+      "old_max_buy": "0.00",
+      "old_profit": "-1607.39",
+      "old_val_conf": "0.0000"
+    }
+  ],
+  "J_PAPER_TRADES": {
+    "count": 6,
+    "open": 6,
+    "note": "No fabricated dispositions. Open trades remain open until evidence exists. Disappearance is not a sale. None are BUY_READY.",
+    "trades": [
+      {
+        "timestamp": "2026-08-25T22:41:30+00:00",
+        "item": "MacBook Pro M3 Pro 14in 18GB RAM 512GB SSD Silver VG Cond BH 95% Please read",
+        "url": "https://www.ebay.co.uk/itm/377433019570",
+        "ask": "GBP 618.70",
+        "max_buy": "EUR 0.00",
+        "predicted_resale": "EUR 0.00 (insufficient evidence)",
+        "expected_profit": "EUR -945.71",
+        "expected_days": 45,
+        "failed_gates": [
+          "PRICE_EVIDENCE_PASS",
+          "MAX_BUY_PASS",
+          "CATEGORY_CERT_PASS",
+          "SAFE_START_PASS",
+          "CONDITION_PASS",
+          "PRODUCT_IDENTITY_PASS"
+        ],
+        "decision": "REVIEW",
+        "status": "open",
+        "note": "Commercially interesting ask vs street, but engine cannot value it. Seller warning in title. Paper only."
+      },
+      {
+        "timestamp": "2026-08-25T22:41:30+00:00",
+        "item": "Apple iPhone 15 Pro 256GB - Unlocked - Black - 96% Battery Health",
+        "url": "https://www.ebay.co.uk/itm/188835553143",
+        "ask": "GBP 339.99",
+        "max_buy": "EUR 0.00",
+        "predicted_resale": "EUR 0.00 (insufficient evidence)",
+        "expected_profit": "EUR -526.40",
+        "expected_days": 45,
+        "failed_gates": [
+          "PRICE_EVIDENCE_PASS",
+          "MAX_BUY_PASS",
+          "CATEGORY_CERT_PASS",
+          "SAFE_START_PASS",
+          "CONDITION_PASS",
+          "PRODUCT_IDENTITY_PASS"
+        ],
+        "decision": "REVIEW",
+        "status": "open",
+        "note": "Ask looks low vs typical used 15 Pro 256GB. Engine has no realised comps. Paper only."
+      },
+      {
+        "timestamp": "2026-08-25T22:41:30+00:00",
+        "item": "SHURE SM7B Cardioid Dynamic Vocal Microphone Studio Podcast Mic New Open Box",
+        "url": "https://www.ebay.ie/itm/820021592130",
+        "ask": "EUR 227.19",
+        "max_buy": "EUR 148.00",
+        "predicted_resale": "EUR 318.00 (Reverb asking comps, not realised)",
+        "expected_profit": "EUR -41.70",
+        "expected_days": 45,
+        "failed_gates": [
+          "PRICE_EVIDENCE_PASS",
+          "MAX_BUY_PASS",
+          "CATEGORY_CERT_PASS",
+          "SAFE_START_PASS",
+          "CONDITION_PASS",
+          "PRODUCT_IDENTITY_PASS",
+          "RISK_PASS",
+          "DOWNSIDE_PASS"
+        ],
+        "decision": "REVIEW",
+        "status": "open",
+        "note": "Ask below typical SM7B street. Counterfeit/open-box risk. Ask > max_buy. Paper only."
+      },
+      {
+        "timestamp": "2026-08-25T22:41:30+00:00",
+        "item": "Sony PlayStation 5 825 GB White Disc Console",
+        "url": "https://www.ebay.co.uk/itm/137661263974",
+        "ask": "GBP 312.70",
+        "max_buy": "EUR 0.00",
+        "predicted_resale": "EUR 0.00 (insufficient evidence)",
+        "expected_profit": "EUR -493.04",
+        "expected_days": 45,
+        "failed_gates": [
+          "PRICE_EVIDENCE_PASS",
+          "MAX_BUY_PASS",
+          "CATEGORY_CERT_PASS",
+          "SAFE_START_PASS",
+          "CONDITION_PASS",
+          "PRODUCT_IDENTITY_PASS"
+        ],
+        "decision": "REVIEW",
+        "status": "open",
+        "note": "Around used-console street. Engine cannot value. Thin/no modelled edge. Paper only."
+      },
+      {
+        "timestamp": "2026-08-25T22:41:30+00:00",
+        "item": "MSI NVIDIA GeForce RTX 4070 GAMING X TRIO 12GB GDDR6X PCIe 4.0",
+        "url": "https://www.ebay.de/itm/820046735352",
+        "ask": "EUR 469.00",
+        "max_buy": "EUR 0.00",
+        "predicted_resale": "EUR 0.00 (insufficient evidence)",
+        "expected_profit": "EUR -505.85",
+        "expected_days": 45,
+        "failed_gates": [
+          "PRICE_EVIDENCE_PASS",
+          "MAX_BUY_PASS",
+          "CATEGORY_CERT_PASS",
+          "SAFE_START_PASS",
+          "CONDITION_PASS",
+          "PRODUCT_IDENTITY_PASS"
+        ],
+        "decision": "REVIEW",
+        "status": "open",
+        "note": "Desktop 4070 not SUPER. Engine cannot value electronics without realised comps. Paper only."
+      },
+      {
+        "timestamp": "2026-08-25T22:41:30+00:00",
+        "item": "Apple iPhone 16 Pro 256GB Desert Titanium (Unlocked) 91% Battery Health",
+        "url": "https://www.ebay.co.uk/itm/188839626354",
+        "ask": "GBP 540.00",
+        "max_buy": "EUR 0.00",
+        "predicted_resale": "EUR 0.00 (insufficient evidence)",
+        "expected_profit": "EUR -835.17",
+        "expected_days": 45,
+        "failed_gates": [
+          "PRICE_EVIDENCE_PASS",
+          "MAX_BUY_PASS",
+          "CATEGORY_CERT_PASS",
+          "SAFE_START_PASS",
+          "CONDITION_PASS",
+          "PRODUCT_IDENTITY_PASS"
+        ],
+        "decision": "REVIEW",
+        "status": "open",
+        "note": "Possible used 16 Pro. Engine cannot value. Paper only."
+      }
+    ]
+  },
+  "K_COMMERCIAL_VERDICT": {
+    "would_personally_spend_100_250": "NO",
+    "safe_start": false,
+    "why": "No BUY_READY candidate. Realised panel empty. No category certified. Valuation still fail-closed. Gates were not lowered."
+  }
+}

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ARIE{% endblock %}</title>
+  <link rel="stylesheet" href="/static/arie.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/">ARIE</a>
+    <p class="tag">Automated Reseller Intelligence Engine · Ireland</p>
+    <nav>
+      <a href="/">Best buys</a>
+      <a href="/inventory">Inventory</a>
+      <a href="/performance">Performance</a>
+      <a href="/data-quality">Data quality</a>
+      <a href="/health">API health</a>
+    </nav>
+  </header>
+  <main>{% block body %}{% endblock %}</main>
+  <footer>
+    <p>Asking prices are not realised sales. Irish expected value is an estimate with visible uncertainty. Never treat ARIE as tax, legal, or guaranteed-profit advice.</p>
+  </footer>
+</body>
+</html>

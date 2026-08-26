@@ -1,0 +1,9 @@
+{
+  "mae": null,
+  "median_abs_error": null,
+  "bias": null,
+  "mape": null,
+  "coverage": 0,
+  "sample_size": 0,
+  "note": "No realised Irish outcomes. Accuracy unknown. Do not invent MAE."
+}

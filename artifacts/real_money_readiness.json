@@ -1,0 +1,11 @@
+{
+  "question": "Would I risk EUR 100-250 of my own money on the strongest current ARIE recommendation?",
+  "answer": "NO",
+  "status": "ARIE_PRODUCTION_LIVE_NOT_COMMERCIALLY_USEFUL_YET",
+  "certification_level": "LEVEL_1_LIVE_DATA",
+  "buy_ready_count": 0,
+  "ebay_production_live": true,
+  "sandbox_used": false,
+  "listings_scanned": 224,
+  "why": "eBay production Browse is LIVE (sandbox_used=false). BUY_READY remains 0 because the Irish realised-sale panel is empty, so PRICE_EVIDENCE_PASS fails on every candidate as designed. Cameras/phones/GPUs/MacBooks have expected_sale=0. Live discovery leaked accessories that the engine ranked as fake profit. SAFE_START cannot fire. No ARIE recommendation is worth EUR 100-250."
+}
