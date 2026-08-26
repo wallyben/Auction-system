@@ -1,6 +1,91 @@
 {
-  "count": 0,
-  "open": 0,
-  "note": "No fabricated dispositions. Open trades remain open until evidence exists.",
-  "trades": []
+  "count": 6,
+  "open": 6,
+  "note": "No fabricated dispositions. Open trades remain open until evidence exists. Disappearance is not a sale. None are BUY_READY.",
+  "trades": [
+    {
+      "timestamp": "2026-08-25T22:41:30+00:00",
+      "item": "MacBook Pro M3 Pro 14in 18GB RAM 512GB SSD Silver VG Cond BH 95% Please read",
+      "url": "https://www.ebay.co.uk/itm/377433019570",
+      "ask": "GBP 618.70",
+      "max_buy": "EUR 0.00",
+      "predicted_resale": "EUR 0.00 (insufficient evidence)",
+      "expected_profit": "EUR -945.71",
+      "expected_days": 45,
+      "failed_gates": ["PRICE_EVIDENCE_PASS", "MAX_BUY_PASS", "CATEGORY_CERT_PASS", "SAFE_START_PASS", "CONDITION_PASS", "PRODUCT_IDENTITY_PASS"],
+      "decision": "REVIEW",
+      "status": "open",
+      "note": "Commercially interesting ask vs street, but engine cannot value it. Seller warning in title. Paper only."
+    },
+    {
+      "timestamp": "2026-08-25T22:41:30+00:00",
+      "item": "Apple iPhone 15 Pro 256GB - Unlocked - Black - 96% Battery Health",
+      "url": "https://www.ebay.co.uk/itm/188835553143",
+      "ask": "GBP 339.99",
+      "max_buy": "EUR 0.00",
+      "predicted_resale": "EUR 0.00 (insufficient evidence)",
+      "expected_profit": "EUR -526.40",
+      "expected_days": 45,
+      "failed_gates": ["PRICE_EVIDENCE_PASS", "MAX_BUY_PASS", "CATEGORY_CERT_PASS", "SAFE_START_PASS", "CONDITION_PASS", "PRODUCT_IDENTITY_PASS"],
+      "decision": "REVIEW",
+      "status": "open",
+      "note": "Ask looks low vs typical used 15 Pro 256GB. Engine has no realised comps. Paper only."
+    },
+    {
+      "timestamp": "2026-08-25T22:41:30+00:00",
+      "item": "SHURE SM7B Cardioid Dynamic Vocal Microphone Studio Podcast Mic New Open Box",
+      "url": "https://www.ebay.ie/itm/820021592130",
+      "ask": "EUR 227.19",
+      "max_buy": "EUR 148.00",
+      "predicted_resale": "EUR 318.00 (Reverb asking comps, not realised)",
+      "expected_profit": "EUR -41.70",
+      "expected_days": 45,
+      "failed_gates": ["PRICE_EVIDENCE_PASS", "MAX_BUY_PASS", "CATEGORY_CERT_PASS", "SAFE_START_PASS", "CONDITION_PASS", "PRODUCT_IDENTITY_PASS", "RISK_PASS", "DOWNSIDE_PASS"],
+      "decision": "REVIEW",
+      "status": "open",
+      "note": "Ask below typical SM7B street. Counterfeit/open-box risk. Ask > max_buy. Paper only."
+    },
+    {
+      "timestamp": "2026-08-25T22:41:30+00:00",
+      "item": "Sony PlayStation 5 825 GB White Disc Console",
+      "url": "https://www.ebay.co.uk/itm/137661263974",
+      "ask": "GBP 312.70",
+      "max_buy": "EUR 0.00",
+      "predicted_resale": "EUR 0.00 (insufficient evidence)",
+      "expected_profit": "EUR -493.04",
+      "expected_days": 45,
+      "failed_gates": ["PRICE_EVIDENCE_PASS", "MAX_BUY_PASS", "CATEGORY_CERT_PASS", "SAFE_START_PASS", "CONDITION_PASS", "PRODUCT_IDENTITY_PASS"],
+      "decision": "REVIEW",
+      "status": "open",
+      "note": "Around used-console street. Engine cannot value. Thin/no modelled edge. Paper only."
+    },
+    {
+      "timestamp": "2026-08-25T22:41:30+00:00",
+      "item": "MSI NVIDIA GeForce RTX 4070 GAMING X TRIO 12GB GDDR6X PCIe 4.0",
+      "url": "https://www.ebay.de/itm/820046735352",
+      "ask": "EUR 469.00",
+      "max_buy": "EUR 0.00",
+      "predicted_resale": "EUR 0.00 (insufficient evidence)",
+      "expected_profit": "EUR -505.85",
+      "expected_days": 45,
+      "failed_gates": ["PRICE_EVIDENCE_PASS", "MAX_BUY_PASS", "CATEGORY_CERT_PASS", "SAFE_START_PASS", "CONDITION_PASS", "PRODUCT_IDENTITY_PASS"],
+      "decision": "REVIEW",
+      "status": "open",
+      "note": "Desktop 4070 not SUPER. Engine cannot value electronics without realised comps. Paper only."
+    },
+    {
+      "timestamp": "2026-08-25T22:41:30+00:00",
+      "item": "Apple iPhone 16 Pro 256GB Desert Titanium (Unlocked) 91% Battery Health",
+      "url": "https://www.ebay.co.uk/itm/188839626354",
+      "ask": "GBP 540.00",
+      "max_buy": "EUR 0.00",
+      "predicted_resale": "EUR 0.00 (insufficient evidence)",
+      "expected_profit": "EUR -835.17",
+      "expected_days": 45,
+      "failed_gates": ["PRICE_EVIDENCE_PASS", "MAX_BUY_PASS", "CATEGORY_CERT_PASS", "SAFE_START_PASS", "CONDITION_PASS", "PRODUCT_IDENTITY_PASS"],
+      "decision": "REVIEW",
+      "status": "open",
+      "note": "Possible used 16 Pro. Engine cannot value. Paper only."
+    }
+  ]
 }

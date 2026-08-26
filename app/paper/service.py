@@ -11,6 +11,12 @@ from app.models.orm import Listing, Opportunity, PaperTrade
 
 
 def should_open_paper(opportunity: Opportunity) -> tuple[bool, str]:
+    from app.sources.ebay_filters import ACCESSORY_RE, KIT_RE
+
+    title = (getattr(opportunity, "title", None) or "") 
+    listing_title = title
+    if ACCESSORY_RE.search(listing_title) or KIT_RE.search(listing_title):
+        return False, ""
     if opportunity.money_ready:
         return True, "BUY_READY"
     if opportunity.engine_decision == "BUY" or opportunity.decision == "BUY":
@@ -23,6 +29,13 @@ def should_open_paper(opportunity: Opportunity) -> tuple[bool, str]:
         and (opportunity.expected_profit_eur or 0) > 0
     ):
         return True, "NEAR_BUY"
+    if (
+        opportunity.money_ready_decision == "REVIEW"
+        and production_ok
+        and (opportunity.expected_profit_eur or 0) >= 40
+        and (opportunity.valuation_confidence or 0) >= 0.40
+    ):
+        return True, "REVIEW_INTERESTING"
     return False, ""
 
 
@@ -34,6 +47,11 @@ def open_paper_trade(session: Session, opportunity: Opportunity) -> PaperTrade |
     if existing:
         return existing
     listing = session.get(Listing, opportunity.listing_id)
+    from app.sources.ebay_filters import ACCESSORY_RE, KIT_RE
+
+    title = listing.title if listing else "Unknown"
+    if ACCESSORY_RE.search(title) or KIT_RE.search(title):
+        return None
     trade = PaperTrade(
         opportunity_id=opportunity.id,
         listing_id=opportunity.listing_id,
@@ -46,8 +64,21 @@ def open_paper_trade(session: Session, opportunity: Opportunity) -> PaperTrade |
         status="open",
         observed_outcome=None,
         notes=(
-            f"Opened as {reason}. Disappearance is not a sale. "
-            "Outcome unknown until observed evidence exists."
+            f"Opened as {reason} at {datetime.now(timezone.utc).isoformat()}. "
+            f"ask={listing.asking_price if listing else None} "
+            f"currency={listing.currency if listing else None} "
+            f"max_buy={opportunity.max_buy_eur} "
+            f"ideal_offer={opportunity.ideal_offer_eur} "
+            f"predicted_resale={opportunity.expected_resale_eur} "
+            f"quick_sale={opportunity.expected_net_resale_eur} "
+            f"expected_profit={opportunity.expected_profit_eur} "
+            f"downside={opportunity.downside_profit_eur} "
+            f"roi={opportunity.expected_roi} "
+            f"confidence={opportunity.valuation_confidence} "
+            f"realised_count={(opportunity.score_breakdown or {}).get('realised_count') or (opportunity.provenance_pack or {}).get('realised_count')} "
+            f"expected_days={opportunity.expected_days_to_sale} "
+            f"failed_gates={(opportunity.gate_results or {}).get('failures')}. "
+            "Disappearance is not a sale. Outcome unknown until observed evidence exists."
         ),
     )
     session.add(trade)
@@ -67,8 +98,11 @@ def paper_summary(session: Session) -> dict:
                 "title": r.title,
                 "price": str(r.paper_purchase_price),
                 "predicted_profit": str(r.predicted_profit),
+                "predicted_exit": r.predicted_exit,
+                "predicted_days": r.predicted_days,
                 "status": r.status,
                 "outcome": r.observed_outcome,
+                "notes": (r.notes or "")[:500],
             }
             for r in rows[:20]
         ],

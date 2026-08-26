@@ -65,6 +65,11 @@ def score_opportunity(
     notes: list[str] = []
     profit_s = _clip(expected_profit / Decimal("250"))
     roi_s = _clip(roi / Decimal("0.6"))
+    if valuation_confidence < min_confidence:
+        # Do not let unvalued accessories outrank real inventory on fake Reverb comps.
+        profit_s = ZERO
+        roi_s = ZERO
+        notes.append("Profit/ROI score zeroed: valuation confidence below minimum.")
     speed_s = Decimal("0.4") if expected_days is None else _clip(Decimal(str(max_days - expected_days)) / Decimal(str(max_days)))
     conf_s = money((valuation_confidence + identity_confidence + condition_confidence) / Decimal("3"))
     liq_s = liquidity_score

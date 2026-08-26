@@ -8,7 +8,10 @@ from decimal import Decimal
 from app.identity.engine import ProductIdentity, identify_listing as generic_identify
 from app.models.enums import IdentityLevel
 
-_GM_II = re.compile(r"\b(?:24-70|24\s*-\s*70).{0,20}\bgm\s*ii\b|\bgm\s*ii\b.{0,20}24-70", re.I)
+_GM_II = re.compile(
+    r"\b(?:16-35|24-70|70-200).{0,28}\bgm\s*ii\b|\bgm\s*ii\b.{0,28}(?:16-35|24-70|70-200)",
+    re.I,
+)
 _GM1 = re.compile(r"\b(?:24-70|70-200|16-35).{0,12}\bgm\b(?!\s*ii)", re.I)
 _SUPER = re.compile(r"\b(rtx\s*)?(40\d0|30\d0|50\d0)\s*super\b", re.I)
 _GPU = re.compile(r"\b(rtx|gtx|rx)\s*(\d{3,4})\s*(ti|super|xt|xtx)?\b", re.I)
@@ -34,12 +37,34 @@ def _finish(base: ProductIdentity, **updates: object) -> ProductIdentity:
 
 
 def resolve_camera(base: ProductIdentity, text: str) -> ProductIdentity:
+    if re.search(r"ilce-7m4|a7\s*iv|a7iv", text) and not re.search(r"a7r|ilce-7rm4", text):
+        return _finish(
+            base,
+            brand=base.brand or "Sony",
+            family="Alpha",
+            model="A7 IV",
+            variant="body",
+            category="cameras",
+            level=IdentityLevel.EXACT,
+            confidence=max(base.confidence, Decimal("0.92")),
+            canonical_key="sony|a7-iv|body",
+        )
+    if re.search(r"ilce-7m3|a7\s*iii|a7iii", text) and not re.search(r"a7\s*iv|a7iv", text):
+        return _finish(
+            base,
+            brand=base.brand or "Sony",
+            family="Alpha",
+            model="A7 III",
+            variant="body",
+            category="cameras",
+            level=IdentityLevel.EXACT,
+            confidence=max(base.confidence, Decimal("0.90")),
+            canonical_key="sony|a7-iii|body",
+        )
     match = _A7.search(text)
     if match:
         variant = "".join(part or "" for part in match.groups()).upper()
         model = re.sub(r"\s+", " ", match.group(0)).strip()
-        level = IdentityLevel.EXACT
-        conf = max(base.confidence, Decimal("0.82"))
         return _finish(
             base,
             brand=base.brand or "Sony",
@@ -47,8 +72,8 @@ def resolve_camera(base: ProductIdentity, text: str) -> ProductIdentity:
             model=model,
             variant=variant or base.variant,
             category="cameras",
-            level=level,
-            confidence=min(conf, Decimal("0.95")),
+            level=IdentityLevel.EXACT,
+            confidence=max(base.confidence, Decimal("0.90")),
             canonical_key=f"sony|{model.lower()}|{base.storage or ''}",
         )
     return _finish(base, category=base.category or "cameras")
@@ -56,16 +81,18 @@ def resolve_camera(base: ProductIdentity, text: str) -> ProductIdentity:
 
 def resolve_lens(base: ProductIdentity, text: str) -> ProductIdentity:
     if _GM_II.search(text):
+        fl = re.search(r"(16-35|24-70|70-200)", text)
+        focal = fl.group(1) if fl else "24-70"
         return _finish(
             base,
             brand=base.brand or "Sony",
             family="GM",
-            model="FE 24-70mm GM II",
+            model=f"FE {focal}mm GM II",
             variant="GM II",
             category="lenses",
             level=IdentityLevel.EXACT,
-            confidence=max(base.confidence, Decimal("0.90")),
-            canonical_key="sony|fe-24-70-gm-ii",
+            confidence=max(base.confidence, Decimal("0.92")),
+            canonical_key=f"sony|fe-{focal}-gm-ii",
         )
     if _GM1.search(text) and "gm ii" not in text:
         fl = re.search(r"(16-35|24-70|70-200)", text)
@@ -115,28 +142,37 @@ def resolve_apple(base: ProductIdentity, text: str) -> ProductIdentity:
                 missing=list(base.missing) + ["generation/chip"],
                 canonical_key=f"apple|{model.lower()}|{chip.lower()}|{base.storage or ''}",
             )
+        ram = re.search(r"\b(8|16|18|24|32|36|48|64|96|128)\s*gb\b", text)
+        storage = base.storage
+        exact = bool(chip and storage and size)
         return _finish(
             base,
             brand="Apple",
             family="MacBook",
             model=f"{model} {chip}",
-            variant=base.storage,
+            variant=" ".join(part for part in [chip, ram.group(0).upper() if ram else "", storage or ""] if part),
             category="computing",
-            level=IdentityLevel.EXACT if base.storage else IdentityLevel.VARIANT,
-            confidence=max(base.confidence, Decimal("0.86" if base.storage else "0.78")),
-            canonical_key=f"apple|{model.lower()}|{chip.lower()}|{base.storage or ''}",
+            level=IdentityLevel.EXACT if exact else IdentityLevel.VARIANT,
+            confidence=max(base.confidence, Decimal("0.92") if exact else Decimal("0.80")),
+            canonical_key=f"apple|{model.lower()}|{chip.lower()}|{storage or ''}",
         )
     iphone = _IPHONE.search(text)
     if iphone:
-        model = re.sub(r"\s+", " ", iphone.group(0)).strip()
+        gen = iphone.group(1)
+        tier = (iphone.group(2) or "").strip()
+        storage = (iphone.group(3) or base.storage or "").replace(" ", "").upper()
+        model = f"iPhone {gen} {tier}".strip()
+        exact = bool(storage and tier)
         return _finish(
             base,
             brand="Apple",
             family="iPhone",
             model=model,
+            variant=storage,
             category="consumer_electronics",
-            level=IdentityLevel.VARIANT if iphone.group(3) else IdentityLevel.FAMILY,
-            confidence=max(base.confidence, Decimal("0.80")),
+            level=IdentityLevel.EXACT if exact else IdentityLevel.VARIANT,
+            confidence=max(base.confidence, Decimal("0.92") if exact else Decimal("0.82")),
+            canonical_key=f"apple|{model.lower()}|{storage.lower()}",
         )
     return _finish(base, brand=base.brand or "Apple", category=base.category or "computing")
 
@@ -165,7 +201,7 @@ def resolve_gpu(base: ProductIdentity, text: str) -> ProductIdentity:
             model=model,
             category="gpu",
             level=IdentityLevel.EXACT,
-            confidence=max(base.confidence, Decimal("0.84")),
+            confidence=max(base.confidence, Decimal("0.90")),
             canonical_key=f"gpu|{model.lower()}",
         )
     return _finish(base, category=base.category or "gpu")
@@ -183,8 +219,8 @@ def resolve_console(base: ProductIdentity, text: str) -> ProductIdentity:
             model=f"PS5 {edition}",
             variant="digital" if digital else "disc",
             category="gaming",
-            level=IdentityLevel.VARIANT,
-            confidence=max(base.confidence, Decimal("0.82")),
+            level=IdentityLevel.EXACT if ps.group(2) else IdentityLevel.VARIANT,
+            confidence=max(base.confidence, Decimal("0.90") if ps.group(2) else Decimal("0.84")),
             canonical_key=f"sony|ps5|{edition}",
         )
     sw = _SWITCH.search(text)
@@ -220,7 +256,7 @@ def resolve_dj(base: ProductIdentity, text: str) -> ProductIdentity:
             model=model,
             category="music_dj",
             level=IdentityLevel.EXACT,
-            confidence=max(base.confidence, Decimal("0.86")),
+            confidence=max(base.confidence, Decimal("0.90")),
             canonical_key=f"dj|{model.lower()}",
         )
     return _finish(base, category=base.category or "music_dj")
@@ -234,7 +270,7 @@ def resolve_audio(base: ProductIdentity, text: str) -> ProductIdentity:
             model=mic.group(1).upper(),
             category="pro_av",
             level=IdentityLevel.EXACT,
-            confidence=max(base.confidence, Decimal("0.88")),
+            confidence=max(base.confidence, Decimal("0.90")),
         )
     return _finish(base, category=base.category or "pro_av")
 
@@ -253,7 +289,7 @@ def resolve_card(base: ProductIdentity, text: str) -> ProductIdentity:
 
 _DISPATCH = (
     (re.compile(r"\b(lens|gm|rf\s*\d|24-70|70-200|16-35)\b", re.I), resolve_lens),
-    (re.compile(r"\b(a7|a9|r5|r6|z8|z9|x-t|gfx|camera body)\b", re.I), resolve_camera),
+    (re.compile(r"\b(a7|a9|r5|r6|z8|z9|x-t|gfx|camera body|ilce)\b", re.I), resolve_camera),
     (re.compile(r"\b(macbook|iphone|ipad|imac)\b", re.I), resolve_apple),
     (re.compile(r"\b(rtx|gtx|radeon|rx\s*\d)\b", re.I), resolve_gpu),
     (re.compile(r"\b(ps5|playstation|switch|xbox)\b", re.I), resolve_console),
@@ -284,6 +320,17 @@ def identify_with_resolvers(
         category=category,
     )
     blob = f"{title}\n{description}\n{brand_hint or ''}\n{model_hint or ''}".lower()
+    from app.sources.ebay_filters import ACCESSORY_RE, KIT_RE
+
+    if ACCESSORY_RE.search(blob) or KIT_RE.search(blob):
+        missing = list(base.missing) + ["accessory_or_kit"]
+        return _finish(
+            base,
+            level=IdentityLevel.CATEGORY,
+            confidence=min(base.confidence, Decimal("0.35")),
+            missing=missing,
+            canonical_key=f"accessory|{base.canonical_key}",
+        )
     for pattern, resolver in _DISPATCH:
         if pattern.search(blob):
             return resolver(base, blob)

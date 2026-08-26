@@ -33,7 +33,6 @@ from app.paper.service import paper_summary
 from app.pipeline.service import run_scan, seed_sources
 from app.pipeline.url import value_manual, value_url
 from app.sold.importers import import_marketplace_export
-from app.sold.owner import import_owner_sales
 from app.strategies.defaults import seed_strategies
 
 router = APIRouter()
@@ -199,7 +198,7 @@ def data_quality(request: Request, session: Session = Depends(get_db)) -> HTMLRe
 @router.post("/import/owner-sales")
 async def upload_owner_sales(file: UploadFile, session: Session = Depends(get_db)) -> RedirectResponse:
     text = (await file.read()).decode("utf-8", errors="replace")
-    import_owner_sales(session, text)
+    import_marketplace_export(session, text)
     return RedirectResponse("/performance", status_code=303)
 
 

@@ -1,0 +1,6 @@
+product,sale_price,sale_date,currency,territory,brand,model,variant,condition,sale_platform,shipping_out,platform_fee,payment_fee,trade_floor
+Sony A7 IV body,1100.00,2026-01-15,EUR,IE,Sony,A7 IV,,used,ebay_ie,12.00,142.00,21.00,
+Apple iPhone 15 Pro 256GB,720.00,2026-02-02,EUR,IE,Apple,iPhone 15 Pro,256GB,used,ebay_ie,8.00,93.00,14.00,
+NVIDIA GeForce RTX 4070 12GB,430.00,2026-03-10,EUR,IE,NVIDIA,RTX 4070,12GB,used,ebay_ie,10.00,56.00,9.00,
+PlayStation 5 Disc,310.00,2026-03-18,EUR,IE,Sony,PS5,disc,used,ebay_ie,14.00,40.00,7.00,
+Shure SM7B,240.00,2026-04-01,EUR,IE,Shure,SM7B,,used,ebay_ie,9.00,31.00,5.00,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal
 
 from app.core.money import ZERO, money
@@ -22,6 +22,8 @@ class ExitQuote:
     confidence: Decimal
     net_proceeds: Decimal
     notes: str
+    tax_effect: Decimal = ZERO
+    data_backed: bool = True
 
 
 @dataclass(slots=True)
@@ -88,6 +90,7 @@ def compare_exits(
     category: str | None,
     weight_kg: Decimal | None = None,
     returns_rate: Decimal = Decimal("0.03"),
+    trade_in_evidence: bool = False,
 ) -> ExitComparison:
     quotes: list[ExitQuote] = []
     for channel in _channels_for(category):
@@ -98,6 +101,13 @@ def compare_exits(
         ship = estimate_outbound(category=category, channel=channel, weight_kg=weight_kg)
         returns = money(gross * returns_rate) if channel not in {"cex_trade_in", "dealer", "local_ie"} else ZERO
         net = money(gross - fee - pay - ship.amount_eur - returns)
+        backed = True
+        conf = _SAFE[channel]
+        notes = rule.notes
+        if channel in {"dealer", "cex_trade_in"} and not trade_in_evidence:
+            backed = False
+            conf = min(conf, Decimal("0.25"))
+            notes = f"{notes} Not certified: no realised trade-in/dealer data.".strip()
         quotes.append(
             ExitQuote(
                 channel=channel,
@@ -107,17 +117,20 @@ def compare_exits(
                 shipping=ship.amount_eur,
                 returns_allowance=returns,
                 expected_days=_DAYS[channel],
-                confidence=_SAFE[channel],
+                confidence=conf,
                 net_proceeds=net,
-                notes=rule.notes,
+                notes=notes,
+                tax_effect=ZERO,
+                data_backed=backed,
             )
         )
     if not quotes:
         raise ValueError("No exit channels")
-    best = max(quotes, key=lambda q: q.net_proceeds * q.confidence)
-    fastest = min(quotes, key=lambda q: q.expected_days)
-    safest = max(quotes, key=lambda q: q.confidence)
-    highest = max(quotes, key=lambda q: q.net_proceeds)
+    backed_quotes = [q for q in quotes if q.data_backed] or quotes
+    best = max(backed_quotes, key=lambda q: q.net_proceeds * q.confidence)
+    fastest = min(backed_quotes, key=lambda q: q.expected_days)
+    safest = max(backed_quotes, key=lambda q: q.confidence)
+    highest = max(backed_quotes, key=lambda q: q.net_proceeds)
     liq = next((q for q in quotes if q.channel in {"cex_trade_in", "dealer"}), safest)
     return ExitComparison(
         quotes=quotes,

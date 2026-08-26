@@ -14,7 +14,13 @@ from app.core.logging import get_logger
 from app.models.enums import SourceKind, SourceStatus
 from app.privacy.ebay_minimise import minimise_normalized_listing
 from app.sources.base import HealthProof, NormalizedListing, SourceAdapter
-from app.sources.ebay_filters import browse_filter, reject_title
+from app.sources.ebay_filters import (
+    browse_filter,
+    category_id_for_query,
+    marketplace_currency,
+    price_band_for_query,
+    reject_listing_fields,
+)
 
 logger = get_logger("arie.sources.ebay")
 
@@ -287,7 +293,8 @@ class EbayBrowseAdapter(SourceAdapter):
             markets = list(markets) + ["EBAY_US"]
         out: list[NormalizedListing] = []
         remaining = min(limit, 80)
-        per_market = max(1, remaining // max(1, len(markets)))
+        # Fetch a usable page per marketplace instead of splitting 2-wide across seven sites.
+        per_market = max(6, remaining // max(1, len(markets)))
         for market in markets:
             if remaining <= 0:
                 break
@@ -302,7 +309,24 @@ class EbayBrowseAdapter(SourceAdapter):
         items: list[NormalizedListing] = []
         offset = 0
         page = min(limit, 50)
+        min_price, max_price = price_band_for_query(query)
+        currency = marketplace_currency(marketplace)
+        category_id = category_id_for_query(query)
+        include_parts = "parts" in (query or "").lower()
         while len(items) < limit:
+            params: dict[str, str] = {
+                "q": query,
+                "limit": str(page),
+                "offset": str(offset),
+                "filter": browse_filter(
+                    min_price=min_price,
+                    max_price=max_price,
+                    currency=currency,
+                    include_parts=include_parts,
+                ),
+            }
+            if category_id:
+                params["category_ids"] = category_id
             async with build_client() as client:
                 try:
                     _, payload = await request_json(
@@ -310,12 +334,7 @@ class EbayBrowseAdapter(SourceAdapter):
                         "GET",
                         SEARCH_URL[settings.ebay_api_env],
                         headers=headers,
-                        params={
-                            "q": query,
-                            "limit": str(page),
-                            "offset": str(offset),
-                            "filter": browse_filter(),
-                        },
+                        params=params,
                     )
                 except SourceHttpError as exc:
                     if exc.status_code == 429:
@@ -326,7 +345,21 @@ class EbayBrowseAdapter(SourceAdapter):
                 break
             for raw in batch:
                 listing = self._normalize(raw, marketplace)
-                reason = reject_title(query, listing.title)
+                leaf_cat = None
+                cats = raw.get("categories") or []
+                if cats:
+                    leaf_cat = str(cats[0].get("categoryId") or "") or None
+                reason = reject_listing_fields(
+                    query,
+                    title=listing.title,
+                    currency=listing.currency,
+                    marketplace=marketplace,
+                    asking_price=listing.asking_price,
+                    min_price=min_price,
+                    max_price=max_price,
+                    category_id=leaf_cat,
+                    condition_id=str(raw.get("conditionId") or "") or None,
+                )
                 if reason:
                     listing.extras["rejected_reason"] = reason
                     continue
@@ -419,6 +452,9 @@ class EbayBrowseAdapter(SourceAdapter):
                 "epid": item.get("epid"),
                 "legacyItemId": item.get("legacyItemId"),
                 "itemSpecifics": specifics,
+                "conditionId": item.get("conditionId"),
+                "conditionDescription": item.get("conditionDescription"),
+                "categoryId": (item.get("categories") or [{}])[0].get("categoryId"),
                 "full_item": full,
                 "sandbox": settings.ebay_api_env == "sandbox",
                 "note": (

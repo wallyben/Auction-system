@@ -1,0 +1,319 @@
+{
+  "/health": {
+    "http": 200,
+    "body": {
+      "status": "ok"
+    }
+  },
+  "/health/db": {
+    "http": 200,
+    "body": {
+      "status": "ok",
+      "database": "up"
+    }
+  },
+  "/health/ebay-notifications": {
+    "http": 200,
+    "body": {
+      "ready": true,
+      "ready_for_ebay_challenge": true,
+      "endpoint_configured": true,
+      "endpoint_https": true,
+      "verification_token_configured": true,
+      "verification_token_length": 48,
+      "verification_token_valid": true,
+      "database": "up",
+      "processor": "ready",
+      "signature_verifier": "ready",
+      "ebay_subscription_active": false,
+      "note": "ARIE does not claim the eBay notification subscription is active. Confirm verification in the eBay Developer portal, then run make ebay-check."
+    }
+  },
+  "/health/sources": {
+    "http": 200,
+    "body": {
+      "status": "ok",
+      "sources": [
+        {
+          "id": "adverts_ie",
+          "name": "Adverts.ie",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": false
+        },
+        {
+          "id": "allegro",
+          "name": "Allegro",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": false
+        },
+        {
+          "id": "bidspotter",
+          "name": "BidSpotter",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": false
+        },
+        {
+          "id": "bpi_auctions",
+          "name": "BPI Auctions",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": false
+        },
+        {
+          "id": "bstock",
+          "name": "B-Stock",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": false
+        },
+        {
+          "id": "cardmarket",
+          "name": "Cardmarket",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": false
+        },
+        {
+          "id": "cex_ie",
+          "name": "CeX Ireland",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": false
+        },
+        {
+          "id": "csv_import",
+          "name": "Owner CSV import",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": true
+        },
+        {
+          "id": "discogs_market",
+          "name": "Discogs Marketplace",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": false
+        },
+        {
+          "id": "donedeal",
+          "name": "DoneDeal",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": false
+        },
+        {
+          "id": "ebay_browse",
+          "name": "eBay Browse API",
+          "status": "LIVE",
+          "reason": "Browse search succeeded across configured marketplaces.",
+          "last_success_at": "2026-08-25T22:25:11.197128+00:00",
+          "last_error": null,
+          "enabled": true
+        },
+        {
+          "id": "ecb_fx",
+          "name": "ECB euro FX reference",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": true
+        },
+        {
+          "id": "i_bidder",
+          "name": "i-bidder",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": false
+        },
+        {
+          "id": "john_pye",
+          "name": "John Pye Auctions",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": false
+        },
+        {
+          "id": "kleinanzeigen",
+          "name": "Kleinanzeigen",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": false
+        },
+        {
+          "id": "leboncoin",
+          "name": "Leboncoin",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": false
+        },
+        {
+          "id": "manual",
+          "name": "Manual listing",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": true
+        },
+        {
+          "id": "marktplaats",
+          "name": "Marktplaats",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": false
+        },
+        {
+          "id": "reverb",
+          "name": "Reverb",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": true
+        },
+        {
+          "id": "rss_generic",
+          "name": "Configured RSS/Atom feeds",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": true
+        },
+        {
+          "id": "scryfall",
+          "name": "Scryfall / Cardmarket guide",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": true
+        },
+        {
+          "id": "subito",
+          "name": "Subito",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": false
+        },
+        {
+          "id": "vinted",
+          "name": "Vinted",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": false
+        },
+        {
+          "id": "wallapop",
+          "name": "Wallapop",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": false
+        },
+        {
+          "id": "wilsons",
+          "name": "Wilsons Auctions Ireland",
+          "status": "DISABLED",
+          "reason": "Not health-checked yet.",
+          "last_success_at": null,
+          "last_error": null,
+          "enabled": false
+        }
+      ]
+    }
+  },
+  "/health/workers": {
+    "http": 200,
+    "body": {
+      "status": "ok",
+      "scheduler_running": true,
+      "jobs": [
+        {
+          "id": "ebay-deletion-retry",
+          "next_run_time": "2026-08-25T22:35:59.685151+00:00"
+        },
+        {
+          "id": "scan-live-sources",
+          "next_run_time": "2026-08-25T22:36:02.749992+00:00"
+        },
+        {
+          "id": "daily-self-audit",
+          "next_run_time": "2026-08-26T06:15:00+00:00"
+        }
+      ]
+    }
+  },
+  "/config": {
+    "http": 200,
+    "body": {
+      "home_country": "IE",
+      "base_currency": "EUR",
+      "min_profit_eur": "40",
+      "min_roi": "0.20",
+      "min_confidence": "0.55",
+      "max_capital_per_item_eur": "1500",
+      "max_days_to_sale": 45,
+      "enabled_sources": [
+        "reverb",
+        "scryfall",
+        "csv_import",
+        "manual",
+        "rss_generic",
+        "ecb_fx",
+        "ebay_browse"
+      ],
+      "scan_queries": [
+        "Sony FE 24-70mm GM II",
+        "Sony A7 IV",
+        "Canon RF 24-70 f/2.8",
+        "MacBook Pro 14 M3",
+        "iPhone 15 Pro 256GB",
+        "PlayStation 5",
+        "RTX 4070",
+        "Pioneer DDJ-1000",
+        "Shure SM7B"
+      ],
+      "ebay_configured": true
+    }
+  }
+}

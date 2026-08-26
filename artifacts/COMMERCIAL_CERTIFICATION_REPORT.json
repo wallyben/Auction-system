@@ -1,0 +1,844 @@
+{
+  "A_STATUS": "ARIE_SOFTWARE_COMPLETE_EMPIRICAL_VALIDATION_REQUIRED",
+  "B_DEPLOYMENT": {
+    "host": "https://auction-system-l6je.onrender.com",
+    "local_sha": "c8ddbb290b2e145bdaaf552cc0a36a4072c2bf3b",
+    "pr6_routes_live": false,
+    "health": {
+      "status": "ok"
+    },
+    "database": {
+      "status": "ok",
+      "database": "up"
+    },
+    "oauth_status_http": 404,
+    "note": "PR #6 is live on Render only when /oauth/ebay/status returns 200."
+  },
+  "C_OWNER_OAUTH": {
+    "connected": null,
+    "scope_valid": null,
+    "scope": null,
+    "last_refresh_at": null,
+    "last_sold_ingest_at": null,
+    "last_ingest_count": null,
+    "ru_name_configured": null,
+    "consent_url_ready": false,
+    "sandbox_used": null,
+    "secrets_included": false,
+    "sold_orders_ingested": 0
+  },
+  "D_REALISED_EVIDENCE": {
+    "by_source": {},
+    "by_category": {},
+    "by_market": {},
+    "by_tier": {},
+    "note": "Empty until owner OAuth consent or CSV upload. Asking listings are not sold."
+  },
+  "E_FALSE_POSITIVE_RATE": {
+    "before": 0.28,
+    "after_on_live_top100_window": 0.14,
+    "live_top100_rejected_by_new_filters": 14,
+    "reject_reasons": {
+      "accessory": 4,
+      "4070_super_mismatch": 3,
+      "multi_variant_listing": 1,
+      "iphone_pro_max_mismatch": 2,
+      "ps5_accessory": 1,
+      "wrong_generation_a7r": 2,
+      "bundle_or_kit": 1
+    },
+    "target": 0.05,
+    "note": "14/100 of the currently deployed (pre-PR#6) opportunity window are the old FP class. Filters are in this branch, not yet on Render."
+  },
+  "F_IDENTITY": {
+    "exact_or_variant_rate_retained_live_top100_after_filters": 0.8953
+  },
+  "G_CONDITION": {
+    "pass_rate_retained_0_75": 1.0,
+    "structured_used_good_082": true,
+    "threshold_not_lowered": 0.75
+  },
+  "H_VALUATION": {
+    "mae": null,
+    "median_ae": null,
+    "bias": null,
+    "mape": null,
+    "coverage": 0,
+    "sample_size": 0,
+    "note": "No realised sold evidence. Lookahead-free backtest cannot be claimed."
+  },
+  "I_CATEGORY_CERTIFICATION": [
+    {
+      "category": "lenses",
+      "n": 20,
+      "certified": false,
+      "reasons": [
+        "fp_rate 0.14 >= 0.05",
+        "realised_coverage 0 < 0.50",
+        "valuation_error_not_acceptable"
+      ],
+      "identity": 1.0,
+      "condition": 1.0
+    },
+    {
+      "category": "music_dj",
+      "n": 19,
+      "certified": false,
+      "reasons": [
+        "too_few_listings",
+        "fp_rate 0.10 >= 0.05",
+        "realised_coverage 0 < 0.50",
+        "valuation_error_not_acceptable"
+      ],
+      "identity": 1.0,
+      "condition": 1.0
+    },
+    {
+      "category": "computing",
+      "n": 10,
+      "certified": false,
+      "reasons": [
+        "too_few_listings",
+        "fp_rate 0.10 >= 0.05",
+        "identity 0.2 < 0.90",
+        "realised_coverage 0 < 0.50",
+        "valuation_error_not_acceptable"
+      ],
+      "identity": 0.2,
+      "condition": 1.0
+    },
+    {
+      "category": "gaming",
+      "n": 8,
+      "certified": false,
+      "reasons": [
+        "too_few_listings",
+        "fp_rate 0.10 >= 0.05",
+        "identity 0.875 < 0.90",
+        "realised_coverage 0 < 0.50",
+        "valuation_error_not_acceptable"
+      ],
+      "identity": 0.875,
+      "condition": 1.0
+    },
+    {
+      "category": "cameras",
+      "n": 8,
+      "certified": false,
+      "reasons": [
+        "too_few_listings",
+        "fp_rate 0.10 >= 0.05",
+        "realised_coverage 0 < 0.50",
+        "valuation_error_not_acceptable"
+      ],
+      "identity": 1.0,
+      "condition": 1.0
+    },
+    {
+      "category": "gpu",
+      "n": 7,
+      "certified": false,
+      "reasons": [
+        "too_few_listings",
+        "fp_rate 0.10 >= 0.05",
+        "realised_coverage 0 < 0.50",
+        "valuation_error_not_acceptable"
+      ],
+      "identity": 1.0,
+      "condition": 1.0
+    },
+    {
+      "category": "pro_av",
+      "n": 6,
+      "certified": false,
+      "reasons": [
+        "too_few_listings",
+        "fp_rate 0.10 >= 0.05",
+        "realised_coverage 0 < 0.50",
+        "valuation_error_not_acceptable"
+      ],
+      "identity": 1.0,
+      "condition": 1.0
+    },
+    {
+      "category": "consumer_electronics",
+      "n": 6,
+      "certified": false,
+      "reasons": [
+        "too_few_listings",
+        "fp_rate 0.10 >= 0.05",
+        "realised_coverage 0 < 0.50",
+        "valuation_error_not_acceptable"
+      ],
+      "identity": 1.0,
+      "condition": 1.0
+    },
+    {
+      "category": "unknown",
+      "n": 2,
+      "certified": false,
+      "reasons": [
+        "too_few_listings",
+        "fp_rate 0.10 >= 0.05",
+        "realised_coverage 0 < 0.50",
+        "valuation_error_not_acceptable"
+      ],
+      "identity": 1.0,
+      "condition": 1.0
+    }
+  ],
+  "J_LIVE_PRODUCTION_SCAN": {
+    "listings_on_live_opportunities_endpoint": 100,
+    "retained_after_new_filters": 86,
+    "BUY_READY": 0,
+    "WATCH": 0,
+    "REVIEW": 86,
+    "IGNORE": 14,
+    "live_host_still_shows_REVIEW_100": true,
+    "pr6_not_deployed": true
+  },
+  "K_TOP_20": [
+    {
+      "item": "Pioneer DDJ-FLX10 4 Canali Controller - Nero",
+      "country": "IT",
+      "url": "https://www.ebay.it/itm/398184264110?_skw=Pioneer+DDJ-FLX10&hash=item5cb5a1b1ae:g:ioQAAeSwzOhqWhWz",
+      "ask": "250.00",
+      "ideal_offer": null,
+      "max_buy": "804.59",
+      "quick_sale": null,
+      "expected_sale": "1391.35",
+      "realised_comp_count": 0,
+      "best_exit": "uncertified_modelled",
+      "expected_profit": "684.74",
+      "downside": null,
+      "ROI": "2.3700",
+      "days": 45,
+      "confidence": "0.2300",
+      "identity": "exact",
+      "identity_confidence": 0.9,
+      "condition_confidence": 0.82,
+      "decision": "REJECT_NO_REALISED_EVIDENCE",
+      "failed_gates": [
+        "PRICE_EVIDENCE_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS",
+        "PRODUCT_IDENTITY_PASS"
+      ]
+    },
+    {
+      "item": "controladora dj pioneer ddj Flx 4",
+      "country": "ES",
+      "url": "https://www.ebay.es/itm/137592858955?_skw=Pioneer+DDJ-FLX4&hash=item20092c694b:g:tckAAeSwTnJqSnYD",
+      "ask": "250.27",
+      "ideal_offer": null,
+      "max_buy": "688.33",
+      "quick_sale": null,
+      "expected_sale": "1203.05",
+      "realised_comp_count": 0,
+      "best_exit": "uncertified_modelled",
+      "expected_profit": "551.86",
+      "downside": null,
+      "ROI": "1.9000",
+      "days": 45,
+      "confidence": "0.1900",
+      "identity": "exact",
+      "identity_confidence": 0.9,
+      "condition_confidence": 0.82,
+      "decision": "REJECT_NO_REALISED_EVIDENCE",
+      "failed_gates": [
+        "PRICE_EVIDENCE_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS",
+        "PRODUCT_IDENTITY_PASS"
+      ]
+    },
+    {
+      "item": "Shure SM7B Cardioid Dynamic Vocal Broadcast Microphone Sealed in box Black",
+      "country": "GB",
+      "url": "https://www.ebay.co.uk/itm/188830229060?_skw=Shure+SM7B&hash=item2bf728a244:g:GRIAAeSw4vlqgvZP",
+      "ask": "83.88",
+      "ideal_offer": null,
+      "max_buy": "139.58",
+      "quick_sale": null,
+      "expected_sale": "320.27",
+      "realised_comp_count": 0,
+      "best_exit": "uncertified_modelled",
+      "expected_profit": "80.30",
+      "downside": null,
+      "ROI": "0.5600",
+      "days": 45,
+      "confidence": "0.2900",
+      "identity": "exact",
+      "identity_confidence": 0.9,
+      "condition_confidence": 0.82,
+      "decision": "REJECT_NO_REALISED_EVIDENCE",
+      "failed_gates": [
+        "PRICE_EVIDENCE_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS",
+        "PRODUCT_IDENTITY_PASS"
+      ]
+    },
+    {
+      "item": "Shure SM7B Cardioid Dynamic Vocal Broadcast Microphone Sealed in box Black",
+      "country": "GB",
+      "url": "https://www.ebay.co.uk/itm/366616083478?_skw=Shure+SM7B&hash=item555c057c16:g:mpkAAeSwoAJqhcFe",
+      "ask": "79.53",
+      "ideal_offer": null,
+      "max_buy": "126.41",
+      "quick_sale": null,
+      "expected_sale": "296.94",
+      "realised_comp_count": 0,
+      "best_exit": "uncertified_modelled",
+      "expected_profit": "70.38",
+      "downside": null,
+      "ROI": "0.5100",
+      "days": 45,
+      "confidence": "0.3100",
+      "identity": "exact",
+      "identity_confidence": 0.9,
+      "condition_confidence": 0.82,
+      "decision": "REJECT_NO_REALISED_EVIDENCE",
+      "failed_gates": [
+        "PRICE_EVIDENCE_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS",
+        "PRODUCT_IDENTITY_PASS"
+      ]
+    },
+    {
+      "item": "Apple MacBook Air 2025  15-inch Midnight Laptop, M3 Chip, 16GB RAM, 256GB SSD",
+      "country": "GB",
+      "url": "https://www.ebay.co.uk/itm/178434430275?_skw=MacBook+Air+15+M3&hash=item298b855543:g:fA0AAeSwtRBpzDGJ",
+      "ask": "669.70",
+      "ideal_offer": null,
+      "max_buy": "674.64",
+      "quick_sale": null,
+      "expected_sale": "1460.48",
+      "realised_comp_count": 0,
+      "best_exit": "uncertified_modelled",
+      "expected_profit": "3.09",
+      "downside": null,
+      "ROI": "0.0000",
+      "days": 45,
+      "confidence": "0.1700",
+      "identity": "family",
+      "identity_confidence": 0.68,
+      "condition_confidence": 0.82,
+      "decision": "REJECT_NO_REALISED_EVIDENCE",
+      "failed_gates": [
+        "PRICE_EVIDENCE_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS",
+        "PRODUCT_IDENTITY_PASS"
+      ]
+    },
+    {
+      "item": "SHURE SM7B Cardioid Dynamic Vocal Microphone Studio Podcast Mic New Open Box",
+      "country": "IT",
+      "url": "https://www.ebay.ie/itm/820021592130?_skw=Shure+SM7B&hash=itembeed188042:g:7PYAAeSw0FZqhVzj&amdata=enc%3AAQALAAAA8ACCtXRWQnOEpyOqnQQ8KGYPXrs2hGKyY7DJifcAcc%2FZbAgmlBgilx2%2BkwNypgN0rDdadKvYY1JZKI90G3Ds3mjpw7itP2jY0OI0fv%2Bxr2LYJaV5IAweTwRLoURdfpocl0TXdMhXB2CDMd5L6lMmzTdykHq7dGyTkJw%2FLKUeS3BfZOJmPyplcRsA6zyNSOdgtklRXiNPT3keAWm107%2B5XNTMAJY%2Bwoy9UvsvGNJ9DgFs%2FehtO6Y1%2F3MRxbtKXNYyjZjyAtD7SXYrIaRMmhs4gyI1HF8OEaDVEm68S7AXDRXaH58N7N99N7AXr%2FiKYEO%2BdQ%3D%3D",
+      "ask": "227.19",
+      "ideal_offer": null,
+      "max_buy": "148.98",
+      "quick_sale": null,
+      "expected_sale": "320.27",
+      "realised_comp_count": 0,
+      "best_exit": "uncertified_modelled",
+      "expected_profit": "-40.43",
+      "downside": null,
+      "ROI": "-0.1500",
+      "days": 45,
+      "confidence": "0.2900",
+      "identity": "exact",
+      "identity_confidence": 0.9,
+      "condition_confidence": 0.82,
+      "decision": "REJECT_NO_REALISED_EVIDENCE",
+      "failed_gates": [
+        "PRICE_EVIDENCE_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS",
+        "PRODUCT_IDENTITY_PASS"
+      ]
+    },
+    {
+      "item": "Shure SM7B Black Dynamic Studio Microphone \u2013 Vocal Recording Broadcast Streaming",
+      "country": "GB",
+      "url": "https://www.ebay.nl/itm/147491419688?_skw=Shure+SM7B&hash=item22572c7628:g:7YkAAeSwqvlqd1ah&amdata=enc%3AAQALAAAA8ACCtXRWQnOEpyOqnQQ8KGYaWB%2BQbnXsVrKbK4qbwZsIJ1u0m7u1wZpYVKD5YW1PxRfPsBwpiELMcA%2FEhvP0Yi4%2Fj%2Fmn07iJFH8yw%2B9L6Pr3OCzAm0KgYU1dMbWni7x88WcoJv7wAJOnr%2FBtLygsopUOldRjH%2B61dqlx5FuRKNG81Y%2BNT6XTCEqnWGfzO1sDjpF9Gw6IQsJr7goDGA9vOeWva3RYM%2FXqJhLWhr0czgAyamVKTEFpGaUgXLLHT8WhT3b3xKcxD3kUWLoxWqFbgYUN7joPjWK8SAsPPr3I5Mo8H53g8c2turSWGYODHRkhxg%3D%3D",
+      "ask": "223.96",
+      "ideal_offer": null,
+      "max_buy": "66.96",
+      "quick_sale": null,
+      "expected_sale": "320.27",
+      "realised_comp_count": 0,
+      "best_exit": "uncertified_modelled",
+      "expected_profit": "-121.70",
+      "downside": null,
+      "ROI": "-0.3500",
+      "days": 45,
+      "confidence": "0.2900",
+      "identity": "exact",
+      "identity_confidence": 0.9,
+      "condition_confidence": 0.82,
+      "decision": "REJECT_NO_REALISED_EVIDENCE",
+      "failed_gates": [
+        "PRICE_EVIDENCE_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS",
+        "PRODUCT_IDENTITY_PASS"
+      ]
+    },
+    {
+      "item": "HyperX QuadCast S RGB USB Condenser Microphone for PC/PlayStation 4",
+      "country": "US",
+      "url": "https://reverb.com/item/99438093-hyperx-quadcast-s-rgb-usb-condenser-microphone-for-pc-playstation-4",
+      "ask": "88.52",
+      "ideal_offer": null,
+      "max_buy": "0.00",
+      "quick_sale": null,
+      "expected_sale": "0.00",
+      "realised_comp_count": 0,
+      "best_exit": "uncertified_modelled",
+      "expected_profit": "-128.76",
+      "downside": null,
+      "ROI": "-1.0000",
+      "days": null,
+      "confidence": "0.0000",
+      "identity": "family",
+      "identity_confidence": 0.35,
+      "condition_confidence": 0.82,
+      "decision": "REJECT_NO_REALISED_EVIDENCE",
+      "failed_gates": [
+        "PRICE_EVIDENCE_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS",
+        "PRODUCT_IDENTITY_PASS"
+      ]
+    },
+    {
+      "item": "Pioneer DJ DDJ-FLX4 DJ Controller 2-Kanal, Schwarz NEU",
+      "country": "DE",
+      "url": "https://www.ebay.de/itm/158218241788?_skw=Pioneer+DDJ-FLX4&hash=item24d68ac6fc:g:aPAAAeSwcXFqjBwC",
+      "ask": "300.00",
+      "ideal_offer": null,
+      "max_buy": "119.95",
+      "quick_sale": null,
+      "expected_sale": "264.75",
+      "realised_comp_count": 0,
+      "best_exit": "uncertified_modelled",
+      "expected_profit": "-148.31",
+      "downside": null,
+      "ROI": "-0.4400",
+      "days": 45,
+      "confidence": "0.2900",
+      "identity": "exact",
+      "identity_confidence": 0.9,
+      "condition_confidence": 0.82,
+      "decision": "REJECT_NO_REALISED_EVIDENCE",
+      "failed_gates": [
+        "PRICE_EVIDENCE_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS",
+        "PRODUCT_IDENTITY_PASS"
+      ]
+    },
+    {
+      "item": "Controlador de doble cubierta Pioneer DJ DDJ-FLX4",
+      "country": "GB",
+      "url": "https://www.ebay.it/itm/137659129381?_skw=Pioneer+DDJ-FLX4&hash=item200d1f9e25:g:qdgAAeSwSUlqjW0x",
+      "ask": "268.79",
+      "ideal_offer": null,
+      "max_buy": "80.04",
+      "quick_sale": null,
+      "expected_sale": "345.91",
+      "realised_comp_count": 0,
+      "best_exit": "uncertified_modelled",
+      "expected_profit": "-152.16",
+      "downside": null,
+      "ROI": "-0.3900",
+      "days": 45,
+      "confidence": "0.1700",
+      "identity": "exact",
+      "identity_confidence": 0.9,
+      "condition_confidence": 0.82,
+      "decision": "REJECT_NO_REALISED_EVIDENCE",
+      "failed_gates": [
+        "PRICE_EVIDENCE_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS",
+        "PRODUCT_IDENTITY_PASS"
+      ]
+    },
+    {
+      "item": "Pioneer DDJ-FLX4 ",
+      "country": "GB",
+      "url": "https://www.ebay.co.uk/itm/178437405474?_skw=Pioneer+DDJ-FLX4&hash=item298bb2bb22:g:zKUAAeSwq2JqjK8o",
+      "ask": "235.00",
+      "ideal_offer": null,
+      "max_buy": "82.26",
+      "quick_sale": null,
+      "expected_sale": "309.82",
+      "realised_comp_count": 0,
+      "best_exit": "uncertified_modelled",
+      "expected_profit": "-161.64",
+      "downside": null,
+      "ROI": "-0.4300",
+      "days": 45,
+      "confidence": "0.1900",
+      "identity": "exact",
+      "identity_confidence": 0.9,
+      "condition_confidence": 0.82,
+      "decision": "REJECT_NO_REALISED_EVIDENCE",
+      "failed_gates": [
+        "PRICE_EVIDENCE_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS",
+        "PRODUCT_IDENTITY_PASS"
+      ]
+    },
+    {
+      "item": "PlayStation Portal PS5 Handheld Console",
+      "country": "GB",
+      "url": "https://www.ebay.ie/itm/168640412692?_skw=PlayStation+5&hash=item2743c07c14:g:8J4AAeSwvr5qjrDU&amdata=enc%3AAQALAAAA8ACCtXRWQnOEpyOqnQQ8KGZwZF2nAmQchPQurfTlCjS0hIBQmmQkDI1H9bLrPbKVvkEes9hg6d5HCSp8y3evwWVVcjubyO%2F3WeuKhYX6dDSPGY6rtBeARq7lDUYavdEWbbIuMhyB%2BweZCOvwQLe6wuIbBT9T%2B5Ed3nRUoHN8VhoKNS%2FmOzoVTuEzIFJs5yzJ4Vl51x6dKFi%2BfaIP9jy1yQ5IMfIlJf0jOXX6Cp2Abl2rAoQjKPDLeHSB%2FtUvWGEesRxaIyLBouYIwWZTBFrey6o5lJl42%2FjhOfnmkMryofKUbsnpB7iBLSTJI5mmmX1eig%3D%3D",
+      "ask": "133.98",
+      "ideal_offer": null,
+      "max_buy": "0.00",
+      "quick_sale": null,
+      "expected_sale": "0.00",
+      "realised_comp_count": 0,
+      "best_exit": "uncertified_modelled",
+      "expected_profit": "-198.35",
+      "downside": null,
+      "ROI": "-1.0000",
+      "days": null,
+      "confidence": "0.0000",
+      "identity": "variant",
+      "identity_confidence": 0.84,
+      "condition_confidence": 0.82,
+      "decision": "REJECT_NO_REALISED_EVIDENCE",
+      "failed_gates": [
+        "PRICE_EVIDENCE_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS",
+        "PRODUCT_IDENTITY_PASS"
+      ]
+    },
+    {
+      "item": "Shure SM7B - Cardioid Dynamic Vocal Microphone - Comes With Box",
+      "country": "CA",
+      "url": "https://www.ebay.ie/itm/405321513841?_skw=Shure+SM7B&hash=item5e5f0b7b71:g:Q60AAOSwhQRmUPY3&amdata=enc%3AAQALAAAA8ACCtXRWQnOEpyOqnQQ8KGaTW%2BHaJpvUM9MLtFhmez4aFf9u9n5qaEwjTzrrfXNmZB%2FnhqoQOEJWvUwsHCi80xMaono0zq3jyhrsbw87u1NT%2Fc8%2FSsKNyyx7XnHdo9fNITPQtbATBZ06A0LMC2HGqzUTA6%2F4wgCaUcTgmM%2FrV4oDieY2G0eOkMzoYopZS2AAmp7pP3ghuo65%2FJf%2BYzOgmS%2BOcnJwIziuwI9p%2BwgOurN6I69k5fgPxVtUNzZORyITIPOdRewA0H9tRtSmS4my4T%2FpdhKoDpvRGD95VtwLyznoka3KUgOPrE7JCjSaCdLNiw%3D%3D",
+      "ask": "247.70",
+      "ideal_offer": null,
+      "max_buy": "17.15",
+      "quick_sale": null,
+      "expected_sale": "261.00",
+      "realised_comp_count": 0,
+      "best_exit": "uncertified_modelled",
+      "expected_profit": "-201.27",
+      "downside": null,
+      "ROI": "-0.5200",
+      "days": 45,
+      "confidence": "0.3100",
+      "identity": "exact",
+      "identity_confidence": 0.9,
+      "condition_confidence": 0.82,
+      "decision": "REJECT_NO_REALISED_EVIDENCE",
+      "failed_gates": [
+        "PRICE_EVIDENCE_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS",
+        "PRODUCT_IDENTITY_PASS"
+      ]
+    },
+    {
+      "item": "Pioneer DDJ-FLX4 2 Canali Controller per DJ - Nero",
+      "country": "DE",
+      "url": "https://www.ebay.it/itm/307133207899?_skw=Pioneer+DDJ-FLX4&hash=item478290d55b:g:MmoAAeSwxWlpWXVu",
+      "ask": "360.00",
+      "ideal_offer": null,
+      "max_buy": "127.41",
+      "quick_sale": null,
+      "expected_sale": "264.75",
+      "realised_comp_count": 0,
+      "best_exit": "uncertified_modelled",
+      "expected_profit": "-201.76",
+      "downside": null,
+      "ROI": "-0.5200",
+      "days": 45,
+      "confidence": "0.2900",
+      "identity": "exact",
+      "identity_confidence": 0.9,
+      "condition_confidence": 0.82,
+      "decision": "REJECT_NO_REALISED_EVIDENCE",
+      "failed_gates": [
+        "PRICE_EVIDENCE_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS",
+        "PRODUCT_IDENTITY_PASS"
+      ]
+    },
+    {
+      "item": "Pioneer DDJ-FLX4 2-Deck Rekordbox Serato DJ Controller with Headset",
+      "country": "US",
+      "url": "https://www.ebay.nl/itm/358378003432?_skw=Pioneer+DDJ-FLX4&hash=item5370fe5be8:g:40cAAeSwmIxpxXOW&amdata=enc%3AAQALAAAA8ACCtXRWQnOEpyOqnQQ8KGb5UVINE5DW4uypazWFNEzt7OUAqmDOgnBBQCTdNF8NsIz0BXJTGwGWaHd45nTBCeX8lgVsdWcEpqvTj7uwCadQz60a35jxojV7hy%2FUML%2Fp91LMObx%2F5eMrHVQZJV6coFYe%2Fgp3AwdkkgbaHr427FqB6fvEpcJ0ctCsN1KedKau%2F9MYofKErOnR7%2B9a20cxwHQGzum75UJW2Ud4ckl2ivhMD3Bczuv6XzB1qA0kflyd1L5W2mm07MUd9WjWdDXBgPTmulJgJ4i2iTtmxWmv0U8qreV2n%2BVc2qoquNNmbV%2BxCw%3D%3D",
+      "ask": "282.92",
+      "ideal_offer": null,
+      "max_buy": "33.01",
+      "quick_sale": null,
+      "expected_sale": "264.75",
+      "realised_comp_count": 0,
+      "best_exit": "uncertified_modelled",
+      "expected_profit": "-220.55",
+      "downside": null,
+      "ROI": "-0.5400",
+      "days": 45,
+      "confidence": "0.2900",
+      "identity": "exact",
+      "identity_confidence": 0.9,
+      "condition_confidence": 0.82,
+      "decision": "REJECT_NO_REALISED_EVIDENCE",
+      "failed_gates": [
+        "PRICE_EVIDENCE_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS",
+        "PRODUCT_IDENTITY_PASS"
+      ]
+    },
+    {
+      "item": "Pioneer DJ DDJ-FLX4 2-deck Rekordbox and Serato DJ Controller - Graphite",
+      "country": "US",
+      "url": "https://www.ebay.ie/itm/185905134083?_skw=Pioneer+DDJ-FLX4&hash=item2b48cf3a03:g:cIgAAOSwtSZkZ8TZ&amdata=enc%3AAQALAAAA8ACCtXRWQnOEpyOqnQQ8KGYk%2FakkF7os87wSe1VOZGkwETRcatS5iwXEVc7xIas53tGDuX7I4um74GaUmOuMhT4S3CQYsVdfXPy5VXvhha2h2yW3NVc5nWG5rg7RBV5RcfA5KSOiEs1fxAt%2F7s2RNhozvjnN5LNclmqQoYsC7mNRKb8TZ3js8P4JqHilo0IWl7GvTZNxAI%2FGo426J9yV9UwnvY1z4LoVKR04%2BM%2F6iGKK9E1HUnPXnCsLT7%2B%2F1L%2BnnHSz%2BNHTenRnlKqDJhpPSa%2BImw%2Bn0tI70f%2B56Zq0UagMryue5NMHiZB2hGHyDVtYGw%3D%3D",
+      "ask": "282.06",
+      "ideal_offer": null,
+      "max_buy": "30.81",
+      "quick_sale": null,
+      "expected_sale": "264.75",
+      "realised_comp_count": 0,
+      "best_exit": "uncertified_modelled",
+      "expected_profit": "-221.94",
+      "downside": null,
+      "ROI": "-0.5400",
+      "days": 45,
+      "confidence": "0.2900",
+      "identity": "exact",
+      "identity_confidence": 0.9,
+      "condition_confidence": 0.82,
+      "decision": "REJECT_NO_REALISED_EVIDENCE",
+      "failed_gates": [
+        "PRICE_EVIDENCE_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS",
+        "PRODUCT_IDENTITY_PASS"
+      ]
+    },
+    {
+      "item": "Pioneer DJ DDJ-FLX4 2-deck rekordbox and Serato DJ Controller - White, Limited E",
+      "country": "US",
+      "url": "https://www.ebay.ie/itm/197813825089?_skw=Pioneer+DDJ-FLX4&hash=item2e0e9f6e41:g:nbAAAeSwheNpAqqH&amdata=enc%3AAQALAAAA8ACCtXRWQnOEpyOqnQQ8KGZoJhFgwNO3wOWRWK42xjn2s3YwFp%2BKmYBOl0ZzxJlGJGeB7CQ69spHbVIrLUnL8J0uMzCieiFELTLJo9KLCk5m0RlI6c8hyprzfmBASvI1BJ4H2t7B%2BSNEQYPtM2jY%2BDTZ7mfPmLHrnRFz1ecd6IxWZ9IdVAfsFKuwMBihbAvcVuQZrt6JKTQMa23qRVfTzALXliDV9k0Es5FgvYpyltLWLvbaYaI9IuuUaQS--p1vJMZWYBt6Gqocykdz1a3%2FWjXhfZDHKP9fLwvBpHGS3F5ducq2YA8eWyPwqeuauf86Ew%3D%3D",
+      "ask": "290.64",
+      "ideal_offer": null,
+      "max_buy": "31.23",
+      "quick_sale": null,
+      "expected_sale": "264.75",
+      "realised_comp_count": 0,
+      "best_exit": "uncertified_modelled",
+      "expected_profit": "-230.24",
+      "downside": null,
+      "ROI": "-0.5500",
+      "days": 45,
+      "confidence": "0.2700",
+      "identity": "exact",
+      "identity_confidence": 0.9,
+      "condition_confidence": 0.82,
+      "decision": "REJECT_NO_REALISED_EVIDENCE",
+      "failed_gates": [
+        "PRICE_EVIDENCE_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS",
+        "PRODUCT_IDENTITY_PASS"
+      ]
+    },
+    {
+      "item": "Authentique Microphone Dynamique Cardio\u00efde Shure SM7B",
+      "country": "FR",
+      "url": "https://www.ebay.fr/itm/198330787869?_skw=Shure+SM7B&hash=item2e2d6fa81d:g:PqMAAeSw4u1p-Qna",
+      "ask": "450.00",
+      "ideal_offer": null,
+      "max_buy": "135.51",
+      "quick_sale": null,
+      "expected_sale": "296.94",
+      "realised_comp_count": 0,
+      "best_exit": "uncertified_modelled",
+      "expected_profit": "-282.94",
+      "downside": null,
+      "ROI": "-0.5800",
+      "days": 45,
+      "confidence": "0.3100",
+      "identity": "exact",
+      "identity_confidence": 0.9,
+      "condition_confidence": 0.82,
+      "decision": "REJECT_NO_REALISED_EVIDENCE",
+      "failed_gates": [
+        "PRICE_EVIDENCE_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS",
+        "PRODUCT_IDENTITY_PASS"
+      ]
+    },
+    {
+      "item": "MESA MEZCLAS PIONEER DDJ-FLX10 20264170",
+      "country": "ES",
+      "url": "https://www.ebay.es/itm/128035359332?_skw=Pioneer+DDJ-FLX10&hash=item1dcf808a64:g:NkUAAeSwSUlqhktB",
+      "ask": "1281.95",
+      "ideal_offer": null,
+      "max_buy": "821.01",
+      "quick_sale": null,
+      "expected_sale": "1395.66",
+      "realised_comp_count": 0,
+      "best_exit": "uncertified_modelled",
+      "expected_profit": "-349.60",
+      "downside": null,
+      "ROI": "-0.2600",
+      "days": 45,
+      "confidence": "0.1900",
+      "identity": "exact",
+      "identity_confidence": 0.9,
+      "condition_confidence": 0.82,
+      "decision": "REJECT_NO_REALISED_EVIDENCE",
+      "failed_gates": [
+        "PRICE_EVIDENCE_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS",
+        "PRODUCT_IDENTITY_PASS"
+      ]
+    },
+    {
+      "item": "Apple iPhone 15 Pro 128GB, Black Titanium, Unlocked",
+      "country": "GB",
+      "url": "https://www.ebay.co.uk/itm/158223434434?_skw=iPhone+15+Pro+128GB&hash=item24d6da02c2:g:LxkAAeSwyIRqjfHc",
+      "ask": "240.00",
+      "ideal_offer": null,
+      "max_buy": "0.00",
+      "quick_sale": null,
+      "expected_sale": "0.00",
+      "realised_comp_count": 0,
+      "best_exit": "uncertified_modelled",
+      "expected_profit": "-383.01",
+      "downside": null,
+      "ROI": "-1.0000",
+      "days": null,
+      "confidence": "0.0000",
+      "identity": "exact",
+      "identity_confidence": 0.92,
+      "condition_confidence": 0.82,
+      "decision": "REJECT_NO_REALISED_EVIDENCE",
+      "failed_gates": [
+        "PRICE_EVIDENCE_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS"
+      ]
+    }
+  ],
+  "L_BUY_READY": "NO_CURRENT_BUY_READY_OPPORTUNITIES",
+  "M_PAPER_TRADES": [],
+  "N_RED_TEAM": {
+    "fixes": [
+      "Encrypted refresh tokens (ENC1/Fernet); never write refresh token to .env",
+      "Production RuName must be identifier not callback URL; sandbox authorize blocked",
+      "invalid_grant marks token_revoked; empty ingest is not a market panel",
+      "Variant reject: Pro Max, storage, Mac chip/size/RAM, 4070 SUPER/Ti, laptop/desktop GPU, GM I/II, focal length",
+      "Condition match: FOR_PARTS vs usable = 0; Used vs Used = 1.0",
+      "CSV rejects refunds, returns, qty<=0, bad currency, duplicate transaction_id",
+      "One realised sale is not drowned by 50 asking prices",
+      "Dealer/CeX exits are not certified without trade-in evidence",
+      "DualSense on a PS5 *console* title is no longer ACCESSORY_RE; controller-only still ps5_accessory",
+      "Cancelled/refunded Fulfillment orders are not persisted as sold"
+    ],
+    "live_false_positives_caught": {
+      "accessory": 4,
+      "4070_super_mismatch": 3,
+      "multi_variant_listing": 1,
+      "iphone_pro_max_mismatch": 2,
+      "ps5_accessory": 1,
+      "wrong_generation_a7r": 2,
+      "bundle_or_kit": 1
+    }
+  },
+  "O_TESTS": {
+    "command": "python3 -m pytest tests -m 'not live'",
+    "result": "151 passed, 2 skipped, 4 deselected"
+  },
+  "P_OWNER_ACTIONS": [
+    "Merge/deploy PR #6 (cursor/arie-commercial-readiness-7682) to Render service auction-system-l6je.",
+    "eBay Developer Portal Production \u2192 User tokens \u2192 Get a RuName.",
+    "Display Title: ARIE owner sold-data",
+    "Privacy Policy URL: https://auction-system-l6je.onrender.com/privacy/ebay",
+    "Auth Accepted URL: https://auction-system-l6je.onrender.com/oauth/ebay/callback",
+    "Auth Declined URL: https://auction-system-l6je.onrender.com/oauth/ebay/declined",
+    "Set Render env EBAY_RU_NAME=<RuName identifier, not the https URL> and restart.",
+    "Open https://auction-system-l6je.onrender.com/oauth/ebay/start, sign in, click Agree.",
+    "Optional: upload Seller Hub / PayPal / generic sales CSV via /performance."
+  ],
+  "Q_FIRST_MONEY_POLICY": {
+    "SAFE_START_MODE": true,
+    "purchase_cap_eur": 250,
+    "valuation_confidence_min": 0.85,
+    "identity": "exact_or_variant",
+    "evidence": "Tier A-C realised",
+    "certified_category_required": true,
+    "downside": "non_negative",
+    "source": "production"
+  },
+  "R_COMMERCIAL_VERDICT": "NO",
+  "would_personally_spend_100_250": "NO",
+  "why": "No realised sold evidence, no certified category, BUY_READY=0. Software path for owner OAuth + CSV + matching + valuation is complete. Gates were not weakened. Owner history is the remaining gap.",
+  "generated_at": "2026-08-26T13:21:22.107308+00:00",
+  "workers": {
+    "status": "ok",
+    "scheduler_running": true,
+    "jobs": [
+      {
+        "id": "ebay-deletion-retry",
+        "next_run_time": "2026-08-26T13:26:13.344705+00:00"
+      },
+      {
+        "id": "scan-live-sources",
+        "next_run_time": "2026-08-26T13:30:52.654835+00:00"
+      },
+      {
+        "id": "daily-self-audit",
+        "next_run_time": "2026-08-27T06:15:00+00:00"
+      }
+    ]
+  },
+  "infra_ok": {
+    "/health": true,
+    "/health/db": true,
+    "/health/ebay-notifications": true,
+    "/health/workers": true,
+    "/config": true,
+    "/oauth/ebay/status": false,
+    "/sold/template": false,
+    "/sold/status": false,
+    "/opportunities": true,
+    "/listings": false
+  },
+  "buy_ready_gates": [
+    "PRODUCT_IDENTITY_PASS",
+    "CONDITION_PASS",
+    "PRICE_EVIDENCE_PASS",
+    "LOCALISATION_PASS",
+    "EXIT_CHANNEL_PASS",
+    "LIQUIDITY_PASS",
+    "COST_PASS",
+    "TAX_PASS",
+    "RISK_PASS",
+    "SOURCE_FRESHNESS_PASS",
+    "DOWNSIDE_PASS",
+    "MAX_BUY_PASS",
+    "DATA_PROVENANCE_PASS",
+    "CATEGORY_CERT_PASS",
+    "SAFE_START_PASS",
+    "PRODUCTION_SOURCE_PASS"
+  ],
+  "status_enum": "ARIE_SOFTWARE_COMPLETE_EMPIRICAL_VALIDATION_REQUIRED"
+}

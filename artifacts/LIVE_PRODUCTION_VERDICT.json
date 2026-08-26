@@ -1,0 +1,123 @@
+{
+  "generated_at": "2026-08-25T22:41:00+00:00",
+  "host": "https://auction-system-l6je.onrender.com",
+  "sandbox_used": false,
+  "commercial_verdict": "NO",
+  "would_risk_eur_100_250": "NO",
+  "buy_ready_count": 0,
+  "A_infrastructure": {
+    "GET /health": {"http": 200, "status": "ok"},
+    "GET /health/db": {"http": 200, "database": "up"},
+    "GET /health/ebay-notifications": {
+      "ready": true,
+      "ready_for_ebay_challenge": true,
+      "endpoint_configured": true,
+      "endpoint_https": true,
+      "verification_token_configured": true,
+      "database": "up",
+      "ebay_subscription_active": false,
+      "note": "ARIE does not claim the eBay subscription is active until the portal confirms it."
+    },
+    "GET /health/workers": {
+      "scheduler_running": true,
+      "jobs": ["scan-live-sources", "ebay-deletion-retry", "daily-self-audit"]
+    }
+  },
+  "B_live_source": {
+    "ebay_browse": "LIVE",
+    "detail": "Browse search succeeded across configured marketplaces.",
+    "ebay_configured": true,
+    "sandbox_used": false,
+    "listing_hosts": "www.ebay.co.uk / .de / .it / .fr / .es / .ie / .nl — not sandbox.ebay",
+    "ecb_fx": "LIVE (after scheduler healthcheck)",
+    "reverb": "LIVE (asking comps only, not realised sales)",
+    "scryfall": "LIVE (not used in this electronics scan)"
+  },
+  "C_scan_size": {
+    "queries": 16,
+    "marketplaces": ["EBAY_IE", "EBAY_GB", "EBAY_DE", "EBAY_FR", "EBAY_IT", "EBAY_ES", "EBAY_NL"],
+    "listings_seen": 224,
+    "opportunities_written": 224,
+    "api_window_analysed": 100,
+    "note": "Each query limit=20 split ~2 listings x 7 markets = 14 retained per query after title filters. Warmup Sony A7 IV scan of 6 plus later scheduler scan of 46 are additional."
+  },
+  "D_top_20_genuine_after_redteam": "see artifacts/top20_genuine_balanced.json",
+  "E_buy_ready": {
+    "count": 0,
+    "second_pass": "N/A — no BUY_READY rows. PRICE_EVIDENCE_PASS was not lowered."
+  },
+  "F_paper_trades": "see artifacts/paper_trade_results.json — open only, disappearance ≠ sold",
+  "G_false_positives_in_api_window_of_100": {
+    "count": 28,
+    "rate": 0.28,
+    "reasons": {
+      "accessory": 12,
+      "iphone_pro_max_mismatch": 7,
+      "4070_super_mismatch": 5,
+      "multi_variant_listing": 1,
+      "bundle_or_kit": 1,
+      "wrong_iphone_generation": 1,
+      "ps5_pro_mismatch": 1
+    },
+    "plus_implausible_price_rejects": ["DDJ-FLX10 at €250", "SM7B at £79-84"]
+  },
+  "H_redteam": {
+    "engine_rank_was_unsafe": true,
+    "why": "Accessories inherited Reverb parent-product asking comps and ranked as €500-€850 expected profit. Real cameras/phones/GPUs had expected_sale=€0 and ranked last.",
+    "examples": [
+      "Pioneer DDJ-FLX10 Stand £70.68 valued as a FLX10",
+      "Power socket €6.50 valued as DDJ-1000",
+      "DDJ-1000 skin $93 valued as a controller",
+      "BOITE iPhone 16 Pro empty box €19",
+      "Sony FE 24-70 GM II moving barrel repair part $114",
+      "PS5 foam pad / DualSense / faceplates / hall-effect sticks"
+    ]
+  },
+  "I_dominant_failed_gates_in_api_window": [
+    ["PRICE_EVIDENCE_PASS", 100],
+    ["LOCALISATION_PASS", 100],
+    ["RISK_PASS", 100],
+    ["CATEGORY_CERT_PASS", 100],
+    ["SAFE_START_PASS", 100],
+    ["CONDITION_PASS", 99],
+    ["DOWNSIDE_PASS", 94],
+    ["MAX_BUY_PASS", 94],
+    ["LIQUIDITY_PASS", 87],
+    ["PRODUCT_IDENTITY_PASS", 84]
+  ],
+  "J_commercial_verdict": {
+    "answer": "NO",
+    "why": [
+      "BUY_READY=0 after 224 live production listings. Gates were not weakened.",
+      "No realised-sale evidence exists. Active eBay asks were not treated as sold prices. PRICE_EVIDENCE_PASS failed on every candidate, as designed.",
+      "Cameras, phones, GPUs, MacBooks, and PS5 consoles have valuation_confidence=0 and max_buy=€0 because Reverb comps do not cover them and the Irish sold panel is empty. ARIE cannot currently price the inventory it is supposed to trade.",
+      "DJ/mic rows get Reverb *asking* comps (confidence 0.17-0.31). That is not realised evidence. Asks still exceed max_buy.",
+      "Live discovery leaked accessories, empty boxes, repair parts, wrong iPhone generation, RTX 4070 SUPER vs 4070, and PS5 Pro vs PS5. Engine ranking promoted the leaks.",
+      "SAFE_START (€100-€250) requires BUY_READY, valuation confidence ≥0.85, downside ≥0, certified category. None of those hold.",
+      "The two eyeball 'maybe cheap' listings (MacBook 14 M3 Pro 18/512 at £618.70 with 'Please read', iPhone 15 Pro 256GB at £339.99) are unvalued by the engine. Betting €100-€250 on them would be a human flyer, not an ARIE recommendation."
+    ]
+  },
+  "K_next_fixes": [
+    "Deploy discovery filters from this branch (accessories/parts/empty box/wrong generation/SUPER/Pro Max, query price bands, priceCurrency on Browse filter).",
+    "Do not let Reverb asking comps value a parent SKU when the subject is an accessory. Score must not promote unvalued inventory.",
+    "Ingest realised sales (owner CSV / eBay Fulfillment sold orders / Marketplace Insights if entitled). Without that, PRICE_EVIDENCE_PASS cannot pass.",
+    "Add electronics comps other than Reverb (eBay sold if entitled, Keepa-class evidence, or owner panel) so cameras/phones/GPUs get a non-zero expected_sale.",
+    "Per-query price floors so €6 sockets never enter. Fetch more than 2 hits per marketplace per query.",
+    "Condition model currently fails ~99% of live used goods — calibrate or it blocks every near-buy.",
+    "Identity 0.90 bar fails A7 IV at 0.82; keep the bar, improve resolvers (storage/chip/shutter) rather than lowering it.",
+    "Do not certify categories until Irish realised outcomes exist."
+  ],
+  "metrics": {
+    "listings_scanned": 224,
+    "listings_retained_by_engine": 224,
+    "false_positive_count_in_top_100": 28,
+    "false_positive_rate_in_top_100": 0.28,
+    "exact_identity_rate_identity_ge_0_90": 0.16,
+    "variant_ambiguity_rate": 0.82,
+    "opportunities_produced_api_window": 100,
+    "BUY_READY": 0,
+    "WATCH": 0,
+    "REVIEW": 100,
+    "IGNORE": 0
+  }
+}
