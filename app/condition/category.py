@@ -38,8 +38,15 @@ _AUDIO = [
 ]
 
 
-def assess_category_condition(raw: str | None, description: str = "", category: str | None = None) -> ConditionAssessment:
-    base = assess_condition(raw, description)
+def assess_category_condition(
+    raw: str | None,
+    description: str = "",
+    category: str | None = None,
+    *,
+    condition_id: str | None = None,
+    specifics: dict | None = None,
+) -> ConditionAssessment:
+    base = assess_condition(raw, description, condition_id=condition_id, specifics=specifics)
     blob = f"{raw or ''}\n{description}"
     table = {
         "cameras": _CAMERA,

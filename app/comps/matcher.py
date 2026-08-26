@@ -60,18 +60,55 @@ def reject_reason(subject_title: str, comp_title: str) -> str | None:
     return None
 
 
-def match_comp(subject_title: str, comp_title: str, *, condition_score: Decimal = Decimal("0.7")) -> CompMatch:
+def match_comp(
+    subject_title: str,
+    comp_title: str,
+    *,
+    condition_score: Decimal = Decimal("0.7"),
+    subject_condition: str | None = None,
+    comp_condition: str | None = None,
+    subject_description: str = "",
+    comp_description: str = "",
+    subject_condition_id: str | None = None,
+    comp_condition_id: str | None = None,
+) -> CompMatch:
+    from app.condition.match import condition_match_score
+    from app.sold.match import identity_similarity, variant_reject
+
+    variant = variant_reject(subject_title, comp_title)
+    if variant:
+        return CompMatch(False, Decimal("0.10"), False, condition_score, Decimal("0"), variant)
     reason = reject_reason(subject_title, comp_title)
     if reason:
         return CompMatch(False, Decimal("0.10"), False, condition_score, Decimal("0"), reason)
+    if subject_condition is not None or comp_condition is not None or subject_condition_id or comp_condition_id:
+        condition_score = condition_match_score(
+            subject_condition,
+            comp_condition,
+            subject_description=subject_description,
+            comp_description=comp_description,
+            subject_condition_id=subject_condition_id,
+            comp_condition_id=comp_condition_id,
+        )
+        if condition_score <= 0:
+            return CompMatch(False, Decimal("0.10"), False, Decimal("0"), Decimal("0"), "condition_mismatch")
     subj_sku = lookup_catalogue(subject_title)
     comp_sku = lookup_catalogue(comp_title)
+    similarity = identity_similarity(subject_title, comp_title)
     if subj_sku and comp_sku and subj_sku.key == comp_sku.key:
-        return CompMatch(True, Decimal("0.96"), True, condition_score, Decimal("0.90"))
+        return CompMatch(True, max(similarity, Decimal("0.96")), True, condition_score, Decimal("0.90"))
     tokens = set(re.findall(r"[a-z0-9]+", subject_title.lower()))
     other = set(re.findall(r"[a-z0-9]+", comp_title.lower()))
     if not tokens or not other:
         return CompMatch(False, Decimal("0"), False, condition_score, Decimal("0"), "empty")
     overlap = Decimal(len(tokens & other)) / Decimal(len(tokens | other))
-    accepted = overlap >= Decimal("0.35")
-    return CompMatch(accepted, overlap, False, condition_score, Decimal("0.50"), "" if accepted else "weak_overlap")
+    score = max(overlap, similarity)
+    accepted = score >= Decimal("0.35")
+    return CompMatch(
+        accepted,
+        score,
+        bool(subj_sku and comp_sku and subj_sku.key == comp_sku.key),
+        condition_score,
+        Decimal("0.50"),
+        "" if accepted else "weak_overlap",
+    )

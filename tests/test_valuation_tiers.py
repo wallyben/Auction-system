@@ -20,6 +20,16 @@ def _comp(price: str, evidence: EvidenceType, country: str = "IE", title: str = 
     )
 
 
+def test_fifty_asks_cannot_drown_one_realised() -> None:
+    comps = [_comp("900", EvidenceType.REALISED_SALE)] + [
+        _comp(str(1500 + i), EvidenceType.CURRENT_ASKING) for i in range(50)
+    ]
+    result = value_from_comps(comps)
+    assert result.realised_count == 1
+    assert result.expected_sale_eur == Decimal("900.00")
+    assert result.sample_size == 1
+
+
 def test_asking_cannot_overwhelm_realised() -> None:
     comps = [
         _comp("900", EvidenceType.REALISED_SALE),

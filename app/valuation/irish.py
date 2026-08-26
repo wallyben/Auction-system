@@ -19,6 +19,8 @@ EVIDENCE_WEIGHT = {
 }
 
 TERRITORY_WEIGHT = {
+    # Geographic relevance to an Irish exit. Not an Ireland premium.
+    # GB realised is used after corridor costs; lack of IE observations lowers confidence.
     "IE": Decimal("1.00"),
     "NI": Decimal("0.85"),
     "GB": Decimal("0.70"),

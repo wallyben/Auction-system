@@ -18,6 +18,7 @@ from app.condition.engine import assess_condition
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.money import ZERO, as_decimal, money
+from app.costs.category import category_cost_policy
 from app.costs.landed import compute_landed_cost
 from app.decision.gates import apply_money_ready_gates
 from app.discovery.mispricing import mispricing
@@ -217,7 +218,18 @@ def persist_listing(session: Session, item: NormalizedListing) -> Listing:
         mpn=item.mpn,
         category=item.category,
     )
-    condition = assess_category_condition(item.condition_raw, item.description, identity.category or item.category)
+    condition = assess_category_condition(
+        item.condition_raw,
+        "\n".join(
+            [
+                item.description or "",
+                str((item.extras or {}).get("conditionDescription") or ""),
+            ]
+        ),
+        identity.category or item.category,
+        condition_id=str((item.extras or {}).get("conditionId") or "") or None,
+        specifics=(item.extras or {}).get("itemSpecifics") if isinstance((item.extras or {}).get("itemSpecifics"), dict) else None,
+    )
     if listing is None:
         listing = Listing(
             source_id=item.source_id,
@@ -308,26 +320,37 @@ async def _comps_for(listing: Listing, rates: dict[str, Decimal], session=None) 
     comps: list[Comp] = []
     rejected: list[dict[str, str]] = []
     identity = getattr(listing, "_identity", None)
-    is_card = listing.category == "trading_cards" or (identity and getattr(identity, "category", None) == "trading_cards")
+    category = (identity.category if identity else None) or listing.category
+    is_card = listing.category == "trading_cards" or category == "trading_cards"
     fx = _eur_per_unit(rates, listing.currency)
     query = (listing.model or listing.title or "")[:80]
     if session is not None:
         try:
             sold = await search_sold_evidence(session, query, listing.country or "IE", listing.condition_grade or "")
             for hit in sold:
-                verdict = match_comp(listing.title, hit.title)
+                verdict = match_comp(
+                    listing.title,
+                    hit.title,
+                    subject_condition=listing.condition_raw,
+                    comp_condition=hit.condition,
+                    subject_description=listing.description or "",
+                    subject_condition_id=str((listing.extras or {}).get("conditionId") or "") or None,
+                )
                 if not verdict.accepted:
                     rejected.append({"title": hit.title, "reject_reason": verdict.reason, "source": hit.source})
                     continue
+                price = hit.sold_price_eur
+                if hit.currency and hit.currency.upper() != "EUR":
+                    price = to_eur(hit.sold_price_eur, hit.currency, _eur_per_unit(rates, hit.currency))
                 comps.append(
                     Comp(
                         source=hit.source,
                         url=hit.url,
                         title=hit.title,
-                        price_eur=hit.sold_price_eur,
+                        price_eur=price,
                         evidence_type=hit.evidence_type,
                         country=hit.territory,
-                        condition_score=Decimal("0.85"),
+                        condition_score=verdict.condition_match,
                         product_score=verdict.identity_similarity,
                         observed_at=hit.sold_date,
                         notes=hit.notes,
@@ -351,7 +374,9 @@ async def _comps_for(listing: Listing, rates: dict[str, Decimal], session=None) 
                 notes="Subject Cardmarket EUR guide via Scryfall. Dealer/market, not an Irish realised sale.",
             )
         )
-    if not is_card:
+    from app.sold.category_policy import reverb_allowed_for
+
+    if reverb_allowed_for(category):
         try:
             from app.sources.reverb import ReverbAdapter
 
@@ -416,8 +441,13 @@ def evaluate_listing(
     identity = getattr(listing, "_identity", None) or identify_with_resolvers(
         title=listing.title, description=listing.description, category=listing.category
     )
+    extras = listing.extras or {}
     condition = getattr(listing, "_condition", None) or assess_category_condition(
-        listing.condition_raw, listing.description, listing.category
+        listing.condition_raw,
+        "\n".join([listing.description or "", str(extras.get("conditionDescription") or "")]),
+        listing.category,
+        condition_id=str(extras.get("conditionId") or "") or None,
+        specifics=extras.get("itemSpecifics") if isinstance(extras.get("itemSpecifics"), dict) else None,
     )
     valuation = value_from_comps(comps)
     fx = _eur_per_unit(rates, listing.currency)
@@ -441,6 +471,7 @@ def evaluate_listing(
     )
     outbound = estimate_outbound(category=listing.category or identity.category, channel="ebay_ie")
     shipping = inbound.amount_eur
+    cat_costs = category_cost_policy(listing.category or identity.category)
     costs = compute_landed_cost(
         purchase_price=purchase,
         currency_to_eur=fx,
@@ -454,9 +485,9 @@ def evaluate_listing(
         payment_fee_fixed=_d("payment_fee_fixed_eur"),
         platform_fee_rate=_d("ebay_ie_final_value_fee"),
         platform_fee_vat=_d("ebay_ie_fee_vat"),
-        returns_allowance=_d("returns_allowance"),
-        warranty_allowance=_d("warranty_allowance"),
-        refurb_eur=condition.refurb_low_eur,
+        returns_allowance=cat_costs.returns_allowance,
+        warranty_allowance=cat_costs.warranty_allowance,
+        refurb_eur=condition.refurb_low_eur + cat_costs.repair_allowance_eur,
         duty_eur=tax.duty_eur,
         import_vat_eur=tax.import_vat_eur,
         fx_spread=_d("fx_spread"),
@@ -468,6 +499,7 @@ def evaluate_listing(
     exits = compare_exits(
         expected_sale_eur=valuation.expected_sale_eur,
         category=listing.category or identity.category,
+        trade_in_evidence=any(c.evidence_type == EvidenceType.TRADE_IN for c in comps),
     )
     best_quote = next((q for q in exits.quotes if q.channel == exits.best_expected_exit), exits.quotes[0])
     # Recompute net from the best exit rather than a single generic fee.

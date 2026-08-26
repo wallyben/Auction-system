@@ -474,9 +474,38 @@ async def _continue_production_programme() -> int:
 def cmd_ebay_owner_oauth_url() -> int:
     from app.sold.ebay_owner_oauth import start_consent
 
-    payload = start_consent()
+    session = None
+    try:
+        session = _session()
+    except Exception:
+        session = None
+    payload = start_consent(session)
     print(json.dumps(payload, indent=2, default=str))
+    if payload.get("consent_url"):
+        print(payload["consent_url"], file=sys.stderr)
+    if session is not None:
+        try:
+            session.commit()
+        except Exception:
+            session.rollback()
+        session.close()
     return 0 if payload.get("ok") else 1
+
+
+def cmd_ebay_owner_ingest() -> int:
+    from app.sold.ebay_owner_oauth import ingest_owner_orders
+
+    session = _session()
+    try:
+        result = asyncio.run(ingest_owner_orders(session, limit=200))
+        session.commit()
+        print(json.dumps(result, indent=2, default=str))
+        return 0 if result.get("ok") else 1
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
 
 def cmd_db_check() -> int:
@@ -555,6 +584,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("ebay-notification-proof")
     sub.add_parser("ebay-notification-await")
     sub.add_parser("ebay-owner-oauth-url")
+    sub.add_parser("ebay-owner-ingest")
     watch = sub.add_parser("ebay-notification-watch")
     watch.add_argument("--timeout", type=float, default=0)
     set_ep = sub.add_parser("ebay-notification-set-endpoint")
@@ -593,6 +623,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_ebay_notification_await()
     if args.cmd == "ebay-owner-oauth-url":
         return cmd_ebay_owner_oauth_url()
+    if args.cmd == "ebay-owner-ingest":
+        return cmd_ebay_owner_ingest()
     if args.cmd == "source-health":
         return asyncio.run(cmd_validate())
     if args.cmd == "backtest":
