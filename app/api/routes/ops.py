@@ -269,6 +269,17 @@ async def import_csv(file: UploadFile = File(...), session: Session = Depends(ge
 
 @router.get("/config")
 def read_config() -> dict[str, Any]:
+    from app.sold.token_store import token_status
+
+    oauth: dict[str, Any] = {}
+    try:
+        session = get_session_factory()()
+        try:
+            oauth = token_status(session)
+        finally:
+            session.close()
+    except Exception:
+        oauth = token_status(None)
     return {
         "home_country": settings.home_country,
         "base_currency": settings.base_currency,
@@ -280,6 +291,14 @@ def read_config() -> dict[str, Any]:
         "enabled_sources": settings.source_ids(),
         "scan_queries": settings.query_list(),
         "ebay_configured": bool(settings.ebay_client_id and settings.ebay_client_secret),
+        "sandbox_used": settings.ebay_api_env == "sandbox",
+        "safe_start_mode": settings.safe_start_mode,
+        "owner_oauth_connected": oauth.get("owner_oauth_connected"),
+        "scope_valid": oauth.get("scope_valid"),
+        "last_refresh_at": oauth.get("last_refresh_at"),
+        "last_sold_ingest_at": oauth.get("last_sold_ingest_at"),
+        "last_ingest_count": oauth.get("last_ingest_count"),
+        "secrets_included": False,
     }
 
 

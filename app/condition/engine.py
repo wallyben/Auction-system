@@ -167,11 +167,28 @@ def assess_condition(
             if pct < 80 and grade in {ConditionGrade.EXCELLENT, ConditionGrade.VERY_GOOD, ConditionGrade.GOOD}:
                 conf = min(conf, Decimal("0.80"))
                 extras.append("battery below 80% caps grade confidence.")
+                if pct < 70:
+                    grade = ConditionGrade.FAIR
+                    conf = min(conf, Decimal("0.78"))
         shutter = _SHUTTER.search(blob)
         if shutter:
             extras.append(f"shutter_count={shutter.group(1)}")
+            try:
+                count = int(shutter.group(1).replace(",", ""))
+            except ValueError:
+                count = 0
+            if count >= 150000 and grade in {ConditionGrade.EXCELLENT, ConditionGrade.VERY_GOOD, ConditionGrade.NEW}:
+                grade = ConditionGrade.GOOD
+                extras.append("high shutter count caps grade.")
         if re.search(r"\b(refurbished|seller refurbished|certified refurbished)\b", blob, re.I):
             extras.append("refurbished flag present.")
+        if re.search(r"please read", blob, re.I):
+            conf = min(conf, Decimal("0.78"))
+            extras.append("please-read language reduces condition confidence.")
+        if re.search(r"\b(damaged|cracked|dented|smashed)\b", blob, re.I) and grade is not ConditionGrade.FOR_PARTS:
+            grade = ConditionGrade.POOR
+            conf = min(conf, Decimal("0.80"))
+            extras.append("damage language overrides structured Used.")
         return _finish(grade, conf, " ".join(extras))
 
     for pattern, grade, confidence in KEYWORD_MAP:

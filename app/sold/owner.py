@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import io
+import re
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 
@@ -36,6 +37,11 @@ OPTIONAL = {
     "territory",
     "trade_floor",
     "notes",
+    "transaction_id",
+    "quantity",
+    "type",
+    "status",
+    "refund",
 }
 
 
@@ -67,6 +73,7 @@ def _fp(row: dict[str, str]) -> str:
             row.get("sale_date") or "",
             row.get("sale_price") or "",
             row.get("sale_platform") or "",
+            row.get("transaction_id") or row.get("acquisition_source") or "",
         ]
     )
     return hashlib.sha256(key.encode()).hexdigest()
@@ -86,6 +93,7 @@ def parse_owner_sales_csv(text: str) -> tuple[list[dict[str, str]], list[str]]:
         return [], [f"Missing required columns: {sorted(missing)}"]
     rows: list[dict[str, str]] = []
     errors: list[str] = []
+    seen_txn: set[str] = set()
     for i, raw in enumerate(reader, start=2):
         row = {(k or "").strip().lower().replace(" ", "_"): (v or "").strip() for k, v in raw.items()}
         try:
@@ -97,6 +105,38 @@ def parse_owner_sales_csv(text: str) -> tuple[list[dict[str, str]], list[str]]:
             sale_date = _date(row.get("sale_date"))
             if sale_date is None:
                 raise ValueError("sale_date required")
+            cur = (row.get("currency") or "EUR").strip().upper()
+            if len(cur) != 3 or not cur.isalpha():
+                raise ValueError("currency must be ISO 4217 3-letter code")
+            row["currency"] = cur
+            qty_raw = row.get("quantity") or "1"
+            try:
+                qty = int(Decimal(str(qty_raw).replace(",", "")))
+            except (InvalidOperation, ValueError) as exc:
+                raise ValueError("quantity invalid") from exc
+            if qty <= 0:
+                raise ValueError("quantity must be positive")
+            row["quantity"] = str(qty)
+            blob = " ".join(
+                [
+                    row.get("notes") or "",
+                    row.get("type") or "",
+                    row.get("transaction_type") or "",
+                    row.get("status") or "",
+                    row.get("refund") or "",
+                ]
+            ).lower()
+            if (row.get("refund") or "").lower() in {"yes", "true", "1", "y"}:
+                raise ValueError("refund_row")
+            if re.search(r"\b(refund|refunded|chargeback)\b", blob):
+                raise ValueError("refund_row")
+            if re.search(r"\b(returned|return to sender)\b", blob) and not re.search(r"\bno returns\b", blob):
+                raise ValueError("return_row")
+            txn = (row.get("transaction_id") or row.get("acquisition_source") or "").strip()
+            if txn:
+                if txn in seen_txn:
+                    raise ValueError("duplicate transaction_id")
+                seen_txn.add(txn)
             _d(row.get("purchase_price") or "0")
             rows.append(row)
         except ValueError as exc:
@@ -169,6 +209,9 @@ def import_owner_sales(session: Session, text: str) -> dict[str, int | list[str]
                     "provenance": "owner_csv",
                     "market": sale.territory,
                     "trade_floor": row.get("trade_floor") or None,
+                    "quantity": int(row.get("quantity") or 1),
+                    "transaction_id": row.get("transaction_id") or row.get("acquisition_source") or None,
+                    "classification": "OWNER_RECORDED",
                     "asking_relabelled": False,
                 },
             )

@@ -328,7 +328,14 @@ async def _comps_for(listing: Listing, rates: dict[str, Decimal], session=None) 
         try:
             sold = await search_sold_evidence(session, query, listing.country or "IE", listing.condition_grade or "")
             for hit in sold:
-                verdict = match_comp(listing.title, hit.title)
+                verdict = match_comp(
+                    listing.title,
+                    hit.title,
+                    subject_condition=listing.condition_raw,
+                    comp_condition=hit.condition,
+                    subject_description=listing.description or "",
+                    subject_condition_id=str((listing.extras or {}).get("conditionId") or "") or None,
+                )
                 if not verdict.accepted:
                     rejected.append({"title": hit.title, "reject_reason": verdict.reason, "source": hit.source})
                     continue
@@ -343,7 +350,7 @@ async def _comps_for(listing: Listing, rates: dict[str, Decimal], session=None) 
                         price_eur=price,
                         evidence_type=hit.evidence_type,
                         country=hit.territory,
-                        condition_score=Decimal("0.85"),
+                        condition_score=verdict.condition_match,
                         product_score=verdict.identity_similarity,
                         observed_at=hit.sold_date,
                         notes=hit.notes,
@@ -492,6 +499,7 @@ def evaluate_listing(
     exits = compare_exits(
         expected_sale_eur=valuation.expected_sale_eur,
         category=listing.category or identity.category,
+        trade_in_evidence=any(c.evidence_type == EvidenceType.TRADE_IN for c in comps),
     )
     best_quote = next((q for q in exits.quotes if q.channel == exits.best_expected_exit), exits.quotes[0])
     # Recompute net from the best exit rather than a single generic fee.

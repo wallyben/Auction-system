@@ -82,7 +82,22 @@ CANONICAL = {
     "platform_fee": {"platform_fee", "final value fee", "fvf", "fee", "commission"},
     "payment_fee": {"payment_fee", "paypal fee", "transaction fee"},
     "trade_floor": {"trade_floor", "trade in", "trade-in", "cex", "liquidation_floor"},
-    "acquisition_source": {"acquisition_source", "item number", "item id", "item_id", "order id", "transaction id"},
+    "acquisition_source": {"acquisition_source"},
+    "transaction_id": {
+        "transaction_id",
+        "transaction id",
+        "txn id",
+        "order id",
+        "order_id",
+        "item number",
+        "item id",
+        "item_id",
+        "paypal transaction id",
+    },
+    "quantity": {"quantity", "qty", "units"},
+    "type": {"type", "transaction type", "transaction_type"},
+    "status": {"status"},
+    "refund": {"refund", "refunded"},
 }
 
 

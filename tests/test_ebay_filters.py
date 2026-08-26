@@ -30,6 +30,8 @@ def test_rejects_dj_accessories_empty_box_and_wrong_sony() -> None:
     assert reject_title("PlayStation 5", "PS5 APU Foam Pad Insulation") == "accessory"
     assert reject_title("PlayStation 5", "Playstation 5 PRO 2 TB come nuova") == "ps5_pro_mismatch"
     assert reject_title("PlayStation 5", "Playstation 5 PRO Faceplates") == "accessory"
+    assert reject_title("PlayStation 5", "Sony PlayStation 5 Console Wi-Fi HDMI USB-C DualSense Controller White/Black") is None
+    assert reject_title("PlayStation 5", "DualSense Wireless Controller") == "ps5_accessory"
     assert reject_title("Sony A7 IV", "Sony A7R IV ILCE-7RM4") == "wrong_generation_a7r"
     assert reject_title("Sony A7 IV", "Kit de lentes Sony A7IV ILCE-7M4") == "bundle_or_kit"
     assert reject_title("iPhone 15 Pro 256GB", "Apple iPhone 14 Pro 256GB") == "wrong_iphone_generation"

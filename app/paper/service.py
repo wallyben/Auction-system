@@ -68,8 +68,14 @@ def open_paper_trade(session: Session, opportunity: Opportunity) -> PaperTrade |
             f"ask={listing.asking_price if listing else None} "
             f"currency={listing.currency if listing else None} "
             f"max_buy={opportunity.max_buy_eur} "
+            f"ideal_offer={opportunity.ideal_offer_eur} "
             f"predicted_resale={opportunity.expected_resale_eur} "
+            f"quick_sale={opportunity.expected_net_resale_eur} "
             f"expected_profit={opportunity.expected_profit_eur} "
+            f"downside={opportunity.downside_profit_eur} "
+            f"roi={opportunity.expected_roi} "
+            f"confidence={opportunity.valuation_confidence} "
+            f"realised_count={(opportunity.score_breakdown or {}).get('realised_count') or (opportunity.provenance_pack or {}).get('realised_count')} "
             f"expected_days={opportunity.expected_days_to_sale} "
             f"failed_gates={(opportunity.gate_results or {}).get('failures')}. "
             "Disappearance is not a sale. Outcome unknown until observed evidence exists."
@@ -92,8 +98,11 @@ def paper_summary(session: Session) -> dict:
                 "title": r.title,
                 "price": str(r.paper_purchase_price),
                 "predicted_profit": str(r.predicted_profit),
+                "predicted_exit": r.predicted_exit,
+                "predicted_days": r.predicted_days,
                 "status": r.status,
                 "outcome": r.observed_outcome,
+                "notes": (r.notes or "")[:500],
             }
             for r in rows[:20]
         ],

@@ -8,6 +8,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models.enums import EvidenceType
 from app.models.orm import SoldEvidence
 from app.sold.provider import SoldEvidenceHit
 
@@ -31,6 +32,9 @@ def persist_sold_hits(session: Session, hits: list[SoldEvidenceHit]) -> dict[str
     written = 0
     skipped = 0
     for hit in hits:
+        if hit.evidence_type in {EvidenceType.CURRENT_ASKING, EvidenceType.DEALER_RETAIL, EvidenceType.ESTIMATE}:
+            skipped += 1
+            continue
         fp = _fingerprint(hit)
         existing = session.scalar(select(SoldEvidence).where(SoldEvidence.fingerprint == fp))
         if existing:
@@ -58,6 +62,11 @@ def persist_sold_hits(session: Session, hits: list[SoldEvidenceHit]) -> dict[str
                     "provenance": hit.provenance,
                     "notes": hit.notes,
                     "product_identity": hit.identity_key,
+                    "quantity": hit.quantity,
+                    "identity_confidence": str(hit.identity_confidence) if hit.identity_confidence is not None else None,
+                    "matching_confidence": str(hit.matching_confidence) if hit.matching_confidence is not None else None,
+                    "evidence_type": hit.evidence_type.value,
+                    "classification": "REALIZED_SOLD",
                     "asking_relabelled": False,
                 },
             )

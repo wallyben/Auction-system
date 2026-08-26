@@ -75,6 +75,26 @@ async def _scheduled_audit() -> None:
         session.close()
 
 
+async def _scheduled_sold_ingest() -> None:
+    from app.sold.ebay_owner_oauth import ingest_owner_orders
+
+    session = get_session_factory()()
+    try:
+        result = await ingest_owner_orders(session, limit=100)
+        session.commit()
+        logger.info(
+            "scheduled_sold_ingest",
+            ok=result.get("ok"),
+            imported=result.get("imported"),
+            error=result.get("error"),
+        )
+    except Exception:
+        session.rollback()
+        logger.exception("scheduled_sold_ingest_failed")
+    finally:
+        session.close()
+
+
 def start_scheduler() -> None:
     global _scheduler
     import sys
@@ -104,6 +124,14 @@ def start_scheduler() -> None:
         _scheduled_deletion_retry,
         IntervalTrigger(minutes=15, jitter=20),
         id="ebay-deletion-retry",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    _scheduler.add_job(
+        _scheduled_sold_ingest,
+        IntervalTrigger(hours=3, jitter=120),
+        id="owner-sold-ingest",
         replace_existing=True,
         max_instances=1,
         coalesce=True,

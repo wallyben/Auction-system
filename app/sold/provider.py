@@ -33,6 +33,9 @@ class SoldEvidenceHit:
     identity_key: str = ""
     provenance: str = ""
     market: str = ""
+    quantity: int = 1
+    identity_confidence: Decimal | None = None
+    matching_confidence: Decimal | None = None
 
 
 class SoldEvidenceProvider(Protocol):
@@ -68,6 +71,9 @@ def _hit_from_sold_row(row: SoldEvidence, notes: str) -> SoldEvidenceHit:
         identity_key=row.canonical_product_id,
         provenance=str(extras.get("provenance") or row.source),
         market=str(extras.get("market") or row.territory),
+        quantity=int(extras.get("quantity") or 1),
+        identity_confidence=Decimal(str(extras["identity_confidence"])) if extras.get("identity_confidence") not in (None, "") else None,
+        matching_confidence=Decimal(str(extras["matching_confidence"])) if extras.get("matching_confidence") not in (None, "") else None,
     )
 
 
@@ -101,6 +107,10 @@ class IrishPanelProvider:
                 tokens = [part for part in needle.replace("-", " ").split() if len(part) > 2]
                 if tokens and not all(token in hay for token in tokens[:3]):
                     continue
+            from app.sold.match import variant_reject
+
+            if product and variant_reject(product, str(extras.get("title") or row.canonical_product_id)):
+                continue
             if market and market.upper() not in {row.territory.upper(), "ALL", ""}:
                 if row.territory.upper() not in {market.upper(), "IE", "GB", "DE", "FR", "IT", "ES", "NL"}:
                     continue
@@ -136,6 +146,10 @@ class OwnerSalesProvider:
                 tokens = [part for part in needle.replace("-", " ").split() if len(part) > 2]
                 if tokens and not all(token in hay for token in tokens[:3]):
                     continue
+            from app.sold.match import variant_reject
+
+            if product and variant_reject(product, row.product):
+                continue
             trade = (row.raw or {}).get("trade_floor")
             notes = "Owner-recorded realised transaction. Highest local weight."
             if trade:

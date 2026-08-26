@@ -34,6 +34,7 @@ from app.sold.provider import SoldEvidenceHit
 from app.sold.token_store import (
     load_ebay_refresh_token,
     load_oauth_state,
+    record_oauth_event,
     save_ebay_tokens,
     save_oauth_state,
     token_status,
@@ -53,6 +54,11 @@ ORDERS_URL = {
 }
 OWNER_SOLD_SCOPE = "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly"
 PRODUCTION_CALLBACK = "https://auction-system-l6je.onrender.com/oauth/ebay/callback"
+PRODUCTION_DECLINED = "https://auction-system-l6je.onrender.com/oauth/ebay/declined"
+PRODUCTION_PRIVACY = "https://auction-system-l6je.onrender.com/privacy/ebay"
+PORTAL_AUTH_URL = "https://developer.ebay.com/my/auth?env=production&index=0"
+OAUTH_DOCS = "https://developer.ebay.com/api-docs/static/oauth-authorization-code-grant.html"
+REFRESH_DOCS = "https://developer.ebay.com/api-docs/static/oauth-refresh-token-request.html"
 _STATE_PATH = Path("artifacts/runtime/ebay_oauth_state.txt")
 
 
@@ -71,14 +77,30 @@ def consent_status(session: Session | None = None) -> dict[str, Any]:
     redirect = _callback_url()
     tokens = token_status(session)
     refresh = load_ebay_refresh_token(session)
+    ru_is_url = ru.lower().startswith("http")
+    authorize_host = AUTHORIZE_URL[current.ebay_api_env]
+    sandbox = current.ebay_api_env == "sandbox"
+    portal = {
+        "environment": "Production" if not sandbox else "Sandbox",
+        "portal_url": PORTAL_AUTH_URL if not sandbox else "https://developer.ebay.com/my/auth?env=sandbox&index=0",
+        "display_title": "ARIE owner sold-data",
+        "privacy_policy_url": PRODUCTION_PRIVACY,
+        "auth_accepted_url": redirect,
+        "auth_declined_url": PRODUCTION_DECLINED,
+        "render_variable": "EBAY_RU_NAME",
+        "render_variable_value": "Paste the RuName identifier eBay shows after Get a RuName — not the https callback URL.",
+        "also_set": f"EBAY_OAUTH_REDIRECT_URI={redirect}",
+        "note": "The OAuth redirect_uri query parameter is the RuName, not the Auth Accepted URL.",
+    }
     steps = [
-        "Open the eBay Developer Portal for the Production ARIE application.",
-        "Create a RuName whose Auth Accepted URL is " + redirect + ".",
-        "Set EBAY_RU_NAME to that RuName (this value is the OAuth redirect_uri parameter).",
-        "Set EBAY_OAUTH_REDIRECT_URI=" + redirect + " if it is not already the default.",
-        "Open GET /oauth/ebay/start on the live host (or the consent_url below).",
-        "Sign in to eBay and click Agree. ARIE never asks for the eBay password.",
-        "The callback stores the refresh token in Postgres and ingests owner sold orders.",
+        "Deploy branch cursor/arie-commercial-readiness-7682 to the Render service auction-system-l6je.",
+        f"Open {portal['portal_url']} (Production application, User tokens / Get a RuName).",
+        f"Display Title: {portal['display_title']}",
+        f"Privacy Policy URL: {portal['privacy_policy_url']}",
+        f"Auth Accepted URL: {portal['auth_accepted_url']}",
+        f"Auth Declined URL: {portal['auth_declined_url']}",
+        "After eBay shows the RuName (YourApp-YourApp-PRD-...), set Render env EBAY_RU_NAME to that exact string and restart the service.",
+        "Open https://auction-system-l6je.onrender.com/oauth/ebay/start — sign in to eBay and click Agree. ARIE never asks for the password.",
     ]
     return {
         "configured_client": bool(current.ebay_client_id and current.ebay_client_secret),
@@ -87,8 +109,13 @@ def consent_status(session: Session | None = None) -> dict[str, Any]:
         "redirect_uri_configured": bool(redirect),
         "refresh_token_configured": bool(refresh),
         "scope": OWNER_SOLD_SCOPE,
-        "official_docs": "https://developer.ebay.com/api-docs/static/oauth-authorization-code-grant.html",
+        "official_docs": OAUTH_DOCS,
+        "refresh_docs": REFRESH_DOCS,
         "orders_docs": "https://developer.ebay.com/api-docs/sell/fulfillment/resources/order/methods/getOrders",
+        "authorize_host": authorize_host,
+        "sandbox_used": sandbox,
+        "ru_name_looks_like_url": ru_is_url,
+        "portal": portal,
         "owner_steps": steps,
         "owner_action": None if refresh else "Open consent_url, sign in to eBay, and approve. Then ARIE ingests sold orders.",
         "secrets_included": False,
@@ -100,8 +127,19 @@ def start_consent(session: Session | None = None) -> dict[str, Any]:
     current = get_settings()
     status = consent_status(session)
     ru = _ru_name()
-    if not current.ebay_client_id or not ru:
-        return {**status, "url": None, "consent_url": None, "ok": False}
+    sandbox = current.ebay_api_env == "sandbox"
+    ru_is_url = bool(ru) and ru.lower().startswith("http")
+    if not current.ebay_client_id or not ru or ru_is_url or sandbox:
+        reason = "missing_ebay_ru_name"
+        if sandbox:
+            reason = "sandbox_blocked"
+        elif ru_is_url:
+            reason = "ru_name_must_be_identifier_not_url"
+        elif not current.ebay_client_id:
+            reason = "missing_ebay_client_id"
+        elif not ru:
+            reason = "missing_ebay_ru_name"
+        return {**status, "url": None, "consent_url": None, "ok": False, "error": reason}
     state = secrets.token_urlsafe(24)
     _STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     _STATE_PATH.write_text(state, encoding="utf-8")
@@ -144,29 +182,29 @@ async def exchange_code(code: str, state: str, session: Session | None = None) -
     refresh = payload.get("refresh_token")
     if not refresh:
         return {"ok": False, "error": "missing_refresh_token"}
-    if session is not None:
-        save_ebay_tokens(
-            session,
-            refresh_token=str(refresh),
-            access_token=str(payload.get("access_token") or "") or None,
-            scope=str(payload.get("refresh_token_expires_in") and OWNER_SOLD_SCOPE or OWNER_SOLD_SCOPE),
-            token_type=str(payload.get("token_type") or "User Access Token"),
-            expires_in=int(payload.get("expires_in") or 7200),
-            extras={"grant": "authorization_code"},
-        )
-    else:
-        from app.privacy.ebay_challenge import upsert_env_key
-
-        upsert_env_key("EBAY_REFRESH_TOKEN", str(refresh))
-        get_settings.cache_clear()
-    ingested = {"imported": 0, "duplicates": 0}
-    if session is not None:
-        ingested = await ingest_owner_orders(session, limit=50)
+    if session is None:
+        return {"ok": False, "error": "database_required_for_token_persistence", "secrets_included": False}
+    save_ebay_tokens(
+        session,
+        refresh_token=str(refresh),
+        access_token=str(payload.get("access_token") or "") or None,
+        scope=OWNER_SOLD_SCOPE,
+        token_type=str(payload.get("token_type") or "User Access Token"),
+        expires_in=int(payload.get("expires_in") or 7200),
+        extras={
+            "grant": "authorization_code",
+            "refresh_token_expires_in": payload.get("refresh_token_expires_in"),
+            "token_revoked": False,
+            "last_error": None,
+        },
+    )
+    ingested = await ingest_owner_orders(session, limit=50)
     return {
         "ok": True,
         "http_status": 200,
         "refresh_token_stored": True,
-        "stored_in_database": session is not None,
+        "stored_in_database": True,
+        "tokens_encrypted": True,
         "orders_ingested": ingested,
         "secrets_included": False,
     }
@@ -181,10 +219,31 @@ def _money(block: dict[str, Any] | None) -> tuple[Decimal | None, str]:
         return None, str(block.get("currency") or "EUR")
 
 
+def _cancelled(order: dict[str, Any]) -> bool:
+    cancel = order.get("cancelStatus") or {}
+    state = str(cancel.get("cancelState") or "").upper()
+    if state in {"CANCELED", "CANCELLED"}:
+        return True
+    status = str(order.get("orderFulfillmentStatus") or "").upper()
+    return status in {"CANCELLED", "CANCELED"}
+
+
+def _line_refunded(order: dict[str, Any], item: dict[str, Any]) -> bool:
+    if item.get("refunds") or item.get("refunded"):
+        return True
+    payments = order.get("paymentSummary") or {}
+    if payments.get("refunds"):
+        return True
+    blob = f"{item.get('lineItemFulfillmentStatus') or ''} {order.get('orderPaymentStatus') or ''}".lower()
+    return "refund" in blob
+
+
 def _parse_orders(payload: dict[str, Any], *, market: str) -> list[SoldEvidenceHit]:
     hits: list[SoldEvidenceHit] = []
     for order in payload.get("orders") or []:
         if not isinstance(order, dict):
+            continue
+        if _cancelled(order):
             continue
         created = order.get("creationDate") or datetime.now(timezone.utc).isoformat()
         try:
@@ -198,6 +257,8 @@ def _parse_orders(payload: dict[str, Any], *, market: str) -> list[SoldEvidenceH
         for item in order.get("lineItems") or []:
             if not isinstance(item, dict):
                 continue
+            if _line_refunded(order, item):
+                continue
             title = str(item.get("title") or "").strip()
             if not title:
                 continue
@@ -206,11 +267,17 @@ def _parse_orders(payload: dict[str, Any], *, market: str) -> list[SoldEvidenceH
                 price, currency = _money(((order.get("pricingSummary") or {}).get("total")))
             if price is None or price <= 0:
                 continue
+            try:
+                qty = int(item.get("quantity") or 1)
+            except (TypeError, ValueError):
+                qty = 1
+            if qty <= 0:
+                continue
             identity = identify_with_resolvers(title=title)
-            condition = str(item.get("soldFormat") or "")
+            condition = str(item.get("soldFormat") or item.get("itemCondition") or "")
             hits.append(
                 SoldEvidenceHit(
-                    source="ebay_owner_fulfillment",
+                    source="ebay_owner_orders",
                     title=title,
                     sold_price_eur=price,
                     territory=territory,
@@ -227,6 +294,9 @@ def _parse_orders(payload: dict[str, Any], *, market: str) -> list[SoldEvidenceH
                     identity_key=identity.canonical_key,
                     provenance=f"fulfillment:{order.get('orderId')}:{item.get('lineItemId')}",
                     market=territory,
+                    quantity=qty,
+                    identity_confidence=identity.confidence,
+                    matching_confidence=identity.confidence,
                 )
             )
     return hits
@@ -236,8 +306,17 @@ async def ingest_owner_orders(session: Session, *, limit: int = 50) -> dict[str,
     refresh = load_ebay_refresh_token(session)
     if not refresh:
         return {"imported": 0, "duplicates": 0, "ok": False, "error": "no_refresh_token"}
-    token = await _refresh_user_token(refresh)
+    token = await _refresh_user_token(refresh, session)
     if not token:
+        st = token_status(session)
+        if st.get("token_revoked"):
+            return {
+                "imported": 0,
+                "duplicates": 0,
+                "ok": False,
+                "error": "owner_token_revoked",
+                "message": "invalid_grant: owner must re-consent. Empty ingest is not a market-sold panel.",
+            }
         return {"imported": 0, "duplicates": 0, "ok": False, "error": "refresh_failed"}
     env = settings.ebay_api_env
     params = {"limit": str(min(limit, 200))}
@@ -254,18 +333,28 @@ async def ingest_owner_orders(session: Session, *, limit: int = 50) -> dict[str,
             "http_status": response.status_code,
             "error": "fulfillment_http_error",
         }
-    hits = _parse_orders(response.json() or {}, market="IE")
+    payload = response.json() or {}
+    hits = _parse_orders(payload, market="IE")
     stats = persist_sold_hits(session, hits)
     stats["ok"] = True
-    stats["orders_seen"] = len((response.json() or {}).get("orders") or [])
+    stats["orders_seen"] = len(payload.get("orders") or [])
     stats["line_items"] = len(hits)
+    stats["empty_orders_is_not_no_market"] = True
+    if stats["orders_seen"] == 0:
+        stats["note"] = "Zero owner orders is not a general sold-comp panel. Do not infer market prices."
+    record_oauth_event(
+        session,
+        last_sold_ingest_at=datetime.now(timezone.utc).isoformat(),
+        last_ingest_count=stats.get("imported", 0),
+        last_error=None,
+    )
     return stats
 
 
 class EbayOwnerOrdersProvider:
     """Owner-only realised sales after user consent. Never uses Browse asking prices."""
 
-    name = "ebay_owner_fulfillment"
+    name = "ebay_owner_orders"
     classification = "REALIZED_SOLD"
 
     async def healthcheck(self) -> dict[str, object]:
@@ -280,7 +369,7 @@ class EbayOwnerOrdersProvider:
                 "note": status.get("owner_action"),
                 "owner_steps": status.get("owner_steps"),
             }
-        token = await _refresh_user_token(refresh)
+        token = await _refresh_user_token(refresh, None)
         if not token:
             return {
                 "provider": self.name,
@@ -316,7 +405,7 @@ class EbayOwnerOrdersProvider:
         return None
 
 
-async def _refresh_user_token(refresh: str) -> str | None:
+async def _refresh_user_token(refresh: str, session: Session | None = None) -> str | None:
     current = get_settings()
     async with httpx.AsyncClient(timeout=20.0) as client:
         response = await client.post(
@@ -324,6 +413,28 @@ async def _refresh_user_token(refresh: str) -> str | None:
             auth=(current.ebay_client_id, current.ebay_client_secret),
             data={"grant_type": "refresh_token", "refresh_token": refresh, "scope": OWNER_SOLD_SCOPE},
         )
+    body = ""
+    try:
+        body = response.text[:400]
+    except Exception:
+        body = ""
     if response.status_code != 200:
+        revoked = "invalid_grant" in body.lower() or response.status_code in {400, 401}
+        if session is not None:
+            record_oauth_event(
+                session,
+                last_error="invalid_grant" if revoked else "refresh_failed",
+                token_revoked=revoked,
+                last_refresh_http_status=response.status_code,
+            )
         return None
-    return str((response.json() or {}).get("access_token") or "") or None
+    access = str((response.json() or {}).get("access_token") or "") or None
+    if session is not None:
+        record_oauth_event(
+            session,
+            last_refresh_at=datetime.now(timezone.utc).isoformat(),
+            last_error=None,
+            token_revoked=False,
+            last_refresh_http_status=200,
+        )
+    return access

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.oauth import OAuthCredential
-from app.privacy.ebay_challenge import upsert_env_key
+from app.sold.crypto import decrypt_secret, encrypt_secret
 
 EBAY_PROVIDER = "ebay"
 EBAY_STATE_PROVIDER = "ebay_oauth_csrf"
@@ -24,7 +24,8 @@ def load_ebay_refresh_token(session: Session | None = None) -> str:
     if session is not None:
         row = session.scalar(select(OAuthCredential).where(OAuthCredential.provider == EBAY_PROVIDER))
         if row and (row.refresh_token or "").strip():
-            return row.refresh_token.strip()
+            plain = decrypt_secret(row.refresh_token.strip())
+            return (plain or "").strip()
     return (getattr(get_settings(), "ebay_refresh_token", None) or "").strip()
 
 
@@ -47,9 +48,9 @@ def save_ebay_tokens(
     if row is None:
         row = OAuthCredential(provider=EBAY_PROVIDER, extras={})
         session.add(row)
-    row.refresh_token = refresh_token
+    row.refresh_token = encrypt_secret(refresh_token)
     if access_token:
-        row.access_token = access_token
+        row.access_token = encrypt_secret(access_token)
     if scope:
         row.scope = scope
     if token_type:
@@ -58,13 +59,18 @@ def save_ebay_tokens(
         row.expires_at = expires_at
     merged = dict(row.extras or {})
     merged.update(payload)
+    merged["encrypted"] = True
     row.extras = merged
-    # Best-effort local .env mirror for CLI/dev. Render disk is ephemeral; DB is source of truth.
-    try:
-        upsert_env_key("EBAY_REFRESH_TOKEN", refresh_token)
-    except Exception:
-        pass
-    get_settings.cache_clear()
+    session.flush()
+
+
+def record_oauth_event(session: Session, **fields: Any) -> None:
+    row = session.scalar(select(OAuthCredential).where(OAuthCredential.provider == EBAY_PROVIDER))
+    if row is None:
+        return
+    merged = dict(row.extras or {})
+    merged.update({k: v for k, v in fields.items() if v is not None})
+    row.extras = merged
     session.flush()
 
 
@@ -89,12 +95,24 @@ def load_oauth_state(session: Session | None) -> str:
 def token_status(session: Session | None = None) -> dict[str, Any]:
     refresh = load_ebay_refresh_token(session)
     db_row = None
+    extras: dict[str, Any] = {}
     if session is not None:
         db_row = session.scalar(select(OAuthCredential).where(OAuthCredential.provider == EBAY_PROVIDER))
+        extras = dict((db_row.extras or {}) if db_row else {})
+    revoked = extras.get("token_revoked") is True or extras.get("last_error") == "invalid_grant"
+    scope = (db_row.scope if db_row else None) or extras.get("scope")
     return {
+        "owner_oauth_connected": bool(refresh) and not revoked,
+        "scope_valid": bool(scope) and "sell.fulfillment.readonly" in str(scope) and not revoked,
         "refresh_token_configured": bool(refresh),
         "refresh_token_in_database": bool(db_row and (db_row.refresh_token or "").strip()),
-        "scope": (db_row.scope if db_row else None) or None,
+        "tokens_encrypted": bool(extras.get("encrypted")),
+        "scope": scope,
+        "last_refresh_at": extras.get("last_refresh_at"),
+        "last_sold_ingest_at": extras.get("last_sold_ingest_at"),
+        "last_ingest_count": extras.get("last_ingest_count"),
+        "last_error": extras.get("last_error") if extras.get("last_error") not in {None, ""} else None,
+        "token_revoked": revoked,
         "updated_at": db_row.updated_at.isoformat() if db_row and db_row.updated_at else None,
         "secrets_included": False,
     }

@@ -53,6 +53,7 @@ class ValuationResult:
     display_expected: Decimal = ZERO
     display_low: Decimal = ZERO
     display_high: Decimal = ZERO
+    sample_size: int = 0
 
 
 def _weight(comp: Comp, now: datetime) -> Decimal:
@@ -83,6 +84,7 @@ def value_from_comps(comps: list[Comp], *, now: datetime | None = None) -> Valua
             foreign_count=0,
             expected_days=None,
             provenance={"reason": "No comparables. Fail closed."},
+            sample_size=0,
         )
     for comp in comps:
         if not comp.evidence_tier:
@@ -128,6 +130,8 @@ def value_from_comps(comps: list[Comp], *, now: datetime | None = None) -> Valua
     else:
         method = "foreign_realised_localised"
         confidence = min(confidence, Decimal("0.62"))
+    if len(usable) < 3:
+        confidence = min(confidence, Decimal("0.58"))
     if confidence > Decimal("0.95"):
         confidence = Decimal("0.95")
     p10 = percentile(ordered, Decimal("0.10"))
@@ -189,4 +193,5 @@ def value_from_comps(comps: list[Comp], *, now: datetime | None = None) -> Valua
         display_expected=display_money(expected, confidence=confidence),
         display_low=display_money(low, confidence=confidence),
         display_high=display_money(high, confidence=confidence),
+        sample_size=len(usable),
     )

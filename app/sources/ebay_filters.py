@@ -15,7 +15,7 @@ ACCESSORY_RE = re.compile(
     r"stand\b|skin\b|decal|sticker|faceplates?|"
     r"foam pad|insulation pad|power socket|dkn\d*|"
     r"repair part|replacement repair|replacement part|moving barrel|"
-    r"hall effect stick|drift (?:fix|reparatur)|dualsense|manette|"
+    r"hall effect stick|drift (?:fix|reparatur)|"
     r"rechargement|charging station|controller stick|"
     r"display model|dummy|housing only|bezel|button set|"
     r"barrel|riparazione|reparaturteil|"
