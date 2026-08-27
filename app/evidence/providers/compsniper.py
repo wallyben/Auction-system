@@ -65,6 +65,7 @@ class CompSniperHealth:
             "provider": self.provider,
             "status": self.status,
             "configured": self.configured,
+            "enabled": bool(_key()),
             "reachable": self.reachable,
             "last_http_status": self.last_http_status,
             "quota_remaining": self.quota_remaining,
@@ -109,8 +110,25 @@ def _key() -> str:
     return (settings.compsniper_api_key or "").strip()
 
 
+COMPLETED_LISTING_TYPES = {
+    "sold",
+    "buy_it_now",
+    "buyitnow",
+    "auction",
+    "best_offer_accepted",
+    "bestofferaccepted",
+    "offer",
+    "",
+}
+
+
 def _enabled() -> bool:
-    return bool(settings.compsniper_enabled)
+    """A configured API key enables CompSniper.
+
+    COMPSNIPER_ENABLED defaulted false, so production could hold a live key
+    and still never query. The key is the credential; blank key disables.
+    """
+    return bool(_key())
 
 
 def provider_status() -> str:
@@ -120,10 +138,8 @@ def provider_status() -> str:
         return DEGRADED
     if HEALTH.last_http_status and HEALTH.last_http_status >= 500:
         return DEGRADED
-    if HEALTH.last_success_at:
+    if HEALTH.last_success_at or HEALTH.last_http_status == 200:
         return LIVE
-    if not _enabled():
-        return DISABLED
     if not _key():
         return BLOCKED_CREDENTIALS
     return LIVE
@@ -133,26 +149,30 @@ def compsniper_health() -> dict[str, object]:
     HEALTH.configured = bool(_key()) or bool(HEALTH.last_http_status)
     HEALTH.status = provider_status()
     if HEALTH.status == DISABLED and not HEALTH.last_error:
-        HEALTH.last_error = "COMPSNIPER_ENABLED is false."
+        HEALTH.last_error = "COMPSNIPER_API_KEY is not set." if not _key() else "CompSniper disabled."
     if HEALTH.status == BLOCKED_CREDENTIALS and not HEALTH.last_error:
         HEALTH.last_error = "COMPSNIPER_API_KEY is not set."
     return HEALTH.as_dict()
 
 
 def _apply_headers(headers: httpx.Headers, status_code: int) -> None:
-    def _int(name: str) -> int | None:
-        raw = headers.get(name)
-        if raw is None:
-            return None
-        try:
-            return int(str(raw).strip())
-        except ValueError:
-            return None
+    def _int(*names: str) -> int | None:
+        for name in names:
+            raw = headers.get(name)
+            if raw is None:
+                continue
+            try:
+                return int(str(raw).split(";")[0].strip())
+            except ValueError:
+                continue
+        return None
 
-    HEALTH.rate_limit_limit = _int("X-RateLimit-Limit")
-    HEALTH.rate_limit_remaining = _int("X-RateLimit-Remaining")
-    HEALTH.quota_limit = _int("X-Usage-Limit")
-    remaining = _int("X-Usage-Remaining")
+    HEALTH.rate_limit_limit = _int("X-RateLimit-Limit", "RateLimit-Limit", "X-Rate-Limit-Limit")
+    HEALTH.rate_limit_remaining = _int(
+        "X-RateLimit-Remaining", "RateLimit-Remaining", "X-Rate-Limit-Remaining"
+    )
+    HEALTH.quota_limit = _int("X-Usage-Limit", "X-Quota-Limit", "X-Monthly-Limit")
+    remaining = _int("X-Usage-Remaining", "X-Quota-Remaining", "X-Monthly-Remaining")
     if remaining is not None:
         HEALTH.quota_remaining = remaining
     HEALTH.last_http_status = status_code
@@ -239,41 +259,68 @@ class CompSniperPage:
     error: str | None = None
 
 
+def _first(payload: dict[str, Any], *keys: str) -> object:
+    for key in keys:
+        if key in payload and payload[key] not in (None, ""):
+            return payload[key]
+    return None
+
+
+def _money_and_currency(value: object, currency_fallback: object) -> tuple[Decimal | None, str | None]:
+    if isinstance(value, dict):
+        amount = parse_money(value.get("amount") or value.get("value") or value.get("price"))
+        currency = str(value.get("currency") or value.get("currencyCode") or currency_fallback or "") or None
+        return amount, currency
+    return parse_money(value), (str(currency_fallback or "") or None)
+
+
 def parse_item(payload: dict[str, Any]) -> CompSniperItem | None:
     if not isinstance(payload, dict):
         return None
-    item_id = str(payload.get("itemId") or "").strip()
-    title = str(payload.get("title") or "").strip()
-    listing_type = str(payload.get("listingType") or "sold").lower()
+    item_id = str(_first(payload, "itemId", "item_id", "id") or "").strip()
+    title = str(_first(payload, "title", "itemTitle", "name") or "").strip()
+    listing_type = str(_first(payload, "listingType", "listing_type") or "sold").lower().replace(" ", "_")
     if not item_id and not title:
         return None
-    cid = payload.get("conditionId")
+    cid = _first(payload, "conditionId", "condition_id")
     try:
         condition_id = int(cid) if cid is not None else None
     except (TypeError, ValueError):
         condition_id = None
+    boa = _first(payload, "bestOfferAccepted", "isBestOfferAccepted", "best_offer_accepted")
+    if listing_type in {"best_offer_accepted", "bestofferaccepted"}:
+        boa = True
+    sold_price, sold_currency = _money_and_currency(
+        _first(payload, "soldPrice", "sold_price", "price", "salePrice"),
+        _first(payload, "soldCurrency", "sold_currency", "currency"),
+    )
+    shipping_price, shipping_currency = _money_and_currency(
+        _first(payload, "shippingPrice", "shipping_price"),
+        _first(payload, "shippingCurrency", "shipping_currency", "soldCurrency", "currency"),
+    )
+    total_price, _ = _money_and_currency(_first(payload, "totalPrice", "total_price"), sold_currency)
     return CompSniperItem(
-        item_id=item_id or str(payload.get("url") or title)[:64],
-        url=str(payload.get("url") or "") or None,
-        epid=str(payload.get("epid") or "") or None,
+        item_id=item_id or str(_first(payload, "url") or title)[:64],
+        url=str(_first(payload, "url", "itemUrl", "itemWebUrl") or "") or None,
+        epid=str(_first(payload, "epid", "ePID") or "") or None,
         title=title,
-        condition=str(payload.get("condition") or "") or None,
+        condition=str(_first(payload, "condition", "conditionDisplayName") or "") or None,
         condition_id=condition_id,
-        buying_format=str(payload.get("buyingFormat") or "") or None,
-        best_offer_accepted=bool(payload.get("bestOfferAccepted")),
+        buying_format=str(_first(payload, "buyingFormat", "buying_format") or "") or None,
+        best_offer_accepted=bool(boa),
         listing_type=listing_type,
-        ended_at=parse_sold_at(payload.get("endedAt")),
-        sold_price=parse_money(payload.get("soldPrice")),
-        sold_currency=(str(payload.get("soldCurrency") or "") or None),
-        shipping_price=parse_money(payload.get("shippingPrice")),
-        shipping_currency=(str(payload.get("shippingCurrency") or "") or None),
-        shipping_type=str(payload.get("shippingType") or "") or None,
-        total_price=parse_money(payload.get("totalPrice")),
-        seller_username=str(payload.get("sellerUsername") or "") or None,
-        seller_positive_percent=_optional_float(payload.get("sellerPositivePercent")),
-        seller_feedback_score=_optional_int(payload.get("sellerFeedbackScore")),
-        item_location=str(payload.get("itemLocation") or "") or None,
-        scraped_at=parse_sold_at(payload.get("scrapedAt")),
+        ended_at=parse_sold_at(_first(payload, "endedAt", "ended_at", "soldAt", "sold_date", "endDate")),
+        sold_price=sold_price,
+        sold_currency=sold_currency,
+        shipping_price=shipping_price,
+        shipping_currency=shipping_currency,
+        shipping_type=str(_first(payload, "shippingType", "shipping_type") or "") or None,
+        total_price=total_price,
+        seller_username=str(_first(payload, "sellerUsername", "seller_username") or "") or None,
+        seller_positive_percent=_optional_float(_first(payload, "sellerPositivePercent", "seller_positive_percent")),
+        seller_feedback_score=_optional_int(_first(payload, "sellerFeedbackScore", "seller_feedback_score")),
+        item_location=str(_first(payload, "itemLocation", "item_location") or "") or None,
+        scraped_at=parse_sold_at(_first(payload, "scrapedAt", "scraped_at")),
         raw=payload,
     )
 
@@ -341,9 +388,11 @@ class CompSniperProvider:
             "sold": "true" if sold else "false",
             "itemCondition": item_condition,
             "includeCompleteListing": "true",
+            "includeCompletedListings": "true",
         }
         if category_id:
             params["categoryId"] = category_id
+            params["category_id"] = category_id
         own_client = client is None
         client = client or httpx.AsyncClient(timeout=settings.request_timeout_seconds)
         try:
@@ -405,11 +454,17 @@ class CompSniperProvider:
                 ok=False, http_status=response.status_code, error_code=code or "http_error", error=error,
             )
         items: list[CompSniperItem] = []
-        for raw_item in body.get("items") or []:
+        raw_items = body.get("items") or body.get("results") or body.get("listings") or []
+        data = body.get("data")
+        if isinstance(data, dict):
+            raw_items = data.get("items") or data.get("results") or raw_items
+        elif isinstance(data, list) and not raw_items:
+            raw_items = data
+        for raw_item in raw_items:
             parsed_item = parse_item(raw_item)
             if parsed_item is None:
                 continue
-            if sold and parsed_item.listing_type not in {"sold", ""}:
+            if sold and parsed_item.listing_type not in COMPLETED_LISTING_TYPES:
                 continue
             items.append(parsed_item)
         HEALTH.status = LIVE

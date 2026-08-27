@@ -15,6 +15,13 @@ logger = get_logger("arie.jobs")
 _scheduler: AsyncIOScheduler | None = None
 _running = False
 
+REQUIRED_JOB_IDS = (
+    "scan-live-sources",
+    "sold-evidence-refresh",
+    "revalue-after-evidence",
+    "revalue-all-active",
+)
+
 
 def scheduler_status() -> dict[str, object]:
     jobs = []
@@ -176,6 +183,14 @@ def start_scheduler() -> None:
         _scheduled_sold_refresh,
         IntervalTrigger(hours=6, jitter=180),
         id="sold-evidence-refresh",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    _scheduler.add_job(
+        _scheduled_revalue,
+        IntervalTrigger(hours=6, jitter=90),
+        id="revalue-after-evidence",
         replace_existing=True,
         max_instances=1,
         coalesce=True,

@@ -9,6 +9,8 @@
 
 <section class="controls wrap">
   <form method="post" action="/scan-now"><button type="submit" class="primary">Scan all now</button></form>
+  <form method="post" action="/sold-refresh"><button type="submit">Refresh sold evidence</button></form>
+  <form method="post" action="/revalue-now"><button type="submit">Revalue book</button></form>
   <form method="post" action="/scan-source">
     <input name="source_id" placeholder="source id" required>
     <button>Scan source</button>
@@ -52,9 +54,9 @@
       {% if o.value_status == "UNVALIDATED_VALUE" %}<span class="pill REVIEW">UNVALIDATED_VALUE</span>{% endif %}
       <h3><a href="/opportunities/{{ o.id }}/view">{{ (o.listing.title if o.listing else "")[:80] }}</a></h3>
       <p>BUY PRICE: {% if o.listing %}{{ o.listing.currency }} {{ '%.0f'|format(o.listing.asking_price or 0) }}{% endif %} · MAX BUY: €{{ '%.0f'|format(o.max_buy_eur) }}</p>
-      <p>EXPECTED SALE: €{{ '%.0f'|format(o.expected_resale_eur) }} · QUICK SALE: €{{ '%.0f'|format(whyv.get("p25")|float if whyv.get("p25") else 0) }}</p>
+      <p>SOLD MEDIAN: €{{ '%.0f'|format(whyv.get("median")|float if whyv.get("median") else 0) }} · EXPECTED SALE: €{{ '%.0f'|format(o.expected_resale_eur) }} · QUICK SALE: €{{ '%.0f'|format(whyv.get("p25")|float if whyv.get("p25") else 0) }}</p>
       <p>EXPECTED NET PROFIT: €{{ '%.0f'|format(o.expected_profit_eur) }} · DOWNSIDE: €{{ '%.0f'|format(o.downside_profit_eur) }}</p>
-      <p>REALISED COMPS N: {{ whyv.get("realised_comp_count") or "0" }} · EVIDENCE: {{ whyv.get("method") }}</p>
+      <p>REALISED COMPS N: {{ whyv.get("realised_comp_count") or "0" }} · LIQUIDITY: {{ pack.get("liquidity", {}).get("kind") }} · EVIDENCE: {{ whyv.get("method") }}</p>
       <p class="meta">IDENTITY {{ '%.0f'|format(o.identity_confidence * 100) }}% · CONDITION {{ '%.0f'|format(o.condition_confidence * 100) }}% · {{ pack.get("liquidity", {}).get("kind") }}</p>
       <p class="meta">FAILED GATES: {{ (o.gate_results.failures or []) | join(", ") or "none" }}</p>
     </article>
@@ -69,7 +71,7 @@
   <h2>HIGH-EVIDENCE WATCH</h2>
   {% if watch_high %}
   <table>
-    <thead><tr><th>Item</th><th>Ask</th><th>Max buy</th><th>Expected sale</th><th>Realised n</th><th>Failed gates</th></tr></thead>
+    <thead><tr><th>Item</th><th>Ask</th><th>Max buy</th><th>Sold median</th><th>Expected sale</th><th>Quick sale</th><th>Realised n</th><th>Liquidity</th><th>Failed gates</th></tr></thead>
     <tbody>
     {% for o in watch_high %}
     {% set pack = o.provenance_pack or {} %}
@@ -78,8 +80,11 @@
       <td><a href="/opportunities/{{ o.id }}/view">{{ (o.listing.title if o.listing else "")[:80] }}</a></td>
       <td>{% if o.listing %}{{ o.listing.currency }} {{ '%.0f'|format(o.listing.asking_price or 0) }}{% endif %}</td>
       <td>€{{ '%.0f'|format(o.max_buy_eur) }}</td>
+      <td>€{{ '%.0f'|format(whyv.get("median")|float if whyv.get("median") else 0) }}</td>
       <td>€{{ '%.0f'|format(o.expected_resale_eur) }}</td>
+      <td>€{{ '%.0f'|format(whyv.get("p25")|float if whyv.get("p25") else 0) }}</td>
       <td>{{ whyv.get("realised_comp_count") or 0 }}</td>
+      <td>{{ pack.get("liquidity", {}).get("kind") }}</td>
       <td class="warn">{{ (o.gate_results.failures or []) | join(", ") }}</td>
     </tr>
     {% endfor %}

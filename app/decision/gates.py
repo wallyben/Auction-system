@@ -31,6 +31,66 @@ GATES = (
 )
 
 
+def _is_camera_body(product_class: str | None, category: str | None) -> bool:
+    klass = (product_class or "").lower()
+    if klass == "camera_body":
+        return True
+    return False
+
+
+def _safe_start_pass(
+    *,
+    purchase: Decimal,
+    valuation_confidence: Decimal,
+    safe_conf: Decimal,
+    downside_profit: Decimal,
+    realised_count: int,
+    roi: Decimal,
+    liquidity_confidence: Decimal,
+    product_class: str | None,
+    category: str | None,
+    liquidity_kind: str | None,
+    all_in_cost: Decimal,
+    p25_sale_eur: Decimal | None,
+) -> bool:
+    """SAFE_START is a capital-at-risk programme, not a universal €250 SKU cap.
+
+    Uncertified categories keep the €250 purchase cap.
+    camera_body uses an evidence-driven starting limit: thick realised sample,
+    known velocity, non-negative p25 downside, and a conservative purchase cap
+    below the full book limit. The camera cap is not tuned to a live listing.
+    """
+    if not settings.safe_start_mode:
+        return purchase <= as_decimal(settings.max_purchase_eur) and downside_profit >= ZERO
+    if not _is_camera_body(product_class, category):
+        return (
+            purchase <= as_decimal(settings.safe_start_max_purchase_eur)
+            and valuation_confidence >= safe_conf
+            and downside_profit >= ZERO
+        )
+    camera_limit = as_decimal(settings.safe_start_camera_max_purchase_eur)
+    min_realised = int(getattr(settings, "safe_start_camera_min_realised", 8) or 8)
+    max_loss = as_decimal(settings.max_single_item_loss_eur)
+    min_roi = as_decimal(settings.min_roi)
+    velocity_known = (liquidity_kind or "") not in {"", "UNKNOWN"}
+    p25 = p25_sale_eur if p25_sale_eur is not None else ZERO
+    # Capital at risk on the p25 sale: all-in cost minus p25 gross (conservative;
+    # fees still sit in downside_profit which must also be >= 0).
+    capital_at_risk = all_in_cost - p25 if p25 > ZERO else all_in_cost
+    if capital_at_risk < ZERO:
+        capital_at_risk = ZERO
+    return (
+        purchase <= camera_limit
+        and valuation_confidence >= safe_conf
+        and downside_profit >= ZERO
+        and realised_count >= min_realised
+        and roi >= min_roi
+        and liquidity_confidence >= Decimal("0.40")
+        and velocity_known
+        and capital_at_risk <= max_loss
+    )
+
+
 @dataclass(slots=True)
 class GateResult:
     engine_decision: Decision
@@ -77,6 +137,9 @@ def apply_money_ready_gates(
     localisation_confidence: Decimal | None = None,
     sold_evidence_fresh: bool = True,
     valuation_anomaly: bool = False,
+    product_class: str | None = None,
+    liquidity_kind: str | None = None,
+    p25_sale_eur: Decimal | None = None,
 ) -> GateResult:
     min_id = as_decimal(settings.buy_ready_min_identity)
     min_cond = as_decimal(settings.buy_ready_min_condition)
@@ -120,13 +183,21 @@ def apply_money_ready_gates(
     gates["MAX_BUY_PASS"] = under_max and max_buy > ZERO
     gates["DATA_PROVENANCE_PASS"] = provenance_complete and not valuation_anomaly
     gates["CATEGORY_CERT_PASS"] = category_certified or settings.owner_override_uncertified
-    safe_limit = as_decimal(settings.safe_start_max_purchase_eur if settings.safe_start_mode else settings.max_purchase_eur)
     safe_conf = as_decimal(settings.safe_start_min_confidence) if settings.safe_start_mode else as_decimal(settings.min_confidence)
     purchase = asking or purchase_price
-    gates["SAFE_START_PASS"] = (
-        purchase <= safe_limit
-        and valuation_confidence >= safe_conf
-        and downside_profit >= ZERO
+    gates["SAFE_START_PASS"] = _safe_start_pass(
+        purchase=purchase,
+        valuation_confidence=valuation_confidence,
+        safe_conf=safe_conf,
+        downside_profit=downside_profit,
+        realised_count=realised_count,
+        roi=roi,
+        liquidity_confidence=liquidity_confidence,
+        product_class=product_class,
+        category=category,
+        liquidity_kind=liquidity_kind,
+        all_in_cost=all_in_cost,
+        p25_sale_eur=p25_sale_eur,
     )
     gates["PRODUCTION_SOURCE_PASS"] = not sandbox_source
     failures = [name for name, ok in gates.items() if not ok]

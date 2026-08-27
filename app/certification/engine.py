@@ -87,12 +87,26 @@ def evaluate_category_certification(metrics: CategoryMetrics) -> CertificationVe
     )
 
 
-def category_is_certified(category: str | None) -> bool:
-    if not category:
+def category_is_certified(
+    category: str | None,
+    session=None,
+    product_class: str | None = None,
+) -> bool:
+    if not category and not product_class:
         return False
-    if category in settings.certified_category_list():
+    if category in settings.certified_category_list() or product_class in settings.certified_category_list():
         return True
-    return CATEGORY_DEFAULTS.get(category, CategoryCert.NOT_CERTIFIED) is CategoryCert.CERTIFIED
+    if CATEGORY_DEFAULTS.get(category or "", CategoryCert.NOT_CERTIFIED) is CategoryCert.CERTIFIED:
+        return True
+    if session is not None and (
+        (category or "").lower() in {"cameras", "camera", "camera_body"}
+        or (product_class or "").lower() == "camera_body"
+    ):
+        from app.sold.certify import live_camera_body_certification
+
+        snap = live_camera_body_certification(session)
+        return bool(snap.get("certified"))
+    return False
 
 
 def exit_is_certified(channel: str | None) -> bool:

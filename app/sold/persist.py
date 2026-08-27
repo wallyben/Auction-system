@@ -129,6 +129,7 @@ def persist_canonical_sold(session: Session, records: list[Any]) -> dict[str, in
             "imported_at": rec.imported_at.isoformat() if rec.imported_at else None,
             "source_listing_id": rec.source_listing_id,
             "best_offer_accepted": rec.best_offer_accepted,
+            "price_certainty": getattr(rec, "price_certainty", "KNOWN_TRANSACTION"),
             "listing_type": rec.listing_type,
             "raw": rec.raw,
             "ticket_level": True,

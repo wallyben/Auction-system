@@ -32,6 +32,7 @@
   <section class="numbers">
     <div><span>BUY PRICE</span><strong>{% if opportunity.listing %}{{ opportunity.listing.currency }} {{ '%.0f'|format(opportunity.listing.asking_price or 0) }}{% endif %}</strong></div>
     <div class="emphasis"><span>MAX BUY</span><strong>€{{ '%.0f'|format(opportunity.max_buy_eur) }}</strong></div>
+    <div><span>SOLD MEDIAN</span><strong>{% if opportunity.value_status == "UNVALIDATED_VALUE" %}n/a{% else %}€{{ '%.0f'|format((opportunity.provenance_pack.why_this_value.median if opportunity.provenance_pack and opportunity.provenance_pack.why_this_value else 0)|float) }}{% endif %}</strong></div>
     <div><span>EXPECTED SALE</span><strong>{% if opportunity.value_status == "UNVALIDATED_VALUE" %}n/a{% else %}€{{ '%.0f'|format(opportunity.expected_resale_eur) }}{% endif %}</strong></div>
     <div><span>QUICK SALE</span><strong>{% if opportunity.value_status == "UNVALIDATED_VALUE" %}n/a{% else %}€{{ '%.0f'|format((opportunity.provenance_pack.why_this_value.p25 if opportunity.provenance_pack and opportunity.provenance_pack.why_this_value else 0)|float) }}{% endif %}</strong></div>
     <div><span>EXPECTED NET PROFIT</span><strong>€{{ '%.0f'|format(opportunity.expected_profit_eur) }}</strong></div>
@@ -50,6 +51,14 @@
     {% if whyv %}
     <p>Method <strong>{{ whyv.method }}</strong> · status <strong>{{ whyv.value_status }}</strong> · algorithm {{ opportunity.algorithm_version }} · evaluated {{ opportunity.last_evaluated_at }}</p>
     <p>Realised comps: {{ whyv.realised_comp_count }} · median {{ whyv.median }} · p25 {{ whyv.p25 }} · p75 {{ whyv.p75 }} · asking implied (not a sale) {{ whyv.asking_implied_eur }} · evidence age days {{ whyv.evidence_age_days }}</p>
+    <p>Accepted sold tickets:</p>
+    <ul>
+      {% for c in (whyv.accepted_sold or [])[:20] %}
+      <li>{% if c.url %}<a href="{{ c.url }}">{{ c.title }}</a>{% else %}{{ c.title }}{% endif %} — €{{ c.price_eur }} {{ c.country }} {{ c.type }}</li>
+      {% else %}
+      <li>None stored. Fail closed — asking is not a sale.</li>
+      {% endfor %}
+    </ul>
     {% else %}
     <p class="warn">No valuation explanation stored. Treat as unvalidated.</p>
     {% endif %}

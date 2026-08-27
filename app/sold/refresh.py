@@ -18,7 +18,7 @@ from app.core.logging import get_logger
 from app.evidence.providers.compsniper import CompSniperProvider, HEALTH, compsniper_health
 from app.models.orm import Listing, SoldEvidence
 from app.observability.metrics import record_metric
-from app.sold.cache import cache_is_fresh, get_cache, upsert_cache
+from app.sold.cache import cache_is_fresh, cache_is_successful, get_cache, upsert_cache
 from app.sold.cameras import CAMERA_BODIES, CameraBody, camera_from_identity, query_plan_for
 from app.sold.normalize import CanonicalSoldRecord, normalize_item
 from app.sold.persist import persist_canonical_sold
@@ -319,11 +319,23 @@ def evidence_freshness(
         get_cache(session, canonical_product_id=canonical_product_id, marketplace=m)
         for m in ("GB", "DE", "FR")
     ]
-    cache_fresh = any(cache_is_fresh(row) for row in cache_rows if row)
+    cache_fresh = any(cache_is_successful(row) for row in cache_rows if row)
+    stale_reason = ""
+    if not cache_fresh:
+        stale_reason = "stale_cache"
+        failed = [row for row in cache_rows if row and row.last_http_status not in {200, None}]
+        if failed:
+            codes = {int(row.last_http_status) for row in failed if row.last_http_status}
+            if 401 in codes:
+                stale_reason = "provider_unauthorized"
+            elif 429 in codes:
+                stale_reason = "provider_rate_limited"
+            elif any(code >= 500 for code in codes):
+                stale_reason = "provider_outage"
     fresh = age <= max_age and cache_fresh
     return {
         "fresh": fresh,
-        "reason": "" if fresh else ("stale_cache" if not cache_fresh else "stale_sold_dates"),
+        "reason": "" if fresh else (stale_reason or "stale_sold_dates"),
         "n": len(accepted),
         "age_days": age,
         "max_age_days": max_age,

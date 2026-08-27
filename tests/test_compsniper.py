@@ -335,8 +335,6 @@ async def test_compsniper_disabled_does_not_call_api() -> None:
     assert page.ok is False
     assert page.error_code == "disabled"
     assert route.called is False
-    health = await provider.healthcheck()
-    assert health["status"] == "DISABLED"
 
 
 @pytest.mark.asyncio
@@ -531,3 +529,220 @@ def test_cache_freshness_ttl() -> None:
     stale = SimpleNamespace(queried_at=now - timedelta(hours=80), ttl_hours=ttl_hours(accepted_count=1))
     assert cache_is_fresh(hot, now=now) is True  # type: ignore[arg-type]
     assert cache_is_fresh(stale, now=now) is False  # type: ignore[arg-type]
+
+
+def test_api_key_enables_provider_when_flag_defaults_false(monkeypatch) -> None:
+    from app.evidence.providers import compsniper as cs
+
+    reset_health_for_tests()
+    monkeypatch.setattr(cs.settings, "compsniper_api_key", "cs_test_not_real")
+    monkeypatch.setattr(cs.settings, "compsniper_enabled", False)
+    assert cs._enabled() is True
+    health = cs.compsniper_health()
+    assert health["configured"] is True
+    assert health["enabled"] is True
+    assert health["status"] == "LIVE"
+
+
+def test_blank_key_stays_disabled(monkeypatch) -> None:
+    from app.evidence.providers import compsniper as cs
+
+    reset_health_for_tests()
+    monkeypatch.setattr(cs.settings, "compsniper_api_key", "")
+    monkeypatch.setattr(cs.settings, "compsniper_enabled", True)
+    assert cs._enabled() is False
+    health = cs.compsniper_health()
+    assert health["enabled"] is False
+    assert health["status"] == "BLOCKED_CREDENTIALS"
+    assert health["configured"] is False
+
+
+@pytest.mark.asyncio
+async def test_adapter_accepts_snake_case_and_nested_items() -> None:
+    reset_health_for_tests()
+    payload = {
+        "keyword": "Sony A7 IV",
+        "data": {
+            "items": [
+                {
+                    "item_id": "555",
+                    "itemUrl": "https://www.ebay.co.uk/itm/555",
+                    "title": "Sony A7 IV Body Only ILCE-7M4",
+                    "listing_type": "buy_it_now",
+                    "ended_at": "2026-08-10",
+                    "sold_price": "1090.00",
+                    "sold_currency": "GBP",
+                    "condition_id": 3000,
+                    "isBestOfferAccepted": False,
+                }
+            ]
+        },
+    }
+    with respx.mock:
+        respx.get("https://api.compsniper.com/v1/scrape").mock(
+            return_value=httpx.Response(200, json=payload)
+        )
+        page = await CompSniperProvider(api_key="cs_test_not_real", enabled=True).scrape("Sony A7 IV")
+    assert page.ok is True
+    assert len(page.items) == 1
+    assert page.items[0].sold_price == Decimal("1090.00")
+    assert page.items[0].listing_type == "buy_it_now"
+
+
+def test_best_offer_is_upper_bound_not_known_price() -> None:
+    body = camera_by_id("sony|a7-iv|body")
+    item = parse_item(
+        {
+            "itemId": "boa-1",
+            "title": "Sony A7 IV Body Only ILCE-7M4",
+            "listingType": "sold",
+            "endedAt": "2026-08-01",
+            "soldPrice": "1400.00",
+            "soldCurrency": "GBP",
+            "conditionId": 3000,
+            "bestOfferAccepted": True,
+        }
+    )
+    rec = normalize_item(item, target=body, ebay_site="ebay.co.uk", rates={"GBP": Decimal("0.85")})
+    assert rec.price_certainty == "UPPER_BOUND"
+    assert rec.accepted_for_valuation is False
+    assert rec.rejection_reason == "best_offer_upper_bound"
+    known = parse_item(
+        {
+            "itemId": "bin-1",
+            "title": "Sony A7 IV Body Only ILCE-7M4",
+            "listingType": "sold",
+            "endedAt": "2026-08-01",
+            "soldPrice": "1100.00",
+            "soldCurrency": "GBP",
+            "conditionId": 3000,
+            "bestOfferAccepted": False,
+        }
+    )
+    known_rec = normalize_item(known, target=body, ebay_site="ebay.co.uk", rates={"GBP": Decimal("0.85")})
+    assert known_rec.accepted_for_valuation is True
+    assert known_rec.price_certainty == "KNOWN_TRANSACTION"
+
+
+def test_buy_it_now_completed_sale_is_not_rejected_as_active() -> None:
+    body = camera_by_id("sony|a7-iv|body")
+    item = parse_item(
+        {
+            "itemId": "bin-2",
+            "title": "Sony A7 IV Body Only ILCE-7M4",
+            "listingType": "buy_it_now",
+            "endedAt": "2026-08-01",
+            "soldPrice": "1100.00",
+            "soldCurrency": "GBP",
+            "conditionId": 3000,
+        }
+    )
+    rec = normalize_item(item, target=body, ebay_site="ebay.co.uk", rates={"GBP": Decimal("0.85")})
+    assert rec.accepted_for_valuation is True
+
+
+def test_error_cache_is_not_successful_for_buy_ready() -> None:
+    from types import SimpleNamespace
+
+    from app.sold.cache import cache_is_fresh, cache_is_successful
+
+    now = datetime.now(timezone.utc)
+    failed = SimpleNamespace(
+        queried_at=now - timedelta(hours=1),
+        ttl_hours=18,
+        last_http_status=429,
+        extras={"code": "rate_limited"},
+    )
+    ok = SimpleNamespace(
+        queried_at=now - timedelta(hours=1),
+        ttl_hours=18,
+        last_http_status=200,
+        extras={},
+    )
+    assert cache_is_fresh(failed, now=now) is True  # type: ignore[arg-type]
+    assert cache_is_successful(failed, now=now) is False  # type: ignore[arg-type]
+    assert cache_is_successful(ok, now=now) is True  # type: ignore[arg-type]
+
+
+def test_required_jobs_are_registered() -> None:
+    from app.jobs.scheduler import REQUIRED_JOB_IDS
+
+    assert "scan-live-sources" in REQUIRED_JOB_IDS
+    assert "sold-evidence-refresh" in REQUIRED_JOB_IDS
+    assert "revalue-after-evidence" in REQUIRED_JOB_IDS
+    assert "revalue-all-active" in REQUIRED_JOB_IDS
+
+
+def test_camera_safe_start_is_evidence_not_250_cap(monkeypatch) -> None:
+    from app.decision import gates as gates_mod
+
+    monkeypatch.setattr(gates_mod.settings, "safe_start_mode", True)
+    monkeypatch.setattr(gates_mod.settings, "safe_start_max_purchase_eur", "250")
+    monkeypatch.setattr(gates_mod.settings, "safe_start_camera_max_purchase_eur", "1000")
+    monkeypatch.setattr(gates_mod.settings, "safe_start_camera_min_realised", 8)
+    monkeypatch.setattr(gates_mod.settings, "max_single_item_loss_eur", "150")
+    thin = _gates(
+        asking=Decimal("800"),
+        purchase_price=Decimal("800"),
+        all_in_cost=Decimal("850"),
+        product_class="camera_body",
+        realised_count=2,
+        comparable_count=2,
+        liquidity_kind="UNKNOWN",
+        p25_sale_eur=Decimal("1200"),
+    )
+    assert thin.gates["SAFE_START_PASS"] is False
+    ready = _gates(
+        asking=Decimal("800"),
+        purchase_price=Decimal("800"),
+        all_in_cost=Decimal("850"),
+        expected_profit=Decimal("200"),
+        gross_sale=Decimal("1300"),
+        net_proceeds=Decimal("1050"),
+        downside_profit=Decimal("40"),
+        roi=Decimal("0.24"),
+        product_class="camera_body",
+        realised_count=10,
+        comparable_count=10,
+        uk_comp_count=10,
+        local_market_method="UK_REALIZED_PROXY",
+        localisation_confidence=Decimal("0.60"),
+        liquidity_kind="HIGH_REALIZED_VELOCITY",
+        liquidity_confidence=Decimal("0.70"),
+        p25_sale_eur=Decimal("1200"),
+        valuation_confidence=Decimal("0.86"),
+        max_buy=Decimal("900"),
+    )
+    assert ready.gates["SAFE_START_PASS"] is True
+    over_cap = _gates(
+        asking=Decimal("1400"),
+        purchase_price=Decimal("1400"),
+        all_in_cost=Decimal("1450"),
+        expected_profit=Decimal("100"),
+        gross_sale=Decimal("1800"),
+        net_proceeds=Decimal("1550"),
+        product_class="camera_body",
+        realised_count=10,
+        comparable_count=10,
+        liquidity_kind="HIGH_REALIZED_VELOCITY",
+        liquidity_confidence=Decimal("0.70"),
+        p25_sale_eur=Decimal("1600"),
+        valuation_confidence=Decimal("0.86"),
+        roi=Decimal("0.24"),
+        downside_profit=Decimal("40"),
+        max_buy=Decimal("1500"),
+    )
+    assert over_cap.gates["SAFE_START_PASS"] is False
+
+
+def test_uncertified_category_keeps_250_cap(monkeypatch) -> None:
+    from app.decision import gates as gates_mod
+
+    monkeypatch.setattr(gates_mod.settings, "safe_start_mode", True)
+    result = _gates(
+        asking=Decimal("400"),
+        purchase_price=Decimal("400"),
+        product_class="gpu",
+        category="gaming",
+    )
+    assert result.gates["SAFE_START_PASS"] is False

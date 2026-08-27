@@ -131,6 +131,23 @@ async def scan_now(session: Session = Depends(get_db)) -> RedirectResponse:
     return RedirectResponse("/", status_code=303)
 
 
+@router.post("/sold-refresh")
+async def dash_sold_refresh(session: Session = Depends(get_db)) -> RedirectResponse:
+    from app.sold.cameras import CAMERA_BODIES
+    from app.sold.refresh import refresh_sold_evidence
+
+    await refresh_sold_evidence(session, bodies=list(CAMERA_BODIES), markets=("GB",))
+    return RedirectResponse("/", status_code=303)
+
+
+@router.post("/revalue-now")
+async def dash_revalue(session: Session = Depends(get_db)) -> RedirectResponse:
+    from app.pipeline.service import revalue_all_active
+
+    await revalue_all_active(session, reason="dashboard")
+    return RedirectResponse("/", status_code=303)
+
+
 @router.post("/scan-source")
 async def scan_source(source_id: str = Form(...), session: Session = Depends(get_db)) -> RedirectResponse:
     await run_scan(session, source_id=source_id, trigger="dashboard-source", limit=12)

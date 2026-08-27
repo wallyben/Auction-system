@@ -18,7 +18,7 @@ CANDIDATES = [
         "status": "implemented_awaiting_owner_key",
         "docs": "https://compsniper.com/docs",
         "provides": "Up to 240 completed eBay sales per keyword across UK/DE/FR (and US/CA/AU/IT/ES). Ticket-level sold price, date, condition, shipping. Commercial use permitted on every plan including free. ARIE applies its own identity gate; CompSniper AI cleanup is not trusted.",
-        "owner_action": "Create a CompSniper account, set COMPSNIPER_API_KEY and COMPSNIPER_ENABLED=true, redeploy.",
+        "owner_action": "Create a CompSniper account and set COMPSNIPER_API_KEY. A non-empty key enables the provider.",
     },
     {
         "name": "eBay Marketplace Insights item_sales/search",
