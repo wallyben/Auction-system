@@ -202,6 +202,10 @@ def test_identity_rejects_live_kit_false_accepts() -> None:
         (a7iii, "Sony Alpha a7 III ILCE-7M3 Digital Camera + FE 50mm f/1.8"),
         (a7riv, "Sony A7R IV ILCE-7RM4 Body + FE 1.8/50mm etc"),
         (xt5, "Fujifilm X-T5 + 35mm f/2"),
+        (
+            camera_by_id("fujifilm|x-t4|body"),
+            "Fujifilm X-T4 26.1 MP Mirrorless Camera - Black (with XF 16-80mm f/4 R OIS WR)",
+        ),
     ]
     for body, title in kits:
         verdict = validate_camera_sold(target=body, sold_title=title)
