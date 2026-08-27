@@ -534,6 +534,17 @@ async def ops_sold_refresh(
     return result
 
 
+@router.post("/ops/sold-revalidate")
+async def ops_sold_revalidate(session: Session = Depends(get_db)) -> dict[str, Any]:
+    """Re-run identity matching on stored CompSniper tickets. Zero quota."""
+    from app.sold.refresh import revalidate_stored_sold_evidence, revalue_matching
+
+    summary = revalidate_stored_sold_evidence(session)
+    changed = set(summary.get("changed_product_ids") or [])
+    revalued = await revalue_matching(session, changed) if changed else 0
+    return {**summary, "revalued": revalued}
+
+
 @router.post("/ops/revalue")
 async def ops_revalue(session: Session = Depends(get_db)) -> dict[str, Any]:
     from app.pipeline.service import revalue_all_active

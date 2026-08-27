@@ -22,6 +22,7 @@ from app.sold.cache import cache_is_fresh, cache_is_successful, get_cache, upser
 from app.sold.cameras import CAMERA_BODIES, CameraBody, camera_from_identity, query_plan_for
 from app.sold.normalize import CanonicalSoldRecord, normalize_item
 from app.sold.persist import persist_canonical_sold
+from app.valuation.version import VALUATION_ALGORITHM_VERSION
 
 logger = get_logger("arie.sold.refresh")
 
@@ -193,6 +194,128 @@ async def refresh_one_query(
     }
 
 
+def _item_from_sold_row(row: SoldEvidence):
+    """Rebuild a CompSniper item from stored extras/raw. Never calls the provider."""
+    from app.evidence.providers.compsniper import CompSniperItem, parse_item
+
+    extras = row.extras or {}
+    raw = extras.get("raw")
+    if isinstance(raw, dict) and raw:
+        parsed = parse_item(raw)
+        if parsed is not None:
+            if extras.get("best_offer_accepted"):
+                parsed.best_offer_accepted = True
+            return parsed
+    title = str(extras.get("title") or "")
+    if not title:
+        return None
+    native = extras.get("sold_price_native")
+    shipping_native = extras.get("shipping_native")
+    currency = str(extras.get("native_currency") or row.currency or "EUR")
+    try:
+        sold_price = Decimal(str(native)) if native not in (None, "") else Decimal(str(row.sold_price))
+    except Exception:
+        sold_price = Decimal(str(row.sold_price or 0))
+    try:
+        shipping_price = Decimal(str(shipping_native)) if shipping_native not in (None, "") else None
+    except Exception:
+        shipping_price = None
+    listing_type = str(extras.get("listing_type") or "sold")
+    return CompSniperItem(
+        item_id=str(extras.get("source_listing_id") or row.url_or_reference or row.id),
+        url=row.url_or_reference,
+        epid=None,
+        title=title,
+        condition=str(extras.get("condition_raw") or row.condition or "") or None,
+        condition_id=None,
+        buying_format=None,
+        best_offer_accepted=bool(extras.get("best_offer_accepted")),
+        listing_type=listing_type,
+        ended_at=row.sold_date,
+        sold_price=sold_price,
+        sold_currency=currency,
+        shipping_price=shipping_price,
+        shipping_currency=currency,
+        shipping_type=None,
+        total_price=None,
+        seller_username=None,
+        seller_positive_percent=None,
+        seller_feedback_score=None,
+        item_location=None,
+        scraped_at=None,
+        raw=raw if isinstance(raw, dict) else {},
+    )
+
+
+def revalidate_stored_sold_evidence(
+    session: Session, *, rates: dict[str, Decimal] | None = None
+) -> dict[str, Any]:
+    """Re-run identity/normalize on stored tickets. Uses zero CompSniper quota."""
+    from app.sold.cameras import MARKETPLACE_SITES, camera_by_id
+
+    fx = rates if rates is not None else _fx_map(session)
+    rows = session.scalars(select(SoldEvidence).where(SoldEvidence.source == "compsniper")).all()
+    site_by_territory = {territory: site for territory, site in MARKETPLACE_SITES}
+    records: list[CanonicalSoldRecord] = []
+    touched: list[SoldEvidence] = []
+    flipped_to_reject = 0
+    flipped_to_accept = 0
+    unchanged = 0
+    skipped = 0
+    changed_product_ids: set[str] = set()
+    for row in rows:
+        body = camera_by_id(row.canonical_product_id)
+        item = _item_from_sold_row(row)
+        if body is None or item is None:
+            skipped += 1
+            continue
+        site = site_by_territory.get((row.territory or "GB").upper(), "ebay.co.uk")
+        rec = normalize_item(item, target=body, ebay_site=site, rates=fx)
+        extras = row.extras or {}
+        if rec.sold_price_eur is None and extras.get("sold_price_eur") not in (None, ""):
+            try:
+                rec.sold_price_eur = Decimal(str(extras["sold_price_eur"]))
+            except Exception:
+                pass
+        if rec.shipping_eur is None and extras.get("shipping_eur") not in (None, ""):
+            try:
+                rec.shipping_eur = Decimal(str(extras["shipping_eur"]))
+            except Exception:
+                pass
+        was = extras.get("accepted_for_valuation") is not False
+        now = rec.accepted_for_valuation
+        if was != now:
+            changed_product_ids.add(row.canonical_product_id)
+            if was and not now:
+                flipped_to_reject += 1
+            else:
+                flipped_to_accept += 1
+        else:
+            unchanged += 1
+        records.append(rec)
+        touched.append(row)
+    if records:
+        persist_canonical_sold(session, records)
+        stamp = _now().isoformat()
+        for row in touched:
+            extras = dict(row.extras or {})
+            extras["revalidated_at"] = stamp
+            extras["matching_rules_version"] = VALUATION_ALGORITHM_VERSION
+            row.extras = extras
+        session.flush()
+    return {
+        "ok": True,
+        "examined": len(rows),
+        "updated": len(records),
+        "skipped": skipped,
+        "flipped_to_reject": flipped_to_reject,
+        "flipped_to_accept": flipped_to_accept,
+        "unchanged": unchanged,
+        "changed_product_ids": sorted(changed_product_ids),
+        "quota_used": 0,
+    }
+
+
 async def refresh_sold_evidence(
     session: Session,
     *,
@@ -200,10 +323,20 @@ async def refresh_sold_evidence(
     force: bool = False,
     markets: tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
+    rates = _fx_map(session)
+    reval = revalidate_stored_sold_evidence(session, rates=rates)
+    revalue_ids: set[str] = set(reval.get("changed_product_ids") or [])
     health = compsniper_health()
     if health["status"] in {"DISABLED", "BLOCKED_CREDENTIALS"}:
-        return {"ok": False, "reason": health["status"], "health": health, "queries": []}
-    rates = _fx_map(session)
+        revalued = await revalue_matching(session, revalue_ids) if revalue_ids else 0
+        return {
+            "ok": False,
+            "reason": health["status"],
+            "health": health,
+            "queries": [],
+            "revalidate": reval,
+            "revalued": revalued,
+        }
     provider = CompSniperProvider()
     targets = bodies if bodies is not None else bodies_from_active_listings(session)
     market_order = markets or tuple(
@@ -212,7 +345,6 @@ async def refresh_sold_evidence(
         if part.strip()
     ) or PRIMARY_MARKETS
     queries: list[dict[str, Any]] = []
-    revalue_ids: set[str] = set()
     for body in targets:
         uk_accepted = 0
         for plan in query_plan_for(body, marketplaces=market_order):
@@ -250,6 +382,7 @@ async def refresh_sold_evidence(
         "queries": queries,
         "revalued": revalued,
         "requested_new_evidence": sorted(revalue_ids),
+        "revalidate": reval,
     }
 
 
