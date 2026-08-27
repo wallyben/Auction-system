@@ -31,14 +31,16 @@ _BODY_TOKEN = re.compile(
     r"\b(body|body\s+only|boitier|boîtier|gehäuse|solo\s+cuerpo|solo\s+corpo)\b",
     re.I,
 )
-# "+ FE 50mm", "+ 35mm f/2", "+ FE 1.8/50mm", "with RF 24-105" even when "body" is present.
+# "+ FE 50mm", "+ 35mm f/2", "+ FE 1.8/50mm", "(with XF 16-80mm ...)" even when "body" is present.
 _LENS_ADDON = re.compile(
     r"("
-    r"\+\s*(?:fe|ef|rf|e[\s-]?mount|lens|obiettivo|objectif|objektiv)\b"
+    r"\+\s*(?:fe|ef|rf|xf|xc|e[\s-]?mount|lens|obiettivo|objectif|objektiv)\b"
     r"|\+\s*\d{2,3}(?:\s*-\s*\d{2,3})?\s*mm\b"
     r"|\+\s*\d{2,3}\s*-\s*\d{2,3}\b"
-    r"|\+\s*(?:fe|ef|rf)?\s*\d(?:\.\d)?\s*/\s*\d{2,3}"
-    r"|\bwith\s+(?:fe|ef|rf|lens|\d{2,3}(?:\s*-\s*\d{2,3})?\s*mm)\b"
+    r"|\+\s*(?:fe|ef|rf|xf|xc)?\s*\d(?:\.\d)?\s*/\s*\d{2,3}"
+    r"|\bwith\s+(?:(?:fe|ef|rf|xf|xc)\s+)?(?:lens|\d{2,3}(?:\s*-\s*\d{2,3})?\s*mm)\b"
+    r"|\(\s*(?:with|w/)\s+[^)]*\d{2,3}(?:\s*-\s*\d{2,3})?\s*mm"
+    r"|\b(?:xf|xc)\s*\d{2,3}(?:\s*-\s*\d{2,3})?(?:\s*mm)?\b"
     r")",
     re.I,
 )
@@ -327,6 +329,11 @@ def identity_precision_corpus() -> list[dict[str, str]]:
             "kit_or_bundle",
         ),
         ("fujifilm|x-t5|body", "Fujifilm X-T5 + 35mm f/2", "kit_or_bundle"),
+        (
+            "fujifilm|x-t4|body",
+            "Fujifilm X-T4 26.1 MP Mirrorless Camera - Black (with XF 16-80mm f/4 R OIS WR)",
+            "kit_or_bundle",
+        ),
     ]
     more_exact.append(("sony|a7-iii|body", "Sony A7 III ILCE-7M3 Body Only + extras"))
     for title in exact:
