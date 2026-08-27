@@ -194,6 +194,37 @@ def test_identity_rejects_accessory_wrong_model_kit_parts() -> None:
     assert validate_camera_sold(target=body, sold_title="Sony A7 IV Body Only ILCE-7M4").product_class == "camera_body"
 
 
+def test_identity_rejects_live_kit_false_accepts() -> None:
+    a7iii = camera_by_id("sony|a7-iii|body")
+    a7riv = camera_by_id("sony|a7r-iv|body")
+    xt5 = camera_by_id("fujifilm|x-t5|body")
+    kits = [
+        (a7iii, "Sony Alpha a7 III ILCE-7M3 Digital Camera + FE 50mm f/1.8"),
+        (a7riv, "Sony A7R IV ILCE-7RM4 Body + FE 1.8/50mm etc"),
+        (xt5, "Fujifilm X-T5 + 35mm f/2"),
+    ]
+    for body, title in kits:
+        verdict = validate_camera_sold(target=body, sold_title=title)
+        assert verdict.accepted is False, title
+        assert verdict.reason == "kit_or_bundle", title
+    extras = validate_camera_sold(
+        target=a7iii, sold_title="Sony A7 III ILCE-7M3 Body Only + extras"
+    )
+    assert extras.accepted is True
+    lens = validate_camera_sold(target=a7iii, sold_title="Sony FE 50mm f/1.8")
+    assert lens.accepted is False
+
+
+def test_r6_ii_keyword_does_not_self_exclude() -> None:
+    body = camera_by_id("canon|r6-ii|body")
+    assert body is not None
+    keyword = body.keyword()
+    assert '-"R6 "' not in keyword
+    assert "Canon EOS R6 II" in keyword
+    assert "-R5" in keyword
+    assert "-R7" in keyword
+
+
 def test_identity_precision_meets_95() -> None:
     result = measure_identity_precision()
     assert result["sample_size"] >= 100
@@ -733,6 +764,64 @@ def test_camera_safe_start_is_evidence_not_250_cap(monkeypatch) -> None:
         max_buy=Decimal("1500"),
     )
     assert over_cap.gates["SAFE_START_PASS"] is False
+
+
+def test_revalidate_stored_kit_without_provider_call() -> None:
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.dialects.postgresql import JSONB, UUID
+    from sqlalchemy.ext.compiler import compiles
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app.db.base import Base
+    from app.evidence.providers.compsniper import parse_item
+    from app.models.orm import SoldEvidence
+    from app.sold.normalize import normalize_item
+    from app.sold.persist import persist_canonical_sold
+    from app.sold.refresh import revalidate_stored_sold_evidence
+
+    @compiles(JSONB, "sqlite")
+    def _jsonb(type_, compiler, **kw):  # noqa: ARG001
+        return "JSON"
+
+    @compiles(UUID, "sqlite")
+    def _uuid(type_, compiler, **kw):  # noqa: ARG001
+        return "CHAR(36)"
+
+    import app.models.orm  # noqa: F401
+
+    eng = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(eng)
+    factory = sessionmaker(bind=eng, autoflush=False, expire_on_commit=False)
+    session = factory()
+    body = camera_by_id("sony|a7-iii|body")
+    raw = {
+        "itemId": "kit1",
+        "url": "https://www.ebay.co.uk/itm/kit1",
+        "title": "Sony Alpha a7 III ILCE-7M3 Digital Camera + FE 50mm f/1.8",
+        "listingType": "sold",
+        "endedAt": "2026-08-01",
+        "soldPrice": "835.00",
+        "soldCurrency": "EUR",
+        "bestOfferAccepted": False,
+        "condition": "Used",
+        "conditionId": 3000,
+    }
+    rec = normalize_item(parse_item(raw), target=body, ebay_site="ebay.co.uk")
+    assert rec.accepted_for_valuation is False
+    rec.accepted_for_valuation = True
+    rec.rejection_reason = ""
+    rec.evidence_class = "MARKET_WIDE_COMPLETED_SALE"
+    persist_canonical_sold(session, [rec])
+    row = session.scalars(select(SoldEvidence)).first()
+    assert row.extras["accepted_for_valuation"] is True
+    summary = revalidate_stored_sold_evidence(session)
+    session.refresh(row)
+    assert summary["quota_used"] == 0
+    assert summary["flipped_to_reject"] == 1
+    assert row.extras["accepted_for_valuation"] is False
+    assert row.extras["rejection_reason"] == "kit_or_bundle"
+    session.close()
 
 
 def test_uncertified_category_keeps_250_cap(monkeypatch) -> None:

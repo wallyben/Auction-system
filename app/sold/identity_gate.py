@@ -19,11 +19,27 @@ from app.sources.ebay_filters import ACCESSORY_RE, KIT_RE, REPAIR_RE
 PRODUCT_CLASS_CAMERA_BODY = "camera_body"
 
 _LENS = re.compile(
-    r"\b(lens|obiettivo|objectif|objektiv|zoom\s+lens|prime\s+lens|fe\s*\d{2}|rf\s*\d{2})\b",
+    r"\b("
+    r"lens|obiettivo|objectif|objektiv|zoom\s+lens|prime\s+lens|"
+    r"(?:fe|ef|rf)\s*\d{2,3}(?:\s*mm)?"
+    r")\b",
     re.I,
 )
+# Only body-only language. ILCE-/EOS R/X-T are model tokens and must not
+# skip lens rejection on kit titles such as "ILCE-7M3 Digital Camera + FE 50mm".
 _BODY_TOKEN = re.compile(
-    r"\b(body|body\s+only|boitier|boîtier|gehäuse|solo\s+cuerpo|solo\s+corpo|ilce-|eos\s+r|x-t\d)\b",
+    r"\b(body|body\s+only|boitier|boîtier|gehäuse|solo\s+cuerpo|solo\s+corpo)\b",
+    re.I,
+)
+# "+ FE 50mm", "+ 35mm f/2", "+ FE 1.8/50mm", "with RF 24-105" even when "body" is present.
+_LENS_ADDON = re.compile(
+    r"("
+    r"\+\s*(?:fe|ef|rf|e[\s-]?mount|lens|obiettivo|objectif|objektiv)\b"
+    r"|\+\s*\d{2,3}(?:\s*-\s*\d{2,3})?\s*mm\b"
+    r"|\+\s*\d{2,3}\s*-\s*\d{2,3}\b"
+    r"|\+\s*(?:fe|ef|rf)?\s*\d(?:\.\d)?\s*/\s*\d{2,3}"
+    r"|\bwith\s+(?:fe|ef|rf|lens|\d{2,3}(?:\s*-\s*\d{2,3})?\s*mm)\b"
+    r")",
     re.I,
 )
 _WRONG_SONY = {
@@ -108,6 +124,10 @@ def validate_camera_sold(
     if (KIT_RE.search(title) or re.search(r"\bkit\b", title, re.I)) and not re.search(
         r"\bbody\s+only\b", title, re.I
     ):
+        return IdentityVerdict(
+            False, "kit_or_bundle", "camera_kit", body.canonical_id, "kit", ident.level.value, body.model
+        )
+    if _LENS_ADDON.search(title):
         return IdentityVerdict(
             False, "kit_or_bundle", "camera_kit", body.canonical_id, "kit", ident.level.value, body.model
         )
@@ -296,7 +316,19 @@ def identity_precision_corpus() -> list[dict[str, str]]:
         ("sony|a7-iv|body", "Sony A7 IV user manual PDF", "accessory"),
         ("sony|a7r-iii|body", "Sony A7R III + 24-70 kit", "kit_or_bundle"),
         ("nikon|z6-ii|body", "Nikon Z6 II cage SmallRig", "accessory"),
+        (
+            "sony|a7-iii|body",
+            "Sony Alpha a7 III ILCE-7M3 Digital Camera + FE 50mm f/1.8",
+            "kit_or_bundle",
+        ),
+        (
+            "sony|a7r-iv|body",
+            "Sony A7R IV ILCE-7RM4 Body + FE 1.8/50mm etc",
+            "kit_or_bundle",
+        ),
+        ("fujifilm|x-t5|body", "Fujifilm X-T5 + 35mm f/2", "kit_or_bundle"),
     ]
+    more_exact.append(("sony|a7-iii|body", "Sony A7 III ILCE-7M3 Body Only + extras"))
     for title in exact:
         rows.append({"target": a7iv, "title": title, "label": "exact", "expect_accept": "true"})
     for title in accessories:

@@ -162,7 +162,7 @@ CAMERA_BODIES: tuple[CameraBody, ...] = (
         "II",
         "R6 II",
         ("Canon EOS R6 II", "Canon R6 Mark II", "Canon R6 II"),
-        ("-R5", "-R7", "-R8", "-R10", '-"R6 "'),
+        ("-R5", "-R7", "-R8", "-R10", '-"R6 Mark III"'),
         1100,
         2300,
     ),
