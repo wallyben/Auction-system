@@ -688,7 +688,11 @@ def evaluate_listing(
         gross_sale=costs.expected_resale_eur,
         net_proceeds=costs.expected_net_resale_eur,
         category=listing.category or identity.category,
-        category_certified=category_is_certified(listing.category or identity.category),
+        category_certified=category_is_certified(
+            listing.category or identity.category,
+            session=session,
+            product_class=getattr(identity, "product_class", None),
+        ),
         exit_present=bool(exits.quotes),
         provenance_complete=bool(valuation.provenance),
         source_fresh=age_hours <= 36,
@@ -700,6 +704,9 @@ def evaluate_listing(
         localisation_confidence=valuation.localisation_confidence,
         sold_evidence_fresh=sold_fresh,
         valuation_anomaly=bool(anomaly_info.get("anomaly")),
+        product_class=getattr(identity, "product_class", None),
+        liquidity_kind=getattr(liquidity, "kind", None),
+        p25_sale_eur=valuation.p25,
     )
     rank = commercial_rank(
         money_ready_decision=gates.money_ready_decision,
@@ -874,10 +881,28 @@ def evaluate_listing(
                 "median": str(valuation.median),
                 "p25": str(valuation.p25),
                 "p75": str(valuation.p75),
+                "quick_sale": str(valuation.quick_sale_eur),
+                "expected_sale": str(valuation.expected_sale_eur),
                 "evidence_age_days": valuation.evidence_age_days,
                 "local_market_method": valuation.local_market_method,
                 "sold_evidence_fresh": sold_fresh,
                 "valuation_anomaly": anomaly_info,
+                "accepted_sold": [
+                    {
+                        "title": c.title,
+                        "url": c.url,
+                        "price_eur": str(c.price_eur),
+                        "country": c.country,
+                        "type": c.evidence_type.value,
+                        "notes": c.notes,
+                        "observed_at": c.observed_at.isoformat() if c.observed_at else None,
+                    }
+                    for c in comps
+                    if c.evidence_type.value in {"realised_sale", "auction_hammer"}
+                ][:40],
+                "sales_count_30d": (velocity or {}).get("sales_count_30d") if isinstance(velocity, dict) else None,
+                "sales_count_60d": (velocity or {}).get("sales_count_60d") if isinstance(velocity, dict) else None,
+                "sales_count_90d": (velocity or {}).get("sales_count_90d") if isinstance(velocity, dict) else None,
             },
             "identity_attributes": getattr(identity, "attributes", {}) or {},
             "product_class": getattr(identity, "product_class", "primary"),

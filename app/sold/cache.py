@@ -58,6 +58,7 @@ def get_cache(
 
 
 def cache_is_fresh(row: SoldQueryCache | None, *, now: datetime | None = None) -> bool:
+    """True when we must not spend another paid request (TTL still running)."""
     if row is None or row.queried_at is None:
         return False
     now = now or _now()
@@ -67,6 +68,19 @@ def cache_is_fresh(row: SoldQueryCache | None, *, now: datetime | None = None) -
     age = now - queried
     ttl = timedelta(hours=int(row.ttl_hours or SLOW_TTL_HOURS_DEFAULT))
     return age <= ttl
+
+
+def cache_is_successful(row: SoldQueryCache | None, *, now: datetime | None = None) -> bool:
+    """True when cached evidence may be used for BUY_READY freshness."""
+    if not cache_is_fresh(row, now=now):
+        return False
+    status = getattr(row, "last_http_status", None)
+    if status != 200:
+        return False
+    extras = getattr(row, "extras", None) or {}
+    if extras.get("error") or extras.get("code") in {"quota_exceeded", "rate_limited", "unauthorized", "network"}:
+        return False
+    return True
 
 
 def upsert_cache(

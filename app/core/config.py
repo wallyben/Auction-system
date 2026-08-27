@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     buy_ready_require_realised: bool = True
     safe_start_mode: bool = True
     safe_start_max_purchase_eur: str = "250"
+    safe_start_camera_max_purchase_eur: str = "1000"
+    safe_start_camera_min_realised: int = 8
     safe_start_min_confidence: str = "0.85"
     owner_override_uncertified: bool = False
     certified_categories: str = ""

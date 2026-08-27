@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.session import get_db_session, get_session_factory, probe_database
 from app.db.url import classify_db_error
-from app.jobs.scheduler import scheduler_status
+from app.jobs.scheduler import REQUIRED_JOB_IDS, scheduler_status
 from app.models.orm import Listing, Opportunity, Purchase, ScanJob, Source, WatchlistItem
 from app.pipeline.service import evaluate_listing, persist_listing, record_health, refresh_fx, run_scan, seed_sources
 from app.pipeline.service import _comps_for
@@ -490,3 +490,117 @@ def _detail(session: Session, row: Opportunity) -> dict[str, Any]:
         }
     )
     return summary
+
+
+@router.get("/health/jobs")
+def health_jobs() -> dict[str, Any]:
+    status = scheduler_status()
+    ids = {job.get("id") for job in status.get("jobs") or []}
+    required = set(REQUIRED_JOB_IDS)
+    return {
+        **status,
+        "required_jobs": sorted(required),
+        "missing_jobs": sorted(required - ids),
+        "ok": required.issubset(ids) and bool(status.get("scheduler_running")),
+    }
+
+
+@router.post("/ops/sold-refresh")
+async def ops_sold_refresh(
+    force: bool = False,
+    markets: str = "GB",
+    limit: int = 12,
+    product: str | None = None,
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Quota-efficient CompSniper ingest: one query per canonical camera × marketplace."""
+    from app.sold.cameras import CAMERA_BODIES, camera_by_id
+    from app.sold.refresh import refresh_sold_evidence
+
+    if product:
+        body = camera_by_id(product)
+        bodies = [body] if body else []
+        if not bodies:
+            raise HTTPException(status_code=404, detail=f"Unknown camera product {product}")
+    else:
+        bodies = list(CAMERA_BODIES)[: max(1, min(limit, 12))]
+    market_tuple = tuple(part.strip().upper() for part in markets.split(",") if part.strip()) or ("GB",)
+    result = await refresh_sold_evidence(
+        session,
+        bodies=bodies,
+        force=force,
+        markets=market_tuple,
+    )
+    return result
+
+
+@router.post("/ops/revalue")
+async def ops_revalue(session: Session = Depends(get_db)) -> dict[str, Any]:
+    from app.pipeline.service import revalue_all_active
+    from app.valuation.version import VALUATION_ALGORITHM_VERSION
+
+    return await revalue_all_active(session, reason=f"ops:{VALUATION_ALGORITHM_VERSION}")
+
+
+@router.get("/ops/sold-quality")
+def ops_sold_quality(session: Session = Depends(get_db)) -> dict[str, Any]:
+    from app.sold.quality import sold_quality_report
+
+    return sold_quality_report(session)
+
+
+@router.get("/ops/certify-cameras")
+def ops_certify_cameras(session: Session = Depends(get_db)) -> dict[str, Any]:
+    from app.sold.certify import live_camera_body_certification
+
+    return live_camera_body_certification(session)
+
+
+@router.get("/ops/camera-pipeline")
+def ops_camera_pipeline(session: Session = Depends(get_db)) -> dict[str, Any]:
+    """Live book snapshot for the camera sold-data chain."""
+    from app.sold.certify import live_camera_body_certification
+    from app.sold.quality import sold_quality_report
+    from app.evidence.providers.compsniper import compsniper_health
+
+    opps = list(session.scalars(select(Opportunity).limit(400)).all())
+    rows = []
+    for opp in opps:
+        listing = session.get(Listing, opp.listing_id)
+        pack = opp.provenance_pack or {}
+        whyv = pack.get("why_this_value") or {}
+        rows.append(
+            {
+                "id": str(opp.id),
+                "title": listing.title if listing else "",
+                "url": listing.url if listing else "",
+                "ask": str(listing.asking_price) if listing and listing.asking_price is not None else None,
+                "currency": listing.currency if listing else None,
+                "country": listing.country if listing else None,
+                "sold_n": whyv.get("realised_comp_count") or 0,
+                "p25": whyv.get("p25"),
+                "median": whyv.get("median"),
+                "expected": str(opp.expected_resale_eur),
+                "quick": whyv.get("quick_sale") or whyv.get("p25"),
+                "max_buy": str(opp.max_buy_eur),
+                "expected_profit": str(opp.expected_profit_eur),
+                "downside": str(opp.downside_profit_eur),
+                "roi": str(opp.expected_roi),
+                "velocity": (pack.get("liquidity") or {}).get("kind"),
+                "confidence": str(opp.valuation_confidence),
+                "decision": opp.money_ready_decision,
+                "failed_gates": (opp.gate_results or {}).get("failures") or [],
+                "value_status": getattr(opp, "value_status", None),
+                "algorithm_version": getattr(opp, "algorithm_version", None),
+            }
+        )
+    rows.sort(key=lambda r: float(r.get("expected_profit") or 0), reverse=True)
+    return {
+        "compsniper": compsniper_health(),
+        "sold_quality": sold_quality_report(session),
+        "certification": live_camera_body_certification(session),
+        "scheduler": scheduler_status(),
+        "top20": rows[:20],
+        "buy_ready": [r for r in rows if r["decision"] == "BUY_READY"],
+        "count": len(rows),
+    }

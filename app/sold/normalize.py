@@ -69,6 +69,7 @@ class CanonicalSoldRecord:
     raw: dict[str, Any] = field(default_factory=dict)
     best_offer_accepted: bool = False
     listing_type: str = "sold"
+    price_certainty: str = "KNOWN_TRANSACTION"
 
     def as_hit(self) -> SoldEvidenceHit:
         price = self.sold_price_eur if self.sold_price_eur is not None else self.sold_price
@@ -122,12 +123,20 @@ def normalize_item(
     shipping_eur = to_eur(shipping, item.shipping_currency or currency, rates)
     accepted = verdict.accepted
     reason = verdict.reason
-    if item.listing_type and item.listing_type != "sold":
+    listing_type = (item.listing_type or "sold").lower().replace(" ", "_")
+    if listing_type in {"active", "unsold", "cancelled", "canceled", "not_sold"}:
         accepted = False
         reason = "not_completed_sale"
     if sold is None or sold <= 0:
         accepted = False
         reason = "invalid_sold_price"
+    price_certainty = "KNOWN_TRANSACTION"
+    if item.best_offer_accepted or listing_type in {"best_offer_accepted", "bestofferaccepted"}:
+        # CompSniper: Best Offer soldPrice is the asking ceiling, not the accepted offer.
+        price_certainty = "UPPER_BOUND"
+        if accepted:
+            accepted = False
+            reason = "best_offer_upper_bound"
     if not (item.sold_currency or currency):
         accepted = False
         reason = "invalid_currency"
@@ -176,4 +185,5 @@ def normalize_item(
         raw=item.raw,
         best_offer_accepted=item.best_offer_accepted,
         listing_type=item.listing_type,
+        price_certainty=price_certainty,
     )
