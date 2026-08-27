@@ -103,7 +103,10 @@ class IrishPanelProvider:
                     str(extras.get("product_identity") or ""),
                 ]
             ).lower()
-            if needle and needle not in hay:
+            ident = (product or "").lower()
+            if ident and row.canonical_product_id.lower() == ident:
+                pass
+            elif needle and needle not in hay:
                 tokens = [part for part in needle.replace("-", " ").split() if len(part) > 2]
                 if tokens and not all(token in hay for token in tokens[:3]):
                     continue
@@ -113,7 +116,9 @@ class IrishPanelProvider:
                 continue
             if extras.get("ticket_level") is False:
                 continue
-            if str(extras.get("evidence_class") or "") in {"E", "F", "G"}:
+            if extras.get("accepted_for_valuation") is False:
+                continue
+            if str(extras.get("evidence_class") or "") in {"E", "F", "G", "X"}:
                 continue
             if product and variant_reject(product, str(extras.get("title") or row.canonical_product_id)):
                 continue
@@ -231,6 +236,7 @@ async def search_sold_evidence(
 
 
 async def sold_provider_health(session: Session) -> list[dict[str, object]]:
+    from app.evidence.providers.compsniper import compsniper_health
     from app.sold.ebay_owner_oauth import EbayOwnerOrdersProvider
     from app.sold.insights import EbayMarketplaceInsightsProvider
 
@@ -242,6 +248,7 @@ async def sold_provider_health(session: Session) -> list[dict[str, object]]:
         EbayOwnerOrdersProvider(),
     ):
         rows.append(await provider.healthcheck())
+    rows.append(compsniper_health())
     return rows
 
 

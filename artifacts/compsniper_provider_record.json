@@ -1,0 +1,80 @@
+{
+  "provider": "CompSniper",
+  "fetched_at": "2026-08-27T21:40:00+00:00",
+  "official_website": "https://compsniper.com",
+  "terms_url": "https://compsniper.com/terms",
+  "docs_url": "https://compsniper.com/docs",
+  "api_base": "https://api.compsniper.com/v1",
+  "relevant_route": "GET /v1/scrape",
+  "auth": "Authorization: Bearer cs_…",
+  "commercial_use_permitted": true,
+  "commercial_use_statement": "Terms §6 (last updated 2026-08-26): Commercial use is permitted on every plan, including the free plan. You may build the service into a paid SaaS product, an internal business tool, a client deliverable, or a mobile app. You may not repackage the raw API as a competing data API.",
+  "data_origin": "Publicly available eBay completed listings. CompSniper ToS §7: data is as-is; Best Offer soldPrice is an upper bound because eBay does not disclose the accepted offer.",
+  "affiliation": "Independent service, not affiliated with eBay (ToS §8).",
+  "marketplaces": [
+    "ebay.com",
+    "ebay.co.uk",
+    "ebay.de",
+    "ebay.fr",
+    "ebay.it",
+    "ebay.es",
+    "ebay.ca",
+    "ebay.com.au"
+  ],
+  "arie_priority_marketplaces": ["ebay.co.uk", "ebay.de", "ebay.fr"],
+  "ireland_coverage": "No dedicated ebay.ie marketplace. UK sold transactions are the primary Ireland proxy.",
+  "history_depth": "Up to 90 days of eBay completed-sales history.",
+  "items_per_request": 240,
+  "pagination": "page parameter; each page debits one request.",
+  "limits": {
+    "per_minute_rate": 60,
+    "free_monthly_quota": 100,
+    "rate_limit_headers": [
+      "X-RateLimit-Limit",
+      "X-RateLimit-Remaining",
+      "X-RateLimit-Reset",
+      "X-Usage-Limit",
+      "X-Usage-Remaining",
+      "Retry-After"
+    ],
+    "429_codes": ["rate_limited", "quota_exceeded"]
+  },
+  "plans": [
+    {"name": "Basic", "price_usd_per_month": 0, "requests_per_month": 100, "notes": "No credit card. 60 req/min. Commercial use included. Free-plan identity shares one allowance."},
+    {"name": "Starter", "price_usd_per_month": 9, "requests_per_month": 2000},
+    {"name": "Growth", "price_usd_per_month": 29, "requests_per_month": 10000},
+    {"name": "Scale", "price_usd_per_month": 79, "requests_per_month": 50000}
+  ],
+  "structured_fields": [
+    "itemId",
+    "url",
+    "epid",
+    "title",
+    "condition",
+    "conditionId",
+    "buyingFormat",
+    "bestOfferAccepted",
+    "listingType",
+    "endedAt",
+    "soldPrice",
+    "soldCurrency",
+    "shippingPrice",
+    "shippingCurrency",
+    "shippingType",
+    "totalPrice",
+    "sellerUsername",
+    "sellerPositivePercent",
+    "sellerFeedbackScore",
+    "itemLocation",
+    "scrapedAt"
+  ],
+  "provider_ai_cleanup": "CompSniper offers optional AI relevance cleanup. ARIE does not trust it. Every sold row must pass ARIE PRODUCT_IDENTITY_VALIDATION before valuation.",
+  "tos_risk": "LOW relative to CompSniper's own terms (commercial use granted; no competing-API resale). CompSniper states it sources publicly available eBay completed sales and is not an eBay affiliate. ARIE uses the licensed CompSniper API under CompSniper ToS, does not scrape eBay HTML, and does not redistribute a competing sold-data API.",
+  "verdict": "ACCEPT_AS_PRIMARY_MARKET_WIDE_SOLD_PROVIDER",
+  "evidence_class_if_used": "A / MARKET_WIDE_COMPLETED_SALE",
+  "rejected_alternatives": {
+    "ebay_marketplace_insights": "BLOCKED_EXTERNAL_ACCESS HTTP 403 NOT_ENTITLED",
+    "cameraworth": "No public licensed API. Vintage UK auction hammers, not a ticket-level digital-body sold feed. MARKET_REFERENCE only if a public figure is already known; do not scrape.",
+    "mpb_price_index": "No public licensed API. Interactive marketing page. Do not scrape. MARKET_REFERENCE / SANITY_CHECK only via documented plausibility bands."
+  }
+}

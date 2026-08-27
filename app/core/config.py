@@ -66,7 +66,10 @@ class Settings(BaseSettings):
         "collectibles,trading_cards,tools,sporting_goods,hobby,small_business"
     )
     scan_queries: str = (
-        "Sony FE 24-70mm GM II,Sony A7 IV,Canon RF 24-70 f/2.8,"
+        "Sony A7 IV,Sony A7 III,Sony A7R IV,Sony A7R III,"
+        "Canon EOS R6,Canon EOS R6 II,Canon EOS R5,"
+        "Nikon Z6 II,Nikon Z7 II,Fujifilm X-T4,Fujifilm X-T5,"
+        "Sony FE 24-70mm GM II,Canon RF 24-70 f/2.8,"
         "MacBook Pro 14 M3,iPhone 15 Pro 256GB,PlayStation 5,"
         "RTX 4070,Pioneer DDJ-1000,Shure SM7B"
     )
@@ -89,6 +92,13 @@ class Settings(BaseSettings):
     ebay_ru_name: str = ""
     ebay_oauth_redirect_uri: str = ""
     ebay_refresh_token: str = ""
+
+    compsniper_api_key: str = ""
+    compsniper_enabled: bool = False
+    compsniper_hot_ttl_hours: int = 18
+    compsniper_slow_ttl_hours: int = 60
+    compsniper_buy_ready_max_evidence_age_days: int = 21
+    compsniper_primary_marketplaces: str = "GB,DE,FR"
 
     @property
     def ebay_api_env(self) -> Literal["production", "sandbox"]:

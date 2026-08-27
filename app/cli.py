@@ -554,6 +554,64 @@ def cmd_db_check() -> int:
     return 0 if result.get("ok") else 1
 
 
+async def cmd_sold_refresh() -> int:
+    from app.sold.refresh import refresh_sold_evidence
+
+    session = _session()
+    try:
+        payload = await refresh_sold_evidence(session)
+        session.commit()
+        Path("artifacts").mkdir(exist_ok=True)
+        Path("artifacts/sold_refresh.json").write_text(json.dumps(payload, indent=2, default=str))
+        print(json.dumps(payload, indent=2, default=str))
+        return 0 if payload.get("ok") else 1
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+def cmd_camera_validate() -> int:
+    from app.sold.cameras import CAMERA_BODIES
+    from app.sold.certify import camera_body_certification_snapshot
+    from app.sold.identity_gate import measure_identity_precision
+    from app.sold.backtest_sold import synthetic_lookahead_backtest
+
+    precision = measure_identity_precision()
+    backtest = synthetic_lookahead_backtest()
+    certification = camera_body_certification_snapshot(precision=precision, backtest=backtest)
+    payload = {
+        "identity": precision,
+        "backtest": backtest,
+        "certification": certification,
+        "models": [
+            {
+                "canonical_id": body.canonical_id,
+                "manufacturer": body.manufacturer,
+                "model": body.model,
+                "mpn": body.mpn,
+                "query": body.keyword(),
+                "raw_count": None,
+                "accepted_count": None,
+                "rejected_count": None,
+                "median": None,
+                "p25": None,
+                "p75": None,
+                "latest_sold": None,
+                "note": "Live CompSniper counts fill after COMPSNIPER_API_KEY is set.",
+            }
+            for body in CAMERA_BODIES
+        ],
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "live_provider": "awaiting_COMPSNIPER_API_KEY",
+    }
+    Path("artifacts").mkdir(exist_ok=True)
+    Path("artifacts/camera_sold_validation.json").write_text(json.dumps(payload, indent=2, default=str))
+    print(json.dumps(payload, indent=2, default=str))
+    return 0 if precision.get("pass") else 1
+
+
 def cmd_backtest() -> int:
     from app.validation.backtest import run_backtest
 
@@ -610,6 +668,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("paper-trade")
     sub.add_parser("db-check")
     sub.add_parser("revalue")
+    sub.add_parser("sold-refresh")
+    sub.add_parser("camera-validate")
     args = parser.parse_args(argv)
     if args.cmd == "scan":
         return asyncio.run(cmd_scan(args.source, args.query, args.limit))
@@ -652,6 +712,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_db_check()
     if args.cmd == "revalue":
         return asyncio.run(cmd_revalue())
+    if args.cmd == "sold-refresh":
+        return asyncio.run(cmd_sold_refresh())
+    if args.cmd == "camera-validate":
+        return cmd_camera_validate()
     return 1
 
 

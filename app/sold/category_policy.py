@@ -11,6 +11,7 @@ REALISED_SOURCES = (
     "owner_recorded",
     "ebay_owner_fulfillment",
     "ebay_marketplace_insights",
+    "compsniper",
     "irish_panel",
     "owner_trade_floor",
 )
@@ -20,7 +21,7 @@ CATEGORY_COMP_POLICY: dict[str, dict[str, object]] = {
         "realised": REALISED_SOURCES,
         "asking": (),
         "reverb": False,
-        "notes": "Cameras require eBay realised / owner sold. Reverb asking is not a camera market.",
+        "notes": "Cameras require eBay realised / CompSniper completed sales / owner sold. Reverb asking is not a camera market.",
     },
     "lenses": {
         "realised": REALISED_SOURCES,

@@ -91,6 +91,25 @@
   </section>
 
   <section>
+    <h2>Realised sold evidence</h2>
+    {% set whyv = opportunity.provenance_pack.why_this_value if opportunity.provenance_pack else None %}
+    {% if whyv %}
+    <p>UK comps {{ whyv.uk_comp_count or 0 }} · EU comps {{ whyv.eu_comp_count or 0 }} · localisation {{ whyv.local_market_method }} · fresh {{ whyv.sold_evidence_fresh }}</p>
+    {% if whyv.valuation_anomaly and whyv.valuation_anomaly.anomaly %}
+    <p class="warn">VALUATION_ANOMALY: sold median {{ whyv.valuation_anomaly.median }} vs sanity band {{ whyv.valuation_anomaly.band }}</p>
+    {% endif %}
+    {% endif %}
+    <p>Rejected candidates (identity gate):</p>
+    <ul>
+      {% for r in (opportunity.provenance_pack.rejected_comps if opportunity.provenance_pack else [])[:20] %}
+      <li>{{ r.title }} — {{ r.reject_reason }} ({{ r.source }})</li>
+      {% else %}
+      <li>None stored.</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section>
     <h2>Comparable evidence</h2>
     <p>Every number above is produced from these stored comparables. Asking prices are labelled. Do not treat dealer/asking evidence as a completed Irish sale.</p>
     <table>

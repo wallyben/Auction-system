@@ -1,3 +1,3 @@
 """Valuation algorithm version. Bump when identity, condition, evidence, or cost rules change."""
 
-VALUATION_ALGORITHM_VERSION = "2.0.0"
+VALUATION_ALGORITHM_VERSION = "2.1.0"

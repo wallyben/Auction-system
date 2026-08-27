@@ -95,6 +95,26 @@ async def _scheduled_sold_ingest() -> None:
         session.close()
 
 
+async def _scheduled_sold_refresh() -> None:
+    from app.sold.refresh import refresh_sold_evidence
+
+    session = get_session_factory()()
+    try:
+        result = await refresh_sold_evidence(session)
+        session.commit()
+        logger.info(
+            "scheduled_sold_refresh",
+            ok=result.get("ok"),
+            revalued=result.get("revalued"),
+            queries=len(result.get("queries") or []),
+        )
+    except Exception:
+        session.rollback()
+        logger.exception("scheduled_sold_refresh_failed")
+    finally:
+        session.close()
+
+
 async def _scheduled_revalue() -> None:
     from app.pipeline.service import revalue_all_active
     from app.valuation.version import VALUATION_ALGORITHM_VERSION
@@ -148,6 +168,14 @@ def start_scheduler() -> None:
         _scheduled_sold_ingest,
         IntervalTrigger(hours=3, jitter=120),
         id="owner-sold-ingest",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    _scheduler.add_job(
+        _scheduled_sold_refresh,
+        IntervalTrigger(hours=6, jitter=180),
+        id="sold-evidence-refresh",
         replace_existing=True,
         max_instances=1,
         coalesce=True,

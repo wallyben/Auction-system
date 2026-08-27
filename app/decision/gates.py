@@ -72,6 +72,11 @@ def apply_money_ready_gates(
     tax_modelled: bool,
     listing_type: str = "fixed",
     sandbox_source: bool = False,
+    local_market_method: str = "",
+    uk_comp_count: int = 0,
+    localisation_confidence: Decimal | None = None,
+    sold_evidence_fresh: bool = True,
+    valuation_anomaly: bool = False,
 ) -> GateResult:
     min_id = as_decimal(settings.buy_ready_min_identity)
     min_cond = as_decimal(settings.buy_ready_min_condition)
@@ -86,8 +91,13 @@ def apply_money_ready_gates(
         # No realised comp: only pass evidence if sample is thick and owner overrode require_realised.
         gates["PRICE_EVIDENCE_PASS"] = strong and realised_ok and valuation_confidence >= min_val
     else:
-        gates["PRICE_EVIDENCE_PASS"] = strong and valuation_confidence >= min_val
-    gates["LOCALISATION_PASS"] = local_count >= 1 or valuation_confidence >= Decimal("0.85")
+        gates["PRICE_EVIDENCE_PASS"] = strong and valuation_confidence >= min_val and sold_evidence_fresh
+    uk_proxy_ok = (
+        (local_market_method or "") == "UK_REALIZED_PROXY"
+        and uk_comp_count >= settings.buy_ready_min_comps
+        and (localisation_confidence or ZERO) >= Decimal("0.40")
+    )
+    gates["LOCALISATION_PASS"] = local_count >= 1 or uk_proxy_ok or valuation_confidence >= Decimal("0.85")
     gates["EXIT_CHANNEL_PASS"] = exit_present
     days_ok = expected_days is None or expected_days <= settings.max_days_to_sale
     gates["LIQUIDITY_PASS"] = liquidity_confidence >= Decimal("0.35") and days_ok
@@ -104,11 +114,11 @@ def apply_money_ready_gates(
         gates["COST_PASS"] = False
     gates["TAX_PASS"] = tax_modelled
     gates["RISK_PASS"] = (not high_risk) and risk_score < Decimal("0.45")
-    gates["SOURCE_FRESHNESS_PASS"] = source_fresh
+    gates["SOURCE_FRESHNESS_PASS"] = source_fresh and sold_evidence_fresh
     gates["DOWNSIDE_PASS"] = downside_profit >= min_down
     under_max = asking is None or asking <= max_buy
     gates["MAX_BUY_PASS"] = under_max and max_buy > ZERO
-    gates["DATA_PROVENANCE_PASS"] = provenance_complete
+    gates["DATA_PROVENANCE_PASS"] = provenance_complete and not valuation_anomaly
     gates["CATEGORY_CERT_PASS"] = category_certified or settings.owner_override_uncertified
     safe_limit = as_decimal(settings.safe_start_max_purchase_eur if settings.safe_start_mode else settings.max_purchase_eur)
     safe_conf = as_decimal(settings.safe_start_min_confidence) if settings.safe_start_mode else as_decimal(settings.min_confidence)

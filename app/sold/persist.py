@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -68,12 +69,114 @@ def persist_sold_hits(session: Session, hits: list[SoldEvidenceHit]) -> dict[str
                     "evidence_type": hit.evidence_type.value,
                     "classification": "REALIZED_SOLD",
                     "asking_relabelled": False,
+                    "accepted_for_valuation": True,
+                    "evidence_class": "A",
+                    "evidence_class_name": "MARKET_WIDE_COMPLETED_SALE" if hit.source == "compsniper" else hit.evidence_type.value,
                 },
             )
         )
         written += 1
     session.flush()
     return {"imported": written, "duplicates": skipped}
+
+
+def _canonical_fingerprint(provider: str, marketplace: str, source_listing_id: str) -> str:
+    key = f"{provider}|{marketplace}|{source_listing_id}"
+    return hashlib.sha256(key.encode()).hexdigest()
+
+
+def persist_canonical_sold(session: Session, records: list[Any]) -> dict[str, int]:
+    """Persist CompSniper canonical rows, including rejected identity candidates."""
+    written = 0
+    skipped = 0
+    imported_accepted = 0
+    rejected = 0
+    for rec in records:
+        fp = _canonical_fingerprint(rec.provider, rec.marketplace, rec.source_listing_id)
+        existing = session.scalar(select(SoldEvidence).where(SoldEvidence.fingerprint == fp))
+        if existing is None and rec.source_url:
+            existing = session.scalar(
+                select(SoldEvidence).where(
+                    SoldEvidence.source == rec.provider,
+                    SoldEvidence.url_or_reference == rec.source_url,
+                )
+            )
+        extras = {
+            "title": rec.title,
+            "variant": rec.variant,
+            "market": rec.marketplace,
+            "provenance": rec.provenance,
+            "notes": rec.rejection_reason or rec.evidence_class,
+            "product_identity": rec.canonical_product_id,
+            "quantity": 1,
+            "evidence_type": "realised_sale",
+            "classification": "REALIZED_SOLD" if rec.accepted_for_valuation else "REJECTED_SOLD_CANDIDATE",
+            "asking_relabelled": False,
+            "accepted_for_valuation": rec.accepted_for_valuation,
+            "rejection_reason": rec.rejection_reason,
+            "evidence_class": rec.evidence_class_letter,
+            "evidence_class_name": rec.evidence_class,
+            "product_class": rec.product_class,
+            "condition_raw": rec.condition_raw,
+            "condition_grade": rec.condition_grade,
+            "sold_price_native": str(rec.sold_price),
+            "shipping_native": str(rec.shipping_price) if rec.shipping_price is not None else None,
+            "buyer_total_native": str(rec.buyer_total) if rec.buyer_total is not None else None,
+            "native_currency": rec.currency,
+            "sold_price_eur": str(rec.sold_price_eur) if rec.sold_price_eur is not None else None,
+            "shipping_eur": str(rec.shipping_eur) if rec.shipping_eur is not None else None,
+            "seller": rec.seller,
+            "imported_at": rec.imported_at.isoformat() if rec.imported_at else None,
+            "source_listing_id": rec.source_listing_id,
+            "best_offer_accepted": rec.best_offer_accepted,
+            "listing_type": rec.listing_type,
+            "raw": rec.raw,
+            "ticket_level": True,
+        }
+        price = rec.sold_price_eur if rec.sold_price_eur is not None else rec.sold_price
+        if rec.shipping_eur is not None and rec.sold_price_eur is not None:
+            price = rec.sold_price_eur + rec.shipping_eur
+        elif rec.buyer_total is not None and rec.sold_price_eur is None:
+            price = rec.buyer_total
+        shipping = rec.shipping_eur if rec.shipping_eur is not None else rec.shipping_price
+        if existing:
+            existing.extras = {**(existing.extras or {}), **extras}
+            existing.condition = rec.condition_grade.lower()
+            existing.sold_price = price
+            existing.shipping_charged = shipping
+            existing.evidence_quality = "high" if rec.accepted_for_valuation else "rejected"
+            skipped += 1
+            continue
+        session.add(
+            SoldEvidence(
+                canonical_product_id=rec.canonical_product_id,
+                condition=rec.condition_grade.lower(),
+                channel="ebay",
+                territory=rec.marketplace,
+                sold_price=price,
+                currency="EUR" if rec.sold_price_eur is not None else rec.currency,
+                shipping_charged=shipping,
+                fees_if_known=None,
+                sold_date=rec.sold_at,
+                source=rec.provider,
+                evidence_quality="high" if rec.accepted_for_valuation else "rejected",
+                url_or_reference=rec.source_url or rec.source_listing_id,
+                fingerprint=fp,
+                extras=extras,
+            )
+        )
+        written += 1
+        if rec.accepted_for_valuation:
+            imported_accepted += 1
+        else:
+            rejected += 1
+    session.flush()
+    return {
+        "imported": written,
+        "duplicates": skipped,
+        "imported_accepted": imported_accepted,
+        "rejected": rejected,
+    }
 
 
 def as_eur(amount: Decimal, currency: str, rates: dict[str, Decimal] | None) -> Decimal:
@@ -85,4 +188,5 @@ def as_eur(amount: Decimal, currency: str, rates: dict[str, Decimal] | None) -> 
     rate = rates.get(cur)
     if rate is None or rate <= 0:
         return amount
-    return amount * rate
+    # ECB quote is units of `currency` per 1 EUR.
+    return amount / rate
