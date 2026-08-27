@@ -68,6 +68,18 @@ def test_negative_downside_blocks_buy_ready() -> None:
     assert result.money_ready_decision != MoneyReadyDecision.BUY_READY
 
 
+def test_no_local_realised_fails_localisation() -> None:
+    result = _gates(
+        local_count=0,
+        valuation_confidence=Decimal("0.62"),
+        asking=Decimal("200"),
+        purchase_price=Decimal("200"),
+        all_in_cost=Decimal("220"),
+    )
+    assert result.money_ready is False
+    assert "LOCALISATION_PASS" in result.failures
+
+
 def test_no_realised_comp_forces_review() -> None:
     result = _gates(realised_count=0, asking=Decimal("200"), purchase_price=Decimal("200"), all_in_cost=Decimal("220"))
     assert result.money_ready is False

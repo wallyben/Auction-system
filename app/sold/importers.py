@@ -48,7 +48,14 @@ CANONICAL = {
         "sold_price",
         "total",
         "proceeds",
+        "avg sold price",
+        "average sold price",
+        "avg. sold price",
+        "average price",
+        "avg price",
     },
+    "sell_through": {"sell through", "sell-through", "sell through %", "sell-through %"},
+    "sold_count": {"sold items", "items sold", "sold count", "quantity sold", "total sold"},
     "sale_date": {
         "sale_date",
         "sale date",
@@ -112,7 +119,11 @@ def _norm_header(name: str) -> str:
 
 
 def detect_kind(text: str) -> str:
-    sample = text[:800].lower()
+    sample = text[:1200].lower()
+    if "sell through" in sample or "sell-through" in sample or "avg sold" in sample or "average sold price" in sample:
+        if "sold for" in sample or "item title" in sample:
+            return "terapeak_listings"
+        return "terapeak_aggregate"
     if "final value fee" in sample or "item number" in sample or "sold for" in sample or "item title" in sample:
         return "ebay"
     if "paypal" in sample or ("gross" in sample and "fee" in sample and "date" in sample):
@@ -177,8 +188,88 @@ def normalize_sales_csv(text: str) -> str:
     return out.getvalue()
 
 
+def import_terapeak_aggregate(session, text: str) -> dict[str, int | list[str]]:
+    """Store Terapeak/Product Research aggregates as class-E statistics.
+
+    Never explode an average into fake individual sold tickets.
+    """
+    from datetime import datetime, timezone
+    from decimal import Decimal, InvalidOperation
+    import hashlib
+
+    from sqlalchemy import select
+
+    from app.identity.resolvers import identify_with_resolvers
+    from app.models.orm import SoldEvidence
+
+    remapped = normalize_sales_csv(text)
+    reader = csv.DictReader(io.StringIO(remapped))
+    imported = 0
+    skipped = 0
+    errors: list[str] = []
+    for i, row in enumerate(reader, start=2):
+        product = (row.get("product") or row.get("title") or row.get("item") or "").strip()
+        price_raw = row.get("sale_price") or row.get("avg_sold_price") or row.get("average_sold_price") or ""
+        if not product or not price_raw:
+            errors.append(f"row {i}: missing product or average price")
+            continue
+        try:
+            price = Decimal(str(price_raw).replace(",", "").replace("€", "").strip())
+        except InvalidOperation:
+            errors.append(f"row {i}: invalid average price")
+            continue
+        if price <= 0:
+            errors.append(f"row {i}: average price must be positive")
+            continue
+        identity = identify_with_resolvers(title=product)
+        fp = hashlib.sha256(f"terapeak_agg|{identity.canonical_key}|{price}|{product}".encode()).hexdigest()
+        existing = session.scalar(select(SoldEvidence).where(SoldEvidence.fingerprint == fp))
+        if existing:
+            skipped += 1
+            continue
+        sold_count = row.get("sold_count") or row.get("sold_items") or ""
+        session.add(
+            SoldEvidence(
+                canonical_product_id=identity.canonical_key,
+                condition=row.get("condition") or "unknown",
+                channel="terapeak_aggregate",
+                territory=(row.get("territory") or "UN")[:8].upper(),
+                sold_price=price,
+                currency=(row.get("currency") or "EUR")[:3].upper(),
+                sold_date=datetime.now(timezone.utc),
+                source="terapeak_aggregate",
+                evidence_quality="aggregate",
+                url_or_reference=None,
+                fingerprint=fp,
+                extras={
+                    "title": product,
+                    "ticket_level": False,
+                    "evidence_class": "E",
+                    "provenance": "owner_terapeak_product_research_export",
+                    "classification": "STATISTICAL_MARKET_VALUE",
+                    "sold_count": sold_count,
+                    "sell_through": row.get("sell_through") or "",
+                    "note": "Aggregate statistic. Not an individual realised transaction.",
+                },
+            )
+        )
+        imported += 1
+    session.flush()
+    return {
+        "imported": imported,
+        "duplicates": skipped,
+        "rejected": len(errors),
+        "errors": errors,
+        "detected_format": "terapeak_aggregate",
+        "ticket_level": False,
+        "note": "Aggregates stored as class E. Not converted into fake sold tickets.",
+    }
+
+
 def import_marketplace_export(session, text: str, *, kind: str = "auto") -> dict[str, int | list[str]]:
     detected = detect_kind(text) if kind == "auto" else kind
+    if detected == "terapeak_aggregate":
+        return import_terapeak_aggregate(session, text)
     remapped = normalize_sales_csv(text)
     rows, errors = parse_owner_sales_csv(remapped)
     if errors and not rows:
@@ -191,4 +282,9 @@ def import_marketplace_export(session, text: str, *, kind: str = "auto") -> dict
         }
     result = import_owner_sales(session, remapped)
     result["detected_format"] = detected
+    if detected.startswith("terapeak"):
+        result["note"] = (
+            "Owner-exported Product Research/Terapeak rows. Provenance preserved. "
+            "Ticket-level only when sold date+price exist. Aggregates are not fake tickets."
+        )
     return result

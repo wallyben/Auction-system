@@ -93,10 +93,22 @@ EBAY_CONDITION_NAME: dict[str, tuple[ConditionGrade, Decimal]] = {
     "gebraucht": (ConditionGrade.GOOD, Decimal("0.82")),
     "wie neu": (ConditionGrade.EXCELLENT, Decimal("0.86")),
     "très bon état": (ConditionGrade.VERY_GOOD, Decimal("0.82")),
+    "tres bon etat": (ConditionGrade.VERY_GOOD, Decimal("0.82")),
     "bon état": (ConditionGrade.GOOD, Decimal("0.80")),
+    "bon etat": (ConditionGrade.GOOD, Decimal("0.80")),
+    "occasion": (ConditionGrade.GOOD, Decimal("0.82")),
+    "état occasion": (ConditionGrade.GOOD, Decimal("0.82")),
+    "neuf": (ConditionGrade.NEW, Decimal("0.90")),
+    "nuovo": (ConditionGrade.NEW, Decimal("0.90")),
+    "neu": (ConditionGrade.NEW, Decimal("0.90")),
+    "nuevo": (ConditionGrade.NEW, Decimal("0.90")),
     "ottimo": (ConditionGrade.VERY_GOOD, Decimal("0.82")),
     "usato": (ConditionGrade.GOOD, Decimal("0.82")),
     "usado": (ConditionGrade.GOOD, Decimal("0.82")),
+    "opened - never used": (ConditionGrade.OPEN_BOX, Decimal("0.84")),
+    "opened never used": (ConditionGrade.OPEN_BOX, Decimal("0.84")),
+    "ouvert – jamais utilisé": (ConditionGrade.OPEN_BOX, Decimal("0.84")),
+    "ouvert jamais utilise": (ConditionGrade.OPEN_BOX, Decimal("0.84")),
 }
 
 _PARTS = re.compile(

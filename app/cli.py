@@ -508,6 +508,22 @@ def cmd_ebay_owner_ingest() -> int:
         session.close()
 
 
+async def cmd_revalue() -> int:
+    from app.pipeline.service import revalue_all_active
+
+    session = _session()
+    try:
+        result = await revalue_all_active(session, reason="cli")
+        session.commit()
+        print(json.dumps(result, indent=2, default=str))
+        return 0 if result.get("ok") else 1
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
 def cmd_db_check() -> int:
     from app.db.session import probe_database, reset_engine
     from app.core.config import get_settings
@@ -593,6 +609,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("backtest")
     sub.add_parser("paper-trade")
     sub.add_parser("db-check")
+    sub.add_parser("revalue")
     args = parser.parse_args(argv)
     if args.cmd == "scan":
         return asyncio.run(cmd_scan(args.source, args.query, args.limit))
@@ -633,6 +650,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_paper()
     if args.cmd == "db-check":
         return cmd_db_check()
+    if args.cmd == "revalue":
+        return asyncio.run(cmd_revalue())
     return 1
 
 

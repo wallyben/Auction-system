@@ -4,6 +4,7 @@
 <section class="hero">
   <h1>Best buys now</h1>
   <p>BUY_READY is harder than engine BUY. Asking prices are not sold prices. Certification: <strong>{{ cert_level }}</strong>{% if safe_start %} · SAFE_START on{% endif %}.</p>
+  <p class="meta">Status remains <strong>ARIE_DATA_VALIDATION_REQUIRED</strong> until a category is certified on realised evidence.</p>
 </section>
 
 <section class="controls wrap">
@@ -40,17 +41,22 @@
 <p class="meta">Home {{ settings.home_country }} · capital €{{ settings.available_capital_eur }} · min profit €{{ settings.min_profit_eur }} · min ROI {{ settings.min_roi }} · scheduler {{ scheduler.scheduler_running }}</p>
 
 <section>
-  <h2>BUY_READY</h2>
+  <h2>BUY READY</h2>
   {% if buys %}
   <div class="cards">
     {% for o in buys %}
+    {% set pack = o.provenance_pack or {} %}
+    {% set whyv = pack.get("why_this_value") or {} %}
     <article class="card">
       <span class="pill BUY_READY">BUY_READY</span>
+      {% if o.value_status == "UNVALIDATED_VALUE" %}<span class="pill REVIEW">UNVALIDATED_VALUE</span>{% endif %}
       <h3><a href="/opportunities/{{ o.id }}/view">{{ (o.listing.title if o.listing else "")[:80] }}</a></h3>
-      <p>Acquire: €{{ '%.0f'|format(o.all_in_acquisition_eur) }} · Max buy: €{{ '%.0f'|format(o.max_buy_eur) }}</p>
-      <p>Expected exit: €{{ '%.0f'|format(o.expected_resale_eur) }} · Net profit: €{{ '%.0f'|format(o.expected_profit_eur) }}</p>
-      <p>ROI {{ '%.0f'|format(o.expected_roi * 100) }}% · {{ o.expected_days_to_sale }} days · conf {{ '%.0f'|format(o.valuation_confidence * 100) }}%</p>
-      <p class="meta">Exit: {{ o.best_exit_channel }} / {{ o.fastest_exit_channel }}</p>
+      <p>BUY PRICE: {% if o.listing %}{{ o.listing.currency }} {{ '%.0f'|format(o.listing.asking_price or 0) }}{% endif %} · MAX BUY: €{{ '%.0f'|format(o.max_buy_eur) }}</p>
+      <p>EXPECTED SALE: €{{ '%.0f'|format(o.expected_resale_eur) }} · QUICK SALE: €{{ '%.0f'|format(whyv.get("p25")|float if whyv.get("p25") else 0) }}</p>
+      <p>EXPECTED NET PROFIT: €{{ '%.0f'|format(o.expected_profit_eur) }} · DOWNSIDE: €{{ '%.0f'|format(o.downside_profit_eur) }}</p>
+      <p>REALISED COMPS N: {{ whyv.get("realised_comp_count") or "0" }} · EVIDENCE: {{ whyv.get("method") }}</p>
+      <p class="meta">IDENTITY {{ '%.0f'|format(o.identity_confidence * 100) }}% · CONDITION {{ '%.0f'|format(o.condition_confidence * 100) }}% · {{ pack.get("liquidity", {}).get("kind") }}</p>
+      <p class="meta">FAILED GATES: {{ (o.gate_results.failures or []) | join(", ") or "none" }}</p>
     </article>
     {% endfor %}
   </div>
@@ -60,29 +66,63 @@
 </section>
 
 <section>
-  <h2>NEAR BUY_READY</h2>
-  {% if near %}
+  <h2>HIGH-EVIDENCE WATCH</h2>
+  {% if watch_high %}
   <table>
-    <thead><tr><th>Item</th><th>Ask</th><th>Max buy</th><th>What prevented BUY_READY?</th></tr></thead>
+    <thead><tr><th>Item</th><th>Ask</th><th>Max buy</th><th>Expected sale</th><th>Realised n</th><th>Failed gates</th></tr></thead>
     <tbody>
-    {% for o in near %}
+    {% for o in watch_high %}
+    {% set pack = o.provenance_pack or {} %}
+    {% set whyv = pack.get("why_this_value") or {} %}
     <tr>
       <td><a href="/opportunities/{{ o.id }}/view">{{ (o.listing.title if o.listing else "")[:80] }}</a></td>
       <td>{% if o.listing %}{{ o.listing.currency }} {{ '%.0f'|format(o.listing.asking_price or 0) }}{% endif %}</td>
       <td>€{{ '%.0f'|format(o.max_buy_eur) }}</td>
-      <td class="warn">{{ (o.gate_results.failures or o.listing.extras.what_prevented_buy_ready if o.listing else []) | join(", ") }}</td>
+      <td>€{{ '%.0f'|format(o.expected_resale_eur) }}</td>
+      <td>{{ whyv.get("realised_comp_count") or 0 }}</td>
+      <td class="warn">{{ (o.gate_results.failures or []) | join(", ") }}</td>
     </tr>
     {% endfor %}
     </tbody>
   </table>
   {% else %}
-  <p class="meta">No near-buy candidates.</p>
+  <p class="meta">No high-evidence watch rows. Realised comps are required for this band.</p>
   {% endif %}
 </section>
 
 <section>
-  <h2>WATCH</h2>
-  <p class="meta">{{ watch|length }} items</p>
+  <h2>NEEDS DATA</h2>
+  {% if needs_data %}
+  <table>
+    <thead>
+      <tr>
+        <th>Item</th><th>Ask</th><th>Max buy</th><th>Expected sale</th><th>Status</th><th>Evidence</th><th>Failed gates</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for o in needs_data[:40] %}
+    {% set pack = o.provenance_pack or {} %}
+    {% set whyv = pack.get("why_this_value") or {} %}
+    <tr>
+      <td><a href="/opportunities/{{ o.id }}/view">{{ (o.listing.title if o.listing else "")[:70] }}</a></td>
+      <td>{% if o.listing %}{{ o.listing.currency }} {{ '%.0f'|format(o.listing.asking_price or 0) }}{% endif %}</td>
+      <td>€{{ '%.0f'|format(o.max_buy_eur) }}</td>
+      <td>{% if o.value_status == "UNVALIDATED_VALUE" %}<span class="warn">UNVALIDATED_VALUE</span>{% else %}€{{ '%.0f'|format(o.expected_resale_eur) }}{% endif %}</td>
+      <td><span class="pill {{ o.ranking_group }}">{{ o.ranking_group }}</span></td>
+      <td>{{ whyv.get("method") }}</td>
+      <td class="warn">{{ (o.gate_results.failures or []) | join(", ") }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="meta">No unvalued / review-interesting rows.</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>REJECTED</h2>
+  <p class="meta">{{ rejected|length }} items (accessories, weak identity, ignore). They are not ranked by hypothetical spread.</p>
 </section>
 
 <section>
@@ -95,19 +135,6 @@
   </ul>
   {% else %}
   <p class="meta">No timed auctions currently flagged.</p>
-  {% endif %}
-</section>
-
-<section>
-  <h2>PRICE DROPS</h2>
-  {% if drops %}
-  <ul>
-    {% for o in drops %}
-    <li><a href="/opportunities/{{ o.id }}/view">{{ (o.listing.title if o.listing else "")[:70] }}</a> · ask now {% if o.listing %}{{ o.listing.asking_price }}{% endif %} · max €{{ '%.0f'|format(o.max_buy_eur) }}</li>
-    {% endfor %}
-  </ul>
-  {% else %}
-  <p class="meta">No observed ask reductions yet.</p>
   {% endif %}
 </section>
 
@@ -141,36 +168,5 @@
     <li>No scans yet.</li>
     {% endfor %}
   </ul>
-</section>
-
-<section>
-  <h2>Watch / review / other</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Money</th><th>Engine</th><th>Item</th><th>Ask</th><th>Max buy</th>
-        <th>Expected</th><th>Profit</th><th>Downside</th><th>ROI</th><th>Days</th><th>Conf</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for o in opportunities %}
-      <tr>
-        <td><a href="/opportunities/{{ o.id }}/view"><span class="pill {{ o.money_ready_decision }}">{{ o.money_ready_decision }}</span></a></td>
-        <td><span class="pill {{ o.engine_decision or o.decision }}">{{ o.engine_decision or o.decision }}</span></td>
-        <td><a href="/opportunities/{{ o.id }}/view">{{ (o.listing.title if o.listing else "")[:70] }}</a></td>
-        <td>{% if o.listing %}{{ o.listing.currency }} {{ '%.0f'|format(o.listing.asking_price or 0) }}{% endif %}</td>
-        <td>€{{ '%.0f'|format(o.max_buy_eur) }}</td>
-        <td>€{{ '%.0f'|format(o.expected_resale_eur) }}</td>
-        <td>€{{ '%.0f'|format(o.expected_profit_eur) }}</td>
-        <td>€{{ '%.0f'|format(o.downside_profit_eur) }}</td>
-        <td>{{ '%.0f'|format(o.expected_roi * 100) }}%</td>
-        <td>{{ o.expected_days_to_sale }}</td>
-        <td>{{ '%.0f'|format(o.valuation_confidence * 100) }}%</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="11">No opportunities stored. Run a scan or value an item.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
 </section>
 {% endblock %}

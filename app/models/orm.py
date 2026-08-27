@@ -290,6 +290,8 @@ class Valuation(Base, TimestampMixin):
     liquidity_score: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False, default=Decimal("0"))
     provenance: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     valued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    algorithm_version: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    evidence_as_of: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Opportunity(Base, TimestampMixin):
@@ -347,6 +349,11 @@ class Opportunity(Base, TimestampMixin):
     exit_analysis: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     negotiation: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     provenance_pack: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    ranking_group: Mapped[str] = mapped_column(String(32), nullable=False, default="UNVALUED")
+    ranking_score: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False, default=Decimal("0"))
+    algorithm_version: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    evidence_as_of: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    value_status: Mapped[str] = mapped_column(String(32), nullable=False, default="UNVALIDATED_VALUE")
 
 
 class ScanJob(Base, TimestampMixin):

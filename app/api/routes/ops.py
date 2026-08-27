@@ -83,15 +83,88 @@ def health_sources(session: Session = Depends(get_db)) -> dict[str, Any]:
                 "last_success_at": row.last_success_at.isoformat() if row.last_success_at else None,
                 "last_error": row.last_error,
                 "enabled": row.enabled,
+                "marketplace_insights": (row.config or {}).get("marketplace_insights") if row.id == "ebay_browse" else None,
             }
             for row in rows
         ],
     }
 
 
-@router.get("/health/workers")
-def health_workers() -> dict[str, Any]:
-    return {"status": "ok", **scheduler_status()}
+@router.get("/health/evidence")
+def health_evidence(session: Session = Depends(get_db)) -> dict[str, Any]:
+    """Source/evidence counters. A sold provider returning zero unexpectedly is a warning."""
+    from sqlalchemy import func
+
+    from app.models.orm import MetricEvent, SoldEvidence
+
+    names = [
+        "listings_scanned",
+        "exact_products",
+        "evidence_queries",
+        "realised_hits",
+        "valuations_generated",
+        "opportunities_rejected",
+        "BUY_READY_count",
+        "sold_provider_zero",
+        "full_book_revalue",
+    ]
+    counts: dict[str, float] = {}
+    for name in names:
+        total = session.scalar(select(func.coalesce(func.sum(MetricEvent.value), 0)).where(MetricEvent.name == name))
+        counts[name] = float(total or 0)
+    realised_n = session.scalar(select(func.count()).select_from(SoldEvidence)) or 0
+    buy_ready_n = session.scalar(
+        select(func.count()).select_from(Opportunity).where(Opportunity.money_ready_decision == "BUY_READY")
+    ) or 0
+    warning = None
+    if counts.get("evidence_queries", 0) > 0 and counts.get("realised_hits", 0) == 0:
+        warning = "Sold provider returned zero realised hits after evidence queries."
+    return {
+        "status": "ok",
+        "metrics": counts,
+        "realised_evidence_rows": int(realised_n),
+        "BUY_READY": int(buy_ready_n),
+        "warning": warning,
+        "providers": [],
+    }
+
+
+@router.get("/paper")
+def paper_trades(session: Session = Depends(get_db)) -> dict[str, Any]:
+    from app.paper.service import paper_summary
+
+    return paper_summary(session)
+
+
+@router.get("/health/insights")
+async def health_insights() -> dict[str, Any]:
+    """One official Marketplace Insights entitlement probe. Never logs tokens."""
+    from app.sold.insights import EbayMarketplaceInsightsProvider, INSIGHTS_URL, PROBE_CATEGORY_ID
+    from app.sources.ebay import EbayBrowseAdapter
+
+    adapter = EbayBrowseAdapter()
+    token = None
+    auth_note = None
+    if adapter._missing_credentials():
+        auth_note = "No eBay client credentials in this process."
+    else:
+        oauth = await adapter._oauth_probe()
+        if oauth.get("ok"):
+            token = adapter._token
+        else:
+            auth_note = "Browse client-credentials grant failed. Insights not probed with a token."
+    provider = EbayMarketplaceInsightsProvider(token)
+    result = await provider.probe(token)
+    result["endpoint"] = INSIGHTS_URL[settings.ebay_api_env]
+    result["marketplace"] = settings.ebay_marketplace_list()[0]
+    result["category"] = PROBE_CATEGORY_ID
+    if auth_note and not result.get("http_status"):
+        result["entitlement_result"] = result.get("entitlement_result") or "AUTH_ERROR"
+        result["response_classification"] = result.get("entitlement_result") or "AUTH_ERROR"
+        result["EBAY_MARKETPLACE_INSIGHTS"] = "BLOCKED_EXTERNAL_ACCESS"
+        result["note"] = auth_note
+    result["secrets_included"] = False
+    return result
 
 
 @router.get("/health/ebay-notifications")
@@ -191,10 +264,19 @@ def list_listings(limit: int = 500, session: Session = Depends(get_db)) -> dict[
 
 @router.get("/opportunities")
 def list_opportunities(decision: str | None = None, session: Session = Depends(get_db)) -> dict[str, Any]:
-    stmt = select(Opportunity).order_by(Opportunity.score.desc())
+    stmt = select(Opportunity)
     if decision:
         stmt = stmt.where(Opportunity.decision == decision.upper())
-    rows = session.scalars(stmt.limit(250)).all()
+    rows = list(session.scalars(stmt.limit(400)).all())
+    from app.opportunity.ranking import GROUP_ORDER
+
+    rows = sorted(
+        rows,
+        key=lambda o: (
+            GROUP_ORDER.get(getattr(o, "ranking_group", None) or "UNVALUED", 9),
+            -(float(getattr(o, "ranking_score", 0) or 0)),
+        ),
+    )[:250]
     return {"opportunities": [_summary(session, row) for row in rows]}
 
 
@@ -325,6 +407,12 @@ def _summary(session: Session, row: Opportunity) -> dict[str, Any]:
         "ignored": row.ignored,
         "money_ready_decision": row.money_ready_decision,
         "engine_decision": row.engine_decision or row.decision,
+        "ranking_group": getattr(row, "ranking_group", None),
+        "ranking_score": str(getattr(row, "ranking_score", "") or ""),
+        "value_status": getattr(row, "value_status", None),
+        "algorithm_version": getattr(row, "algorithm_version", None),
+        "evaluated_at": row.last_evaluated_at.isoformat() if row.last_evaluated_at else None,
+        "evidence_as_of": row.evidence_as_of.isoformat() if getattr(row, "evidence_as_of", None) else None,
         "ideal_offer_eur": str(row.ideal_offer_eur) if row.ideal_offer_eur is not None else None,
         "best_exit_channel": row.best_exit_channel,
         "downside_profit_eur": str(row.downside_profit_eur) if row.downside_profit_eur is not None else None,
@@ -350,6 +438,12 @@ def _detail(session: Session, row: Opportunity) -> dict[str, Any]:
             "score_breakdown": row.score_breakdown,
             "risks": row.risks,
             "last_evaluated_at": row.last_evaluated_at.isoformat(),
+            "algorithm_version": getattr(row, "algorithm_version", None),
+            "evidence_as_of": row.evidence_as_of.isoformat() if getattr(row, "evidence_as_of", None) else None,
+            "value_status": getattr(row, "value_status", None),
+            "ranking_group": getattr(row, "ranking_group", None),
+            "provenance_pack": row.provenance_pack,
+            "gate_results": row.gate_results,
         }
     )
     return summary

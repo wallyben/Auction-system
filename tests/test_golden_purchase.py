@@ -65,7 +65,9 @@ def test_cheap_a7iv_clears_or_fails_honestly() -> None:
         max_buy=costs.max_purchase_eur,
     )
     assert valuation.realised_count == 0
+    assert valuation.expected_sale_eur == Decimal("0.00")
+    assert valuation.value_status == "UNVALIDATED_VALUE"
     assert valuation.confidence <= Decimal("0.48")
-    assert costs.max_purchase_eur > 0
-    assert decision.decision.value in {"BUY", "WATCH", "IGNORE", "REVIEW"}
+    assert costs.max_purchase_eur == Decimal("0")
+    assert decision.decision.value in {"WATCH", "IGNORE", "REVIEW"}
     assert ASK < valuation.expected_sale_eur or decision.decision.value in {"IGNORE", "REVIEW", "WATCH"}

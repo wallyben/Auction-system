@@ -1,0 +1,368 @@
+{
+  "generated_at": "2026-08-27T18:54:27.576573+00:00",
+  "host": "https://auction-system-l6je.onrender.com",
+  "git": {
+    "sha": "98b6e3e0c8377bfafa7a031a8bac5bd5d848e8f7",
+    "branch": "main",
+    "clean": true,
+    "migrations_head_at_baseline": "20260825_0005",
+    "tests_at_baseline": "not_re_run_before_code_change; existing suite collected on main"
+  },
+  "production": {
+    "health": {
+      "status": "ok"
+    },
+    "health_db": {
+      "status": "ok",
+      "database": "up"
+    },
+    "health_workers": {
+      "status": "ok",
+      "scheduler_running": true,
+      "jobs": [
+        {
+          "id": "ebay-deletion-retry",
+          "next_run_time": "2026-08-27T18:46:40.690990+00:00"
+        },
+        {
+          "id": "scan-live-sources",
+          "next_run_time": "2026-08-27T18:46:57.750539+00:00"
+        },
+        {
+          "id": "owner-sold-ingest",
+          "next_run_time": "2026-08-27T20:01:27.325243+00:00"
+        },
+        {
+          "id": "daily-self-audit",
+          "next_run_time": "2026-08-28T06:15:00+00:00"
+        }
+      ]
+    },
+    "oauth": {
+      "owner_oauth_connected": true,
+      "scope_valid": true,
+      "last_sold_ingest_at": "2026-08-27T17:01:41.175207+00:00",
+      "last_ingest_count": 0,
+      "sandbox_used": false,
+      "secrets_included": false
+    },
+    "live_sources": [
+      {
+        "id": "csv_import",
+        "status": "LIVE"
+      },
+      {
+        "id": "ebay_browse",
+        "status": "LIVE"
+      },
+      {
+        "id": "ecb_fx",
+        "status": "LIVE"
+      },
+      {
+        "id": "manual",
+        "status": "LIVE"
+      },
+      {
+        "id": "reverb",
+        "status": "LIVE"
+      },
+      {
+        "id": "scryfall",
+        "status": "LIVE"
+      }
+    ],
+    "ebay_browse": {
+      "id": "ebay_browse",
+      "name": "eBay Browse API",
+      "status": "LIVE",
+      "reason": "Browse search succeeded across configured marketplaces.",
+      "last_success_at": "2026-08-27T18:31:31.982503+00:00",
+      "last_error": null,
+      "enabled": true
+    }
+  },
+  "baseline_counts": {
+    "listings": 473,
+    "opportunities": 250,
+    "realised_evidence": 0,
+    "owner_realised_evidence": 0,
+    "BUY_READY": 0,
+    "categories_certified": 0,
+    "paper_trades": "not_exposed_as_json; performance HTML bytes=2858",
+    "money_ready_decisions": {
+      "REVIEW": 250
+    },
+    "expected_resale_zero": 214,
+    "expected_resale_nonzero": 36,
+    "failed_gates": {
+      "PRODUCT_IDENTITY_PASS": 198,
+      "CONDITION_PASS": 195,
+      "PRICE_EVIDENCE_PASS": 250,
+      "LOCALISATION_PASS": 250,
+      "LIQUIDITY_PASS": 231,
+      "RISK_PASS": 250,
+      "CATEGORY_CERT_PASS": 250,
+      "SAFE_START_PASS": 250,
+      "DOWNSIDE_PASS": 242,
+      "MAX_BUY_PASS": 243
+    },
+    "listing_sources": {
+      "ebay_browse": 469,
+      "reverb": 4
+    },
+    "listing_countries": {
+      "GB": 132,
+      "IE": 2,
+      "DE": 96,
+      "IT": 55,
+      "CN": 24,
+      "JP": 53,
+      "US": 29,
+      "AU": 1,
+      "KR": 1,
+      "FR": 49,
+      "NL": 5,
+      "ES": 12,
+      "BR": 1,
+      "CH": 6,
+      "PL": 2,
+      "CA": 3,
+      "RO": 1,
+      "HK": 1
+    },
+    "listing_categories_top": [
+      [
+        "Video Game Consoles",
+        45
+      ],
+      [
+        "Lenses",
+        36
+      ],
+      [
+        "Handys & Smartphones",
+        25
+      ],
+      [
+        "Digital Cameras",
+        25
+      ],
+      [
+        "Konsolen",
+        20
+      ],
+      [
+        "Mobile & Smart Phones",
+        19
+      ],
+      [
+        "Fa\u00e7ades, coques, autocollants",
+        15
+      ],
+      [
+        "Cellulari e smartphone",
+        13
+      ],
+      [
+        "Apple Laptops",
+        11
+      ],
+      [
+        "Console",
+        11
+      ],
+      [
+        "DJ Controllers",
+        11
+      ],
+      [
+        "Objektive",
+        10
+      ],
+      [
+        "Cases, Bags & Covers",
+        10
+      ],
+      [
+        "Objectifs",
+        10
+      ],
+      [
+        "Graphics/Video Cards",
+        10
+      ]
+    ],
+    "condition_grade": {
+      "good": 145,
+      "new": 7,
+      "very_good": 4,
+      "unknown": 309,
+      "open_box": 5,
+      "excellent": 2,
+      "for_parts": 1
+    },
+    "conditionId_present": 49,
+    "conditionId_missing": 424
+  },
+  "top_ranked_by_profit_before_pivot": [
+    {
+      "title": "Pioneer DDJ-FLX10 Stand",
+      "expected_profit_eur": "850.57",
+      "expected_resale_eur": "1391.35",
+      "asking_price": "70.68",
+      "country": "GB",
+      "source": "ebay_browse",
+      "confidence": "0.1700",
+      "failed_gates": [
+        "PRODUCT_IDENTITY_PASS",
+        "CONDITION_PASS",
+        "PRICE_EVIDENCE_PASS",
+        "LOCALISATION_PASS",
+        "LIQUIDITY_PASS",
+        "RISK_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS"
+      ],
+      "url": "https://www.ebay.de/itm/388780093593?_skw=Pioneer+DDJ-FLX10&hash=item5a85197099:g:~64AAeSwzIxqWVM-"
+    },
+    {
+      "title": "Pioneer DDJ-FLX10 4 Canali Controller - Nero",
+      "expected_profit_eur": "684.74",
+      "expected_resale_eur": "1391.35",
+      "asking_price": "250.00",
+      "country": "IT",
+      "source": "ebay_browse",
+      "confidence": "0.2300",
+      "failed_gates": [
+        "PRODUCT_IDENTITY_PASS",
+        "CONDITION_PASS",
+        "PRICE_EVIDENCE_PASS",
+        "LOCALISATION_PASS",
+        "LIQUIDITY_PASS",
+        "RISK_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS"
+      ],
+      "url": "https://www.ebay.it/itm/398184264110?_skw=Pioneer+DDJ-FLX10&hash=item5cb5a1b1ae:g:ioQAAeSwzOhqWhWz"
+    },
+    {
+      "title": "Power socket for Pioneer XDJ-700, XDJ-RR, DDJ-1000 ect. (ref : DKN1649)",
+      "expected_profit_eur": "674.75",
+      "expected_resale_eur": "1005.89",
+      "asking_price": "6.50",
+      "country": "FR",
+      "source": "ebay_browse",
+      "confidence": "0.2900",
+      "failed_gates": [
+        "PRODUCT_IDENTITY_PASS",
+        "CONDITION_PASS",
+        "PRICE_EVIDENCE_PASS",
+        "LOCALISATION_PASS",
+        "RISK_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS"
+      ],
+      "url": "https://www.ebay.fr/itm/136755573768?_skw=Pioneer+DDJ-1000&hash=item1fd7447408:g:LT0AAeSwNxZpGxuU"
+    },
+    {
+      "title": "controladora dj pioneer ddj Flx 4",
+      "expected_profit_eur": "551.86",
+      "expected_resale_eur": "1203.05",
+      "asking_price": "250.27",
+      "country": "ES",
+      "source": "ebay_browse",
+      "confidence": "0.1900",
+      "failed_gates": [
+        "PRODUCT_IDENTITY_PASS",
+        "CONDITION_PASS",
+        "PRICE_EVIDENCE_PASS",
+        "LOCALISATION_PASS",
+        "LIQUIDITY_PASS",
+        "RISK_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS"
+      ],
+      "url": "https://www.ebay.es/itm/137592858955?_skw=Pioneer+DDJ-FLX4&hash=item20092c694b:g:tckAAeSwTnJqSnYD"
+    },
+    {
+      "title": "Pioneer DDJ-1000 SRT Skin | Custom Design |  Protective Decal | StyleFlip",
+      "expected_profit_eur": "530.27",
+      "expected_resale_eur": "1005.89",
+      "asking_price": "93.36",
+      "country": "US",
+      "source": "ebay_browse",
+      "confidence": "0.2900",
+      "failed_gates": [
+        "PRODUCT_IDENTITY_PASS",
+        "CONDITION_PASS",
+        "PRICE_EVIDENCE_PASS",
+        "LOCALISATION_PASS",
+        "RISK_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS"
+      ],
+      "url": "https://www.ebay.nl/itm/325631663707?_skw=Pioneer+DDJ-1000&hash=item4bd128de5b:g:5AYAAOSwXWhkuCX3&amdata=enc%3AAQALAAAA8ACCtXRWQnOEpyOqnQQ8KGa2NoVsqDM9kuc8t25KYqWBXPniGPSfZsO6ZWbUN2jleADmP5%2FjZ4LdOiF%2FBjUk7xcmGmdmccNYBRZhTNNuQ5uLudWX9svIz%2Fwptdtu7B90lu46MNmINrQoOT1VZEIg0KpFZ51fPY5IPZYZjAtBs17xNsvMKqZiDGvHCVPlAfYTH6MoFdrcBPjr%2F6tbQz03079QwOx%2FIgj176fJO0UCY4WOh66RS8RmhCKqSTw%2FY1p1NZW7FTN1X%2B5lbmCyvqaCQIWgLeIfVBgzBQalDIEoX8E0baEs1WvWHr63wJPpJFKUmA%3D%3D"
+    },
+    {
+      "title": "Shure SM7B Cardioid Dynamic Vocal Broadcast Microphone Sealed in box Black",
+      "expected_profit_eur": "80.30",
+      "expected_resale_eur": "320.27",
+      "asking_price": "83.88",
+      "country": "GB",
+      "source": "ebay_browse",
+      "confidence": "0.2900",
+      "failed_gates": [
+        "PRODUCT_IDENTITY_PASS",
+        "CONDITION_PASS",
+        "PRICE_EVIDENCE_PASS",
+        "LOCALISATION_PASS",
+        "RISK_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS"
+      ],
+      "url": "https://www.ebay.co.uk/itm/188830229060?_skw=Shure+SM7B&hash=item2bf728a244:g:GRIAAeSw4vlqgvZP"
+    },
+    {
+      "title": "Shure SM7B Cardioid Dynamic Vocal Broadcast Microphone Sealed in box Black",
+      "expected_profit_eur": "70.38",
+      "expected_resale_eur": "296.94",
+      "asking_price": "79.53",
+      "country": "GB",
+      "source": "ebay_browse",
+      "confidence": "0.3100",
+      "failed_gates": [
+        "PRODUCT_IDENTITY_PASS",
+        "CONDITION_PASS",
+        "PRICE_EVIDENCE_PASS",
+        "LOCALISATION_PASS",
+        "RISK_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS"
+      ],
+      "url": "https://www.ebay.co.uk/itm/366616083478?_skw=Shure+SM7B&hash=item555c057c16:g:mpkAAeSwoAJqhcFe"
+    },
+    {
+      "title": "Apple MacBook Air 2025  15-inch Midnight Laptop, M3 Chip, 16GB RAM, 256GB SSD",
+      "expected_profit_eur": "3.09",
+      "expected_resale_eur": "1460.48",
+      "asking_price": "669.70",
+      "country": "GB",
+      "source": "ebay_browse",
+      "confidence": "0.1700",
+      "failed_gates": [
+        "PRODUCT_IDENTITY_PASS",
+        "CONDITION_PASS",
+        "PRICE_EVIDENCE_PASS",
+        "LOCALISATION_PASS",
+        "LIQUIDITY_PASS",
+        "RISK_PASS",
+        "MAX_BUY_PASS",
+        "CATEGORY_CERT_PASS",
+        "SAFE_START_PASS"
+      ],
+      "url": "https://www.ebay.co.uk/itm/178434430275?_skw=MacBook+Air+15+M3&hash=item298b855543:g:fA0AAeSwtRBpzDGJ"
+    }
+  ],
+  "note": "Realised evidence counts are 0 from public opportunity payloads (PRICE_EVIDENCE_PASS failed on all 250). Owner OAuth last_ingest_count=0."
+}

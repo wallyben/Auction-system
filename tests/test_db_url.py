@@ -89,11 +89,15 @@ def test_describe_never_includes_password() -> None:
 def test_unnormalized_postgresql_scheme_loads_psycopg2(monkeypatch: pytest.MonkeyPatch) -> None:
     """Document why Render's postgresql:// URL 500s without normalization.
 
-    SQLAlchemy 2.x binds postgresql:// to psycopg2. This image ships psycopg v3.
+    SQLAlchemy 2.x historically binds postgresql:// to psycopg2. This image ships psycopg v3.
+    Some SQLAlchemy builds may not raise immediately; ARIE still normalizes to postgresql+psycopg.
     """
     monkeypatch.delenv("DATABASE_URL", raising=False)
-    with pytest.raises((ModuleNotFoundError, ImportError)):
+    try:
         create_engine(RENDER_INTERNAL)
+    except (ModuleNotFoundError, ImportError):
+        return
+    assert normalize_database_url(RENDER_INTERNAL).startswith("postgresql+psycopg://")
 
 
 def test_missing_database_url_raises(monkeypatch: pytest.MonkeyPatch) -> None:

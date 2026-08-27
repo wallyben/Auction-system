@@ -32,8 +32,9 @@ a { color: var(--green); }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
 .card { background: var(--panel); border: 1px solid var(--line); padding: 0.9rem; }
 input { font: inherit; padding: 0.35rem 0.45rem; border: 1px solid var(--line); }
-.pill.WATCH, .pill.DEGRADED { background: var(--gold); }
-.pill.IGNORE, .pill.BLOCKED_POLICY, .pill.BLOCKED_CREDENTIALS, .pill.BLOCKED_TECHNICAL { background: var(--rust); color: #fff; }
+.pill.WATCH, .pill.DEGRADED, .pill.WATCH_HIGH_EVIDENCE { background: var(--gold); }
+.pill.IGNORE, .pill.BLOCKED_POLICY, .pill.BLOCKED_CREDENTIALS, .pill.BLOCKED_TECHNICAL, .pill.REJECTED { background: var(--rust); color: #fff; }
+.pill.REVIEW, .pill.UNVALUED, .pill.REVIEW_INTERESTING { background: #3d4a66; color: #fff; }
 .pill.PRODUCTION_KEYSET_DISABLED_COMPLIANCE { background: var(--gold); color: var(--ink); }
 .pill.REVIEW { background: #3d4a66; color: #fff; }
 .scans { padding-left: 1.1rem; }

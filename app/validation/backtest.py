@@ -98,7 +98,12 @@ def run_lookahead_backtest(session: Session | None = None) -> dict:
         covered = 0
         by_cat: dict[str, list[Decimal]] = defaultdict(list)
         for i, target in enumerate(rows):
-            if (target.extras or {}).get("asking_relabelled"):
+            tex = target.extras or {}
+            if tex.get("asking_relabelled"):
+                continue
+            if tex.get("ticket_level") is False or str(tex.get("evidence_class") or "") in {"E", "F", "G"}:
+                continue
+            if tex.get("market_wide") is False:
                 continue
             earlier: list[Comp] = []
             target_title = str((target.extras or {}).get("title") or target.canonical_product_id)
@@ -107,7 +112,12 @@ def run_lookahead_backtest(session: Session | None = None) -> dict:
             for prior in rows[:i]:
                 if _aware(prior.sold_date) >= target_at:
                     continue
-                prior_title = str((prior.extras or {}).get("title") or prior.canonical_product_id)
+                pex = prior.extras or {}
+                if pex.get("ticket_level") is False or str(pex.get("evidence_class") or "") in {"E", "F", "G"}:
+                    continue
+                if pex.get("market_wide") is False:
+                    continue
+                prior_title = str(pex.get("title") or prior.canonical_product_id)
                 if variant_reject(target_title, prior_title):
                     continue
                 pkey = (prior.canonical_product_id or "").strip()

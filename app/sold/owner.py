@@ -212,6 +212,9 @@ def import_owner_sales(session: Session, text: str) -> dict[str, int | list[str]
                     "quantity": int(row.get("quantity") or 1),
                     "transaction_id": row.get("transaction_id") or row.get("acquisition_source") or None,
                     "classification": "OWNER_RECORDED",
+                    "evidence_class": "C",
+                    "ticket_level": True,
+                    "market_wide": False,
                     "asking_relabelled": False,
                 },
             )

@@ -1,0 +1,109 @@
+{
+  "generated_at": "2026-08-27T19:20:00+00:00",
+  "production_inventory_context": {
+    "listings": 473,
+    "note": "From artifacts/pre_pivot_baseline.json. Leaf eBay categories mixed accessories with primaries.",
+    "top_leaf_categories_relevant": {
+      "Video Game Consoles": 45,
+      "Lenses": 36,
+      "Digital Cameras": 25,
+      "Handys & Smartphones / Mobile & Smart Phones": 44,
+      "DJ Controllers": 11,
+      "Apple Laptops": 11,
+      "Graphics/Video Cards": 10
+    },
+    "ireland_listings": 2,
+    "realised_evidence": 0
+  },
+  "candidates": [
+    {
+      "category": "cameras",
+      "product_class": "camera_body",
+      "acquisition_inventory": "Present (Digital Cameras 25 plus mixed EU/GB/JP bodies in the live book).",
+      "exact_sku_identifiability": "High. ILCE-7M4 / A7 IV / A7R generation and body vs kit are structured. Accessories (case/strap) are a separate product class after this pivot.",
+      "sold_data_availability": "None currently. Same external blocker as every other category (Insights not entitled; no licensed camera sold API).",
+      "liquidity": "Used full-frame bodies turn over on eBay IE/GB/DE. Not measured (no realised tickets).",
+      "average_absolute_profit_potential": "High ticket (€700–€2500 band already used in discovery). Absolute euro profit can justify Ireland shipping/VAT if evidence later exists.",
+      "shipping_simplicity": "An Post / courier parcel, insure. Not freight. Modelled as CONFIGURED_ASSUMPTION.",
+      "fraud_counterfeit_risk": "Lower than phones. Serial/shutter-count still required at purchase. Grey imports exist.",
+      "ireland_demand": "Real used-camera demand; MPB/eBay GB are the practical exits. Not invented.",
+      "score_note": "Best first commercial category even though it cannot be certified yet."
+    },
+    {
+      "category": "lenses",
+      "product_class": "lens",
+      "acquisition_inventory": "Present (36 Lenses leaf rows).",
+      "exact_sku_identifiability": "High if generation is parsed (GM vs GM II, focal length). Related to cameras but a different product class.",
+      "sold_data_availability": "None.",
+      "liquidity": "Strong for GM/RF staples; unmeasured.",
+      "average_absolute_profit_potential": "High.",
+      "shipping_simplicity": "Better than bodies (smaller). Still insure.",
+      "fraud_counterfeit_risk": "Grey-market and replica filters/hoods; bodies were cleaner as the first SKU.",
+      "ireland_demand": "Yes.",
+      "score_note": "Keep as discovery / REVIEW. Do not certify with cameras as one blob."
+    },
+    {
+      "category": "smartphones",
+      "product_class": "phone",
+      "acquisition_inventory": "Largest electronics cluster after consoles.",
+      "exact_sku_identifiability": "Hard. Pro vs Pro Max vs Plus, storage, carrier/unlocked, battery health. Historical FP was high.",
+      "sold_data_availability": "None.",
+      "liquidity": "High in principle; unmeasured.",
+      "average_absolute_profit_potential": "Medium; spreads often fake after fees/VAT/IMEI risk.",
+      "shipping_simplicity": "Easy physically; IMEI/blacklist/Find My are the real cost.",
+      "fraud_counterfeit_risk": "Highest of the set.",
+      "ireland_demand": "High.",
+      "score_note": "Reject as first certified category."
+    },
+    {
+      "category": "gpu",
+      "product_class": "desktop_gpu",
+      "acquisition_inventory": "Small (10 Graphics/Video Cards).",
+      "exact_sku_identifiability": "Ti / SUPER / laptop/mobile must be distinct. Easy to get wrong.",
+      "sold_data_availability": "None.",
+      "liquidity": "Cyclical.",
+      "average_absolute_profit_potential": "Medium-high when identity is exact.",
+      "shipping_simplicity": "OK if not a prebuilt PC.",
+      "fraud_counterfeit_risk": "Mining/used-as-new, hash-rate fraud.",
+      "ireland_demand": "Exists; thinner than cameras/phones.",
+      "score_note": "Discovery only."
+    },
+    {
+      "category": "consoles",
+      "product_class": "console",
+      "acquisition_inventory": "Largest leaf (Video Game Consoles 45) but polluted by games, skins, accessories.",
+      "exact_sku_identifiability": "Disc vs digital vs slim vs pro is OK; games/skins were the audit failures.",
+      "sold_data_availability": "None for eBay tickets. PriceCharting is a games/collectibles guide, not console sold tickets for Ireland.",
+      "liquidity": "High for PS5/Switch hardware; unmeasured.",
+      "average_absolute_profit_potential": "Lower absolute euro than cameras after fees.",
+      "shipping_simplicity": "OK.",
+      "fraud_counterfeit_risk": "Account-banned units, region, missing DualSense.",
+      "ireland_demand": "High.",
+      "score_note": "Discovery / REVIEW until games cannot be valued as consoles (now rejected) and sold evidence exists."
+    },
+    {
+      "category": "dj_audio",
+      "product_class": "dj_controller",
+      "acquisition_inventory": "DJ Controllers 11 plus Reverb asks.",
+      "exact_sku_identifiability": "Controllers are identifiable; stands/skins/sockets were valued as the parent SKU in the audit.",
+      "sold_data_availability": "None realised. Reverb asks were the source of fake €800 spreads.",
+      "liquidity": "Unknown; US Reverb density is not Irish sell-through.",
+      "average_absolute_profit_potential": "Looks huge on asks; that was the bug.",
+      "shipping_simplicity": "Worst of the set (bulky controllers).",
+      "fraud_counterfeit_risk": "Medium.",
+      "ireland_demand": "Niche.",
+      "score_note": "Do not certify. Reverb is class F only."
+    }
+  ],
+  "selected_initial_category": "cameras",
+  "selected_product_class": "camera_body",
+  "certified": false,
+  "certified_categories_config": [],
+  "why": "Cameras have the best combination of SKU identifiability, live acquisition inventory, absolute profit potential, and shipping simplicity, with lower fraud than phones. Sold-data availability is zero in every category, so none can be certified. Cameras are the first category ARIE will try to certify once genuine realised evidence exists. All other categories remain discovery-only / REVIEW. BUY_READY is not weakened to manufacture a green row.",
+  "sibling_not_certified": ["lenses"],
+  "buy_ready_target_if_later_certified": {
+    "false_positive_rate": "<0.05",
+    "identity_exact_or_variant_precision": ">=0.95",
+    "note": "Do not lower gates to compensate for weak identity or empty sold data."
+  }
+}

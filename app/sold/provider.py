@@ -61,7 +61,7 @@ def _hit_from_sold_row(row: SoldEvidence, notes: str) -> SoldEvidenceHit:
         condition=row.condition,
         channel=row.channel,
         sold_date=row.sold_date,
-        evidence_type=EvidenceType.REALISED_SALE,
+        evidence_type=EvidenceType.REALISED_SALE if row.source not in {"owner_recorded", "owner_sales", "ebay_owner_fulfillment"} else EvidenceType.OWNER_RECORDED,
         quality=row.evidence_quality,
         url=row.url_or_reference,
         notes=notes,
@@ -109,6 +109,12 @@ class IrishPanelProvider:
                     continue
             from app.sold.match import variant_reject
 
+            if (row.source or "") in {"owner_recorded", "owner_sales", "ebay_owner_fulfillment", "owner_trade_floor"}:
+                continue
+            if extras.get("ticket_level") is False:
+                continue
+            if str(extras.get("evidence_class") or "") in {"E", "F", "G"}:
+                continue
             if product and variant_reject(product, str(extras.get("title") or row.canonical_product_id)):
                 continue
             if market and market.upper() not in {row.territory.upper(), "ALL", ""}:

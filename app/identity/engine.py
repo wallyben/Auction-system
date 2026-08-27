@@ -69,6 +69,8 @@ class ProductIdentity:
     evidence: list[IdentityEvidence] = field(default_factory=list)
     is_lot: bool = False
     canonical_key: str = ""
+    product_class: str = "primary"
+    attributes: dict[str, str] = field(default_factory=dict)
 
 
 def _norm(text: str | None) -> str:

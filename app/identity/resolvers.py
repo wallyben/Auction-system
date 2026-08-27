@@ -6,7 +6,18 @@ import re
 from decimal import Decimal
 
 from app.identity.engine import ProductIdentity, identify_listing as generic_identify
+from app.identity.schemas import parse_camera, parse_gpu, parse_macbook, parse_phone
 from app.models.enums import IdentityLevel
+
+GAME_RE = re.compile(
+    r"\b("
+    r"fifa|ea\s*sports\s*fc|gta|grand theft auto|call of duty|cod\s+\d|"
+    r"spider-man|spiderman|horizon forbidden|god of war|game\s+only|"
+    r"digital\s+code|voucher\s+code|psn\s+card|"
+    r"mario kart|zelda|pokemon violet|pokemon scarlet"
+    r")\b",
+    re.I,
+)
 
 _GM_II = re.compile(
     r"\b(?:16-35|24-70|70-200).{0,28}\bgm\s*ii\b|\bgm\s*ii\b.{0,28}(?:16-35|24-70|70-200)",
@@ -37,6 +48,29 @@ def _finish(base: ProductIdentity, **updates: object) -> ProductIdentity:
 
 
 def resolve_camera(base: ProductIdentity, text: str) -> ProductIdentity:
+    parsed = parse_camera(text)
+    if parsed and parsed.model:
+        attrs = {
+            "manufacturer": parsed.manufacturer or "",
+            "model": parsed.model,
+            "generation": parsed.generation or "",
+            "body_or_kit": parsed.body_or_kit or "body",
+        }
+        key = "|".join(parsed.canonical_parts())
+        exact = parsed.tier in {"A7", "A7R", "A7S", "A7C"} and bool(parsed.generation)
+        return _finish(
+            base,
+            brand=parsed.manufacturer or base.brand or "Sony",
+            family="Alpha",
+            model=parsed.model,
+            variant=parsed.body_or_kit or "body",
+            category="cameras",
+            level=IdentityLevel.EXACT if exact else IdentityLevel.VARIANT,
+            confidence=max(base.confidence, Decimal("0.92") if exact else Decimal("0.84")),
+            canonical_key=key or "sony|a7",
+            attributes=attrs,
+            product_class="primary",
+        )
     if re.search(r"ilce-7m4|a7\s*iv|a7iv", text) and not re.search(r"a7r|ilce-7rm4", text):
         return _finish(
             base,
@@ -48,6 +82,8 @@ def resolve_camera(base: ProductIdentity, text: str) -> ProductIdentity:
             level=IdentityLevel.EXACT,
             confidence=max(base.confidence, Decimal("0.92")),
             canonical_key="sony|a7-iv|body",
+            attributes={"manufacturer": "Sony", "model": "A7 IV", "generation": "IV", "body_or_kit": "body"},
+            product_class="primary",
         )
     if re.search(r"ilce-7m3|a7\s*iii|a7iii", text) and not re.search(r"a7\s*iv|a7iv", text):
         return _finish(
@@ -123,6 +159,57 @@ def resolve_lens(base: ProductIdentity, text: str) -> ProductIdentity:
 
 
 def resolve_apple(base: ProductIdentity, text: str) -> ProductIdentity:
+    phone = parse_phone(text)
+    if phone and phone.model:
+        exact = bool(phone.storage and phone.tier)
+        return _finish(
+            base,
+            brand="Apple",
+            family="iPhone",
+            model=phone.model,
+            variant=phone.storage,
+            storage=phone.storage or base.storage,
+            category="consumer_electronics",
+            level=IdentityLevel.EXACT if exact else IdentityLevel.VARIANT,
+            confidence=max(base.confidence, Decimal("0.92") if exact else Decimal("0.82")),
+            canonical_key="|".join(phone.canonical_parts()),
+            missing=list(base.missing) + phone.missing,
+            attributes={
+                "manufacturer": "Apple",
+                "model": phone.model,
+                "generation": phone.generation or "",
+                "tier": phone.tier or "",
+                "storage": phone.storage or "",
+                "carrier": phone.carrier or "",
+            },
+            product_class="primary",
+        )
+    parsed_mac = parse_macbook(text)
+    if parsed_mac and parsed_mac.model:
+        exact = bool(parsed_mac.chip and parsed_mac.storage and parsed_mac.size)
+        return _finish(
+            base,
+            brand="Apple",
+            family="MacBook",
+            model=f"{parsed_mac.model} {parsed_mac.size or ''} {parsed_mac.chip or ''}".strip(),
+            variant=" ".join(p for p in [parsed_mac.chip, parsed_mac.ram, parsed_mac.storage] if p),
+            storage=parsed_mac.storage or base.storage,
+            category="computing",
+            level=IdentityLevel.EXACT if exact else IdentityLevel.FAMILY if parsed_mac.missing else IdentityLevel.VARIANT,
+            confidence=max(base.confidence, Decimal("0.92") if exact else Decimal("0.70") if parsed_mac.chip else Decimal("0.58")),
+            canonical_key="|".join(parsed_mac.canonical_parts()),
+            missing=list(base.missing) + parsed_mac.missing,
+            attributes={
+                "manufacturer": "Apple",
+                "model": parsed_mac.model,
+                "chip": parsed_mac.chip or "",
+                "ram": parsed_mac.ram or "",
+                "storage": parsed_mac.storage or "",
+                "size": parsed_mac.size or "",
+                "family": parsed_mac.tier or "",
+            },
+            product_class="primary",
+        )
     mac = _MACBOOK.search(text)
     if mac:
         size = mac.group(2) or ""
@@ -178,6 +265,21 @@ def resolve_apple(base: ProductIdentity, text: str) -> ProductIdentity:
 
 
 def resolve_gpu(base: ProductIdentity, text: str) -> ProductIdentity:
+    parsed = parse_gpu(text)
+    if parsed and parsed.extra.get("form") == "laptop":
+        return _finish(
+            base,
+            family="GeForce",
+            model=parsed.model,
+            variant="laptop",
+            category="gpu",
+            level=IdentityLevel.FAMILY,
+            confidence=min(max(base.confidence, Decimal("0.40")), Decimal("0.55")),
+            canonical_key=f"gpu|{parsed.model.lower()}|laptop",
+            product_class="primary",
+            attributes={"form": "laptop", "model": parsed.model or ""},
+            missing=list(base.missing) + ["desktop_gpu"],
+        )
     if _SUPER.search(text):
         num = re.search(r"40\d0|30\d0|50\d0", text, re.I)
         model = f"RTX {num.group(0)} SUPER" if num else "RTX SUPER"
@@ -208,6 +310,16 @@ def resolve_gpu(base: ProductIdentity, text: str) -> ProductIdentity:
 
 
 def resolve_console(base: ProductIdentity, text: str) -> ProductIdentity:
+    if GAME_RE.search(text) and not re.search(r"\b(console|bundle with console)\b", text, re.I):
+        return _finish(
+            base,
+            category="gaming",
+            level=IdentityLevel.CATEGORY,
+            confidence=min(base.confidence, Decimal("0.30")),
+            product_class="game",
+            missing=list(base.missing) + ["console_vs_game"],
+            canonical_key=f"game|{base.canonical_key}",
+        )
     ps = _PS.search(text)
     if ps:
         edition = (ps.group(2) or "disc").lower()
@@ -330,7 +442,20 @@ def identify_with_resolvers(
             confidence=min(base.confidence, Decimal("0.35")),
             missing=missing,
             canonical_key=f"accessory|{base.canonical_key}",
+            product_class="accessory",
+            category=base.category or category or "accessory",
         )
+    if GAME_RE.search(blob) and re.search(r"\b(ps5|playstation|xbox|switch|console)\b", blob):
+        if not re.search(r"\b(console|disc edition|digital edition)\b", blob):
+            return _finish(
+                base,
+                level=IdentityLevel.CATEGORY,
+                confidence=min(base.confidence, Decimal("0.30")),
+                missing=list(base.missing) + ["console_vs_game"],
+                canonical_key=f"game|{base.canonical_key}",
+                product_class="game",
+                category="gaming",
+            )
     for pattern, resolver in _DISPATCH:
         if pattern.search(blob):
             return resolver(base, blob)

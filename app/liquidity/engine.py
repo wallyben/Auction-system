@@ -18,6 +18,7 @@ class LiquidityResult:
     quick_sale_discount: Decimal
     slow_sale_risk: Decimal
     notes: str
+    kind: str = "UNKNOWN"
 
 
 def estimate_liquidity(
@@ -50,7 +51,24 @@ def estimate_liquidity(
         score = Decimal("0.95")
     if comparable_count == 0:
         return LiquidityResult(
-            ZERO, None, None, None, ZERO, Decimal("0.15"), Decimal("0.80"), "No evidence. Days-to-sale unknown."
+            ZERO, None, None, None, ZERO, Decimal("0.15"), Decimal("0.80"),
+            "No evidence. Days-to-sale unknown.",
+            kind="UNKNOWN",
+        )
+    if realised_count == 0:
+        prior = Decimal("0.25")
+        if category in fast:
+            prior += Decimal("0.05")
+        return LiquidityResult(
+            score=prior,
+            expected_days_to_sale=None,
+            expected_days_to_sale_low=None,
+            expected_days_to_sale_high=None,
+            liquidity_confidence=Decimal("0.20"),
+            quick_sale_discount=Decimal("0.15"),
+            slow_sale_risk=money_risk(prior),
+            notes="MARKET_PRIOR only. Asking density is not sell-through. Days-to-sale not measured.",
+            kind="MARKET_PRIOR",
         )
     days = 45
     low, high = 21, 70
@@ -58,18 +76,22 @@ def estimate_liquidity(
         days, low, high = 14, 7, 23
     elif score >= Decimal("0.50"):
         days, low, high = 28, 14, 45
-    if realised_count == 0:
-        high = max(high, 60)
-    conf = min(score, Decimal("0.40") if realised_count == 0 else score)
+    conf = min(score, Decimal("0.75"))
+    kind = "MEASURED_LIQUIDITY" if realised_count >= 3 else "MARKET_PRIOR"
     return LiquidityResult(
         score=score,
-        expected_days_to_sale=days,
-        expected_days_to_sale_low=low,
-        expected_days_to_sale_high=high,
-        liquidity_confidence=conf,
+        expected_days_to_sale=days if kind == "MEASURED_LIQUIDITY" else None,
+        expected_days_to_sale_low=low if kind == "MEASURED_LIQUIDITY" else None,
+        expected_days_to_sale_high=high if kind == "MEASURED_LIQUIDITY" else None,
+        liquidity_confidence=conf if kind == "MEASURED_LIQUIDITY" else min(conf, Decimal("0.35")),
         quick_sale_discount=Decimal("0.12"),
         slow_sale_risk=money_risk(score),
-        notes="Days-to-sale is a band from evidence density, not a calendar promise.",
+        notes=(
+            "MEASURED_LIQUIDITY from realised transaction density."
+            if kind == "MEASURED_LIQUIDITY"
+            else "Fewer than 3 realised comps: days-to-sale is a prior, not a measurement."
+        ),
+        kind=kind,
     )
 
 

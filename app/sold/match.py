@@ -31,13 +31,34 @@ def variant_reject(subject_title: str, comp_title: str) -> str | None:
         "repair_or_parts",
         "ps5_accessory",
         "4070_ti_mismatch",
+        "console_game",
+        "wrong_generation_a7r",
+        "wrong_generation_a7",
     }:
         return accessory
     if ACCESSORY_RE.search(other) and not ACCESSORY_RE.search(subject):
         return "accessory"
+    from app.sources.ebay_filters import GAME_TITLE_RE
+
     st, ot = subject.lower(), other.lower()
+    if GAME_TITLE_RE.search(other) and re.search(r"\b(ps5|playstation|xbox|switch)\b", st) and not re.search(
+        r"\b(console|disc edition)\b", ot
+    ):
+        return "console_game"
     if "pro max" in ot and "pro max" not in st and "iphone" in st:
         return "iphone_pro_max_mismatch"
+    if "pro max" in st and "pro max" not in ot and "iphone" in ot:
+        return "iphone_pro_max_mismatch"
+    if re.search(r"\biphone\s*\d+\s*pro\b", st) and re.search(r"\biphone\s*\d+\s*plus\b", ot):
+        return "iphone_plus_mismatch"
+    if "macbook air" in st and "macbook pro" in ot:
+        return "mac_air_pro_mismatch"
+    if "macbook pro" in st and "macbook air" in ot:
+        return "mac_air_pro_mismatch"
+    if re.search(r"a7\s*iv|a7iv|ilce-7m4", st) and re.search(r"a7r|ilce-7rm", ot):
+        return "a7r_not_a7"
+    if re.search(r"a7r|ilce-7rm", st) and re.search(r"a7\s*iv|a7iv|ilce-7m4", ot) and "a7r" not in ot:
+        return "a7r_not_a7"
     if re.search(r"iphone\s*(\d+)", st) and re.search(r"iphone\s*(\d+)", ot):
         if re.search(r"iphone\s*(\d+)", st).group(1) != re.search(r"iphone\s*(\d+)", ot).group(1):
             return "wrong_iphone_generation"
