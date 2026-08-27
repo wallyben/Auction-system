@@ -19,7 +19,18 @@ ACCESSORY_RE = re.compile(
     r"rechargement|charging station|controller stick|"
     r"display model|dummy|housing only|bezel|button set|"
     r"barrel|riparazione|reparaturteil|"
-    r"silhouette cut|protective film"
+    r"silhouette cut|protective film|"
+    r"coque|hülle|huelle|étui|etui|housse|tasche|"
+    r"socket|prise de courant|"
+    r"game only|digital code|voucher code"
+    r")\b",
+    re.I,
+)
+
+GAME_TITLE_RE = re.compile(
+    r"\b("
+    r"fifa|ea\s*sports\s*fc|gta|grand theft auto|call of duty|"
+    r"spider-man|god of war|horizon forbidden|mario kart|zelda"
     r")\b",
     re.I,
 )
@@ -111,6 +122,10 @@ def reject_title(query: str, title: str) -> str | None:
     t = (title or "").lower()
     if ACCESSORY_RE.search(t) and not ACCESSORY_RE.search(q):
         return "accessory"
+    if GAME_TITLE_RE.search(t) and re.search(r"\b(ps5|playstation|xbox|switch)\b", q) and not re.search(
+        r"\b(console|disc edition|digital edition)\b", t
+    ):
+        return "console_game"
     if KIT_RE.search(t) and not KIT_RE.search(q):
         return "bundle_or_kit"
     if REPAIR_RE.search(t) and not REPAIR_RE.search(q):
@@ -164,13 +179,25 @@ def reject_title(query: str, title: str) -> str | None:
     unique_phone_storage = {n for n in storages if 32 <= int(n) <= 1024}
     if "iphone" in q and len(unique_phone_storage) >= 3:
         return "multi_variant_listing"
+    if "macbook air" in q and "macbook pro" in t:
+        return "mac_air_pro_mismatch"
+    if "macbook pro" in q and "macbook air" in t:
+        return "mac_air_pro_mismatch"
     if re.search(r"\b(\d+)\s?gb\b", q) and re.search(r"\b(\d+)\s?gb\b", t):
-        want = re.search(r"\b(\d+)\s?gb\b", q)
-        got = re.search(r"\b(\d+)\s?gb\b", t)
-        if want and got and want.group(1) != got.group(1):
-            want_n, got_n = int(want.group(1)), int(got.group(1))
-            if max(want_n, got_n) <= 1024 and want_n != got_n:
-                if "iphone" in q or "macbook" in q or got_n < 64:
+        if "iphone" in q:
+            want = re.search(r"\b(\d+)\s?gb\b", q)
+            got = re.search(r"\b(\d+)\s?gb\b", t)
+            if want and got and want.group(1) != got.group(1):
+                want_n, got_n = int(want.group(1)), int(got.group(1))
+                if max(want_n, got_n) <= 1024 and want_n != got_n:
+                    return "storage_mismatch"
+        if "macbook" in q:
+            want_s = re.search(r"\b(256|512|1024|1)\s*(gb|tb)\b", q, re.I)
+            got_s = re.search(r"\b(256|512|1024|1)\s*(gb|tb)\b", t, re.I)
+            if want_s and got_s:
+                want_key = want_s.group(1) + want_s.group(2).lower()
+                got_key = got_s.group(1) + got_s.group(2).lower()
+                if want_key != got_key:
                     return "storage_mismatch"
     return None
 

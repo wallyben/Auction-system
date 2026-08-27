@@ -95,6 +95,22 @@ async def _scheduled_sold_ingest() -> None:
         session.close()
 
 
+async def _scheduled_revalue() -> None:
+    from app.pipeline.service import revalue_all_active
+    from app.valuation.version import VALUATION_ALGORITHM_VERSION
+
+    session = get_session_factory()()
+    try:
+        result = await revalue_all_active(session, reason=f"scheduled:{VALUATION_ALGORITHM_VERSION}")
+        session.commit()
+        logger.info("scheduled_revalue", **{k: result.get(k) for k in ("revalued", "algorithm_version", "ok")})
+    except Exception:
+        session.rollback()
+        logger.exception("scheduled_revalue_failed")
+    finally:
+        session.close()
+
+
 def start_scheduler() -> None:
     global _scheduler
     import sys
@@ -135,6 +151,13 @@ def start_scheduler() -> None:
         replace_existing=True,
         max_instances=1,
         coalesce=True,
+    )
+    _scheduler.add_job(
+        _scheduled_revalue,
+        CronTrigger(hour=7, minute=40),
+        id="revalue-all-active",
+        replace_existing=True,
+        max_instances=1,
     )
     _scheduler.start()
     logger.info("scheduler_started", minutes=settings.fast_marketplace_minutes)

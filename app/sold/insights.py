@@ -126,6 +126,10 @@ class EbayMarketplaceInsightsProvider:
                 "http_status": None,
                 "classification": "UNAVAILABLE",
                 "entitled": False,
+                "entitlement_result": "AUTH_ERROR",
+                "response_classification": "AUTH_ERROR",
+                "EBAY_MARKETPLACE_INSIGHTS": "BLOCKED_EXTERNAL_ACCESS",
+                "endpoint": url,
                 "official_endpoint": url,
                 "owner_action": (
                     "Marketplace Insights is Limited Release. Apply via Buy APIs Requirements: "
@@ -149,9 +153,13 @@ class EbayMarketplaceInsightsProvider:
                 "provider": self.name,
                 "available": False,
                 "url_probed": url,
+                "endpoint": url,
                 "error": type(exc).__name__,
                 "classification": "UNAVAILABLE",
                 "entitled": False,
+                "entitlement_result": "UNKNOWN",
+                "response_classification": "UNKNOWN",
+                "EBAY_MARKETPLACE_INSIGHTS": "BLOCKED_EXTERNAL_ACCESS",
                 "owner_action": f"Retry later or apply at {BUY_API_REQUIREMENTS}.",
             }
             self._last_probe = last
@@ -161,11 +169,25 @@ class EbayMarketplaceInsightsProvider:
             body_excerpt = "[redacted]"
         entitled = response.status_code == 200
         self._entitled = entitled
+        if response.status_code == 200:
+            entitlement = "ENTITLED"
+        elif response.status_code == 403:
+            entitlement = "NOT_ENTITLED"
+            self._entitled = False
+        elif response.status_code in {401, 400} and "token" in body_excerpt.lower():
+            entitlement = "AUTH_ERROR"
+        elif response.status_code == 401:
+            entitlement = "AUTH_ERROR"
+        elif response.status_code in {404, 405}:
+            entitlement = "ENDPOINT_INVALID"
+        else:
+            entitlement = "UNKNOWN"
         note = {
             200: "Entitled. Completed sales may be used as REALIZED_SOLD evidence.",
             403: (
                 "Not entitled (Limited Release). This app cannot read Marketplace Insights. "
-                f"Owner action: apply at {BUY_API_REQUIREMENTS}. Stop relying on Insights until 200."
+                f"Owner action: apply at {BUY_API_REQUIREMENTS}. Stop relying on Insights until 200. "
+                "EBAY_MARKETPLACE_INSIGHTS=BLOCKED_EXTERNAL_ACCESS."
             ),
             400: "Request rejected. Probe uses official v1_beta + required category_ids.",
             401: "Token rejected. Client-credentials Browse tokens usually lack Insights scope.",
@@ -178,8 +200,14 @@ class EbayMarketplaceInsightsProvider:
             "available": entitled,
             "http_status": response.status_code,
             "url_probed": url,
+            "endpoint": url,
+            "marketplace": settings.ebay_marketplace_list()[0],
+            "category": PROBE_CATEGORY_ID,
             "classification": self.classification if entitled else "UNAVAILABLE",
             "entitled": entitled,
+            "entitlement_result": entitlement,
+            "response_classification": entitlement,
+            "EBAY_MARKETPLACE_INSIGHTS": "LIVE" if entitled else "BLOCKED_EXTERNAL_ACCESS",
             "body_excerpt": body_excerpt,
             "required_param": "category_ids",
             "docs": INSIGHTS_DOCS,

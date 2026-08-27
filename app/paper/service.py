@@ -13,29 +13,17 @@ from app.models.orm import Listing, Opportunity, PaperTrade
 def should_open_paper(opportunity: Opportunity) -> tuple[bool, str]:
     from app.sources.ebay_filters import ACCESSORY_RE, KIT_RE
 
-    title = (getattr(opportunity, "title", None) or "") 
+    title = (getattr(opportunity, "title", None) or "")
     listing_title = title
     if ACCESSORY_RE.search(listing_title) or KIT_RE.search(listing_title):
         return False, ""
-    if opportunity.money_ready:
+    if opportunity.money_ready or str(getattr(opportunity, "money_ready_decision", "")) == "BUY_READY":
         return True, "BUY_READY"
-    if opportunity.engine_decision == "BUY" or opportunity.decision == "BUY":
-        return True, "ENGINE_BUY"
-    failures = (opportunity.gate_results or {}).get("failures") or []
-    production_ok = "PRODUCTION_SOURCE_PASS" not in failures
-    if (
-        opportunity.money_ready_decision == "WATCH"
-        and production_ok
-        and (opportunity.expected_profit_eur or 0) > 0
-    ):
-        return True, "NEAR_BUY"
-    if (
-        opportunity.money_ready_decision == "REVIEW"
-        and production_ok
-        and (opportunity.expected_profit_eur or 0) >= 40
-        and (opportunity.valuation_confidence or 0) >= 0.40
-    ):
-        return True, "REVIEW_INTERESTING"
+    extras = getattr(opportunity, "extras", None) or {}
+    pack = getattr(opportunity, "provenance_pack", None) or {}
+    experimental = bool(extras.get("experimental_paper") or pack.get("experimental_paper"))
+    if experimental:
+        return True, "EXPERIMENTAL"
     return False, ""
 
 
@@ -82,6 +70,31 @@ def open_paper_trade(session: Session, opportunity: Opportunity) -> PaperTrade |
         ),
     )
     session.add(trade)
+    session.flush()
+    return trade
+
+
+CONFIRMED_CLOSE_KINDS = {"owner_sale", "realised_sale", "trade_in_completed", "auction_hammer"}
+NOT_A_SALE = {"listing_disappeared", "delisted", "ended", "ended_without_sale", "unknown"}
+
+
+def close_paper_trade(
+    session: Session,
+    trade: PaperTrade,
+    *,
+    outcome_kind: str,
+    actual_sale_eur=None,
+    actual_days: int | None = None,
+    notes: str = "",
+) -> PaperTrade:
+    """Close only on confirmed outcome evidence. Listing disappearance is not a sale."""
+    kind = (outcome_kind or "").strip().lower()
+    if kind in NOT_A_SALE or kind not in CONFIRMED_CLOSE_KINDS:
+        raise ValueError("Listing disappearance is not a sale. Confirmed outcome evidence is required to close.")
+    trade.status = "closed"
+    trade.observed_outcome = kind
+    extra = f" actual_sale={actual_sale_eur} actual_days={actual_days}." if actual_sale_eur is not None else ""
+    trade.notes = ((trade.notes or "") + f" Closed as {kind}.{extra} {notes}").strip()
     session.flush()
     return trade
 

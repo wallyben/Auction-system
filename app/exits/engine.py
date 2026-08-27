@@ -67,9 +67,9 @@ _SAFE = {
     "cardmarket": Decimal("0.72"),
     "discogs": Decimal("0.68"),
     "reverb": Decimal("0.68"),
-    "cex_trade_in": Decimal("0.90"),
+    "cex_trade_in": Decimal("0.35"),
     "auction_ie": Decimal("0.50"),
-    "dealer": Decimal("0.80"),
+    "dealer": Decimal("0.20"),
 }
 
 
@@ -106,8 +106,15 @@ def compare_exits(
         notes = rule.notes
         if channel in {"dealer", "cex_trade_in"} and not trade_in_evidence:
             backed = False
-            conf = min(conf, Decimal("0.25"))
-            notes = f"{notes} Not certified: no realised trade-in/dealer data.".strip()
+            conf = min(conf, Decimal("0.20"))
+            notes = (
+                f"{notes} MODELLED_DEALER_ESTIMATE: configured haircut is not a dealer bid. "
+                "Low confidence until an actual quote/feed exists."
+            ).strip()
+        elif channel in {"dealer", "cex_trade_in"} and trade_in_evidence:
+            backed = True
+            conf = Decimal("0.80")
+            notes = f"{notes} Binding quote/feed present.".strip()
         quotes.append(
             ExitQuote(
                 channel=channel,

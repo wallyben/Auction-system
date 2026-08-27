@@ -72,3 +72,6 @@ source-health:
 
 backtest:
 	$(PYTHON) -m app.cli backtest
+
+revalue:
+	$(PYTHON) -m app.cli revalue

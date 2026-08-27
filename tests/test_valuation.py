@@ -61,5 +61,7 @@ def test_asking_only_is_not_called_realised() -> None:
     result = value_from_comps(comps)
     assert result.realised_count == 0
     assert result.confidence <= Decimal("0.48")
+    assert result.expected_sale_eur == Decimal("0.00")
+    assert result.asking_implied_eur > Decimal("0")
+    assert result.value_status == "UNVALIDATED_VALUE"
     assert "asking" in result.method
-    assert Decimal("0") < result.expected_sale_eur <= Decimal("1500")

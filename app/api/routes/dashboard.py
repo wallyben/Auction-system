@@ -72,14 +72,26 @@ def dashboard(request: Request, session: Session = Depends(get_db)) -> HTMLRespo
     opps = session.scalars(
         select(Opportunity)
         .where(Opportunity.ignored.is_(False))
-        .order_by(Opportunity.expected_profit_eur.desc())
-        .limit(80)
+        .limit(200)
     ).all()
+    from app.opportunity.ranking import GROUP_ORDER
+
+    opps = sorted(
+        opps,
+        key=lambda o: (
+            GROUP_ORDER.get(getattr(o, "ranking_group", None) or "UNVALUED", 9),
+            -(float(getattr(o, "ranking_score", 0) or 0)),
+            -(float(o.expected_profit_eur or 0) if getattr(o, "value_status", "") == "VALIDATED_VALUE" else 0),
+        ),
+    )
     for opp in opps:
         _attach_listing(session, opp)
     jobs = session.scalars(select(ScanJob).order_by(ScanJob.created_at.desc()).limit(8)).all()
     inventory = session.scalars(select(InventoryItem).order_by(InventoryItem.purchased_at.desc()).limit(20)).all()
-    buys = [o for o in opps if o.money_ready_decision == "BUY_READY"]
+    buys = [o for o in opps if o.money_ready_decision == "BUY_READY" or o.ranking_group == "BUY_READY"]
+    watch_high = [o for o in opps if o.ranking_group == "WATCH_HIGH_EVIDENCE"]
+    needs_data = [o for o in opps if o.ranking_group in {"UNVALUED", "REVIEW_INTERESTING"}]
+    rejected = [o for o in opps if o.ranking_group == "REJECTED"]
 
     def _extras(row: Opportunity) -> dict:
         listing = getattr(row, "listing", None)
@@ -88,8 +100,8 @@ def dashboard(request: Request, session: Session = Depends(get_db)) -> HTMLRespo
     near = [
         o
         for o in opps
-        if o.money_ready_decision in {"WATCH", "REVIEW"}
-        and (_extras(o).get("near_buy") or (o.gate_results or {}).get("failures"))
+        if o.ranking_group == "WATCH_HIGH_EVIDENCE"
+        or (_extras(o).get("near_buy") and (o.gate_results or {}).get("gates", {}).get("PRICE_EVIDENCE_PASS"))
     ]
     closing = [o for o in opps if o.urgency in {"act_now", "bid_later"}]
     drops = [o for o in opps if _extras(o).get("price_drop")]
@@ -102,6 +114,9 @@ def dashboard(request: Request, session: Session = Depends(get_db)) -> HTMLRespo
             "buys": buys,
             "near": near,
             "watch": [o for o in opps if o.money_ready_decision == "WATCH"],
+            "watch_high": watch_high,
+            "needs_data": needs_data,
+            "rejected": rejected,
             "review": [o for o in opps if o.money_ready_decision == "REVIEW"],
             "closing": closing,
             "drops": drops,

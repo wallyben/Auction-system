@@ -9,6 +9,8 @@
   <header>
     <span class="pill {{ opportunity.money_ready_decision }}">{{ opportunity.money_ready_decision }}</span>
     <span class="pill {{ opportunity.engine_decision or opportunity.decision }}">engine {{ opportunity.engine_decision or opportunity.decision }}</span>
+    {% if opportunity.ranking_group %}<span class="pill {{ opportunity.ranking_group }}">{{ opportunity.ranking_group }}</span>{% endif %}
+    {% if opportunity.value_status == "UNVALIDATED_VALUE" %}<span class="pill REVIEW">UNVALIDATED_VALUE</span>{% endif %}
     <h1>{{ opportunity.listing.title if opportunity.listing else "Unknown listing" }}</h1>
     <p class="meta">
       Source {{ opportunity.listing.source_id if opportunity.listing else "" }} ·
@@ -28,19 +30,29 @@
   {% endif %}
 
   <section class="numbers">
-    <div><span>Asking / current</span><strong>{% if opportunity.listing %}{{ opportunity.listing.currency }} {{ '%.0f'|format(opportunity.listing.asking_price or 0) }}{% endif %}</strong></div>
-    <div><span>Ideal offer</span><strong>€{{ '%.0f'|format(opportunity.ideal_offer_eur or 0) }}</strong></div>
-    <div class="emphasis"><span>MAX SAFE PURCHASE</span><strong>€{{ '%.0f'|format(opportunity.max_buy_eur) }}</strong></div>
-    <div><span>Expected sale (range)</span><strong>€{{ '%.0f'|format(opportunity.expected_resale_eur) }}</strong></div>
-    <div><span>Expected net</span><strong>€{{ '%.0f'|format(opportunity.expected_net_resale_eur) }}</strong></div>
-    <div><span>Expected profit</span><strong>€{{ '%.0f'|format(opportunity.expected_profit_eur) }}</strong></div>
-    <div><span>Downside</span><strong>€{{ '%.0f'|format(opportunity.downside_profit_eur) }}</strong></div>
-    <div><span>Expected value</span><strong>€{{ '%.0f'|format(opportunity.expected_value_eur or 0) }}</strong></div>
-    <div><span>ROI</span><strong>{{ '%.0f'|format(opportunity.expected_roi * 100) }}%</strong></div>
-    <div><span>Best exit</span><strong>{{ opportunity.best_exit_channel }}</strong></div>
-    <div><span>Liquidation</span><strong>{{ (opportunity.provenance_pack.liquidation.floor if opportunity.provenance_pack and opportunity.provenance_pack.liquidation else "n/a") }}</strong></div>
-    <div><span>Days (band)</span><strong>{{ opportunity.expected_days_to_sale }}</strong></div>
-    <div><span>Urgency</span><strong>{{ opportunity.urgency }}</strong></div>
+    <div><span>BUY PRICE</span><strong>{% if opportunity.listing %}{{ opportunity.listing.currency }} {{ '%.0f'|format(opportunity.listing.asking_price or 0) }}{% endif %}</strong></div>
+    <div class="emphasis"><span>MAX BUY</span><strong>€{{ '%.0f'|format(opportunity.max_buy_eur) }}</strong></div>
+    <div><span>EXPECTED SALE</span><strong>{% if opportunity.value_status == "UNVALIDATED_VALUE" %}n/a{% else %}€{{ '%.0f'|format(opportunity.expected_resale_eur) }}{% endif %}</strong></div>
+    <div><span>QUICK SALE</span><strong>{% if opportunity.value_status == "UNVALIDATED_VALUE" %}n/a{% else %}€{{ '%.0f'|format((opportunity.provenance_pack.why_this_value.p25 if opportunity.provenance_pack and opportunity.provenance_pack.why_this_value else 0)|float) }}{% endif %}</strong></div>
+    <div><span>EXPECTED NET PROFIT</span><strong>€{{ '%.0f'|format(opportunity.expected_profit_eur) }}</strong></div>
+    <div><span>DOWNSIDE</span><strong>€{{ '%.0f'|format(opportunity.downside_profit_eur) }}</strong></div>
+    <div><span>REALISED COMPS N</span><strong>{{ opportunity.provenance_pack.why_this_value.realised_comp_count if opportunity.provenance_pack and opportunity.provenance_pack.why_this_value else "0" }}</strong></div>
+    <div><span>EVIDENCE TYPE</span><strong>{{ opportunity.provenance_pack.why_this_value.method if opportunity.provenance_pack and opportunity.provenance_pack.why_this_value else opportunity.why[:40] }}</strong></div>
+    <div><span>IDENTITY</span><strong>{{ '%.0f'|format(opportunity.identity_confidence * 100) }}%</strong></div>
+    <div><span>CONDITION</span><strong>{{ '%.0f'|format(opportunity.condition_confidence * 100) }}% {{ opportunity.listing.condition_grade if opportunity.listing else "" }}</strong></div>
+    <div><span>LIQUIDITY</span><strong>{{ opportunity.provenance_pack.liquidity.kind if opportunity.provenance_pack and opportunity.provenance_pack.liquidity else "UNKNOWN" }}</strong></div>
+    <div><span>FAILED GATES</span><strong>{{ (opportunity.gate_results.failures or []) | join(", ") or "none" }}</strong></div>
+  </section>
+
+  <section>
+    <h2>WHY THIS VALUE?</h2>
+    {% set whyv = opportunity.provenance_pack.why_this_value if opportunity.provenance_pack else None %}
+    {% if whyv %}
+    <p>Method <strong>{{ whyv.method }}</strong> · status <strong>{{ whyv.value_status }}</strong> · algorithm {{ opportunity.algorithm_version }} · evaluated {{ opportunity.last_evaluated_at }}</p>
+    <p>Realised comps: {{ whyv.realised_comp_count }} · median {{ whyv.median }} · p25 {{ whyv.p25 }} · p75 {{ whyv.p75 }} · asking implied (not a sale) {{ whyv.asking_implied_eur }} · evidence age days {{ whyv.evidence_age_days }}</p>
+    {% else %}
+    <p class="warn">No valuation explanation stored. Treat as unvalidated.</p>
+    {% endif %}
   </section>
 
   <section>

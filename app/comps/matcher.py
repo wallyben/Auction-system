@@ -71,6 +71,7 @@ def match_comp(
     comp_description: str = "",
     subject_condition_id: str | None = None,
     comp_condition_id: str | None = None,
+    strict_identity: bool = False,
 ) -> CompMatch:
     from app.condition.match import condition_match_score
     from app.sold.match import identity_similarity, variant_reject
@@ -103,6 +104,17 @@ def match_comp(
         return CompMatch(False, Decimal("0"), False, condition_score, Decimal("0"), "empty")
     overlap = Decimal(len(tokens & other)) / Decimal(len(tokens | other))
     score = max(overlap, similarity)
+    if strict_identity:
+        same_key = bool(subj_sku and comp_sku and subj_sku.key == comp_sku.key)
+        accepted = same_key or score >= Decimal("0.85")
+        return CompMatch(
+            accepted,
+            score,
+            same_key,
+            condition_score,
+            Decimal("0.90") if same_key else Decimal("0.20"),
+            "" if accepted else "strict_identity_mismatch",
+        )
     accepted = score >= Decimal("0.35")
     return CompMatch(
         accepted,

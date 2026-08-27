@@ -46,9 +46,11 @@ from app.models.orm import (
 from app.observability.metrics import record_metric
 from app.observations.tracker import record_observation
 from app.opportunity.engine import score_opportunity
+from app.opportunity.ranking import commercial_rank
 from app.paper.service import open_paper_trade
 from app.sources.quality import describe_source
 from app.valuation.tiers import classify_tier
+from app.valuation.version import VALUATION_ALGORITHM_VERSION
 from app.risk.engine import assess_risk
 from app.shipping.engine import estimate_inbound, estimate_outbound
 from app.sold.provider import search_sold_evidence
@@ -128,7 +130,12 @@ async def record_health(session: Session, source_id: str | None = None) -> list[
         row.status = proof.status.value
         row.status_reason = proof.detail
         quality = describe_source(adapter.source_id, technical_status=proof.status.value, records=proof.records)
-        row.config = {**(row.config or {}), **quality}
+        merged = {**(row.config or {}), **quality}
+        if adapter.source_id == "ebay_browse" and isinstance(proof.proof, dict):
+            insights = proof.proof.get("marketplace_insights")
+            if insights:
+                merged["marketplace_insights"] = insights
+        row.config = merged
         row.commercial_quality = str(quality.get("COMMERCIAL_DATA_QUALITY") or row.commercial_quality)
         if proof.ok:
             row.last_success_at = proof.checked_at
@@ -288,6 +295,11 @@ def persist_listing(session: Session, item: NormalizedListing) -> Listing:
         listing.shipping_cost = item.shipping_cost
         listing.current_bid = item.current_bid
         listing.condition_raw = item.condition_raw or listing.condition_raw
+        listing.condition_grade = condition.grade.value
+        listing.category = identity.category or item.category or listing.category
+        listing.brand = identity.brand or listing.brand
+        listing.model = identity.model or listing.model
+        listing.variant = identity.variant or listing.variant
         listing.last_seen_at = item.observed_at
         listing.observed_at = item.observed_at
         listing.images = item.images or listing.images
@@ -321,13 +333,36 @@ async def _comps_for(listing: Listing, rates: dict[str, Decimal], session=None) 
     rejected: list[dict[str, str]] = []
     identity = getattr(listing, "_identity", None)
     category = (identity.category if identity else None) or listing.category
+    product_class = getattr(identity, "product_class", None) if identity else None
+    if product_class in {"accessory", "game", "consumable"}:
+        listing._rejected_comps = [{"title": listing.title, "reject_reason": f"subject_is_{product_class}"}]
+        return []
     is_card = listing.category == "trading_cards" or category == "trading_cards"
     fx = _eur_per_unit(rates, listing.currency)
-    query = (listing.model or listing.title or "")[:80]
+    query = (identity.canonical_key if identity and identity.level.value in {"exact", "variant"} else None) or (
+        listing.model or listing.title or ""
+    )[:80]
+    if identity and identity.model:
+        query = identity.model[:80]
     if session is not None:
         try:
             sold = await search_sold_evidence(session, query, listing.country or "IE", listing.condition_grade or "")
+            record_metric(session, "evidence_queries", run_id=str(listing.id), query=query[:80])
             for hit in sold:
+                if hit.source in {"owner_recorded", "owner_sales", "ebay_owner_fulfillment"}:
+                    rejected.append({
+                        "title": hit.title,
+                        "reject_reason": "owner_not_market_wide",
+                        "source": hit.source,
+                    })
+                    continue
+                if hit.evidence_type is EvidenceType.OWNER_RECORDED:
+                    rejected.append({
+                        "title": hit.title,
+                        "reject_reason": "owner_not_market_wide",
+                        "source": hit.source,
+                    })
+                    continue
                 verdict = match_comp(
                     listing.title,
                     hit.title,
@@ -354,6 +389,7 @@ async def _comps_for(listing: Listing, rates: dict[str, Decimal], session=None) 
                         product_score=verdict.identity_similarity,
                         observed_at=hit.sold_date,
                         notes=hit.notes,
+                        evidence_class="C" if hit.evidence_type.value == "owner_recorded" else "A",
                     )
                 )
         except Exception as exc:
@@ -384,7 +420,14 @@ async def _comps_for(listing: Listing, rates: dict[str, Decimal], session=None) 
             for peer in peers:
                 if not peer.asking_price or peer.url == listing.url:
                     continue
-                verdict = match_comp(listing.title, peer.title)
+                peer_ident = identify_with_resolvers(title=peer.title)
+                if peer_ident.product_class in {"accessory", "game"}:
+                    rejected.append({"title": peer.title, "reject_reason": "comp_is_accessory", "source": "reverb"})
+                    continue
+                if identity and identity.category and peer_ident.category and identity.category != peer_ident.category:
+                    rejected.append({"title": peer.title, "reject_reason": "cross_category_reverb", "source": "reverb"})
+                    continue
+                verdict = match_comp(listing.title, peer.title, strict_identity=True)
                 if not verdict.accepted:
                     rejected.append({"title": peer.title, "reject_reason": verdict.reason, "source": "reverb"})
                     continue
@@ -398,9 +441,10 @@ async def _comps_for(listing: Listing, rates: dict[str, Decimal], session=None) 
                         evidence_type=EvidenceType.CURRENT_ASKING,
                         country=peer.country or "UN",
                         condition_score=Decimal("0.80"),
-                        product_score=Decimal("0.75"),
+                        product_score=verdict.identity_similarity,
                         observed_at=peer.observed_at,
-                        notes="Peer Reverb asking price. Not a realised Irish sale.",
+                        notes="Peer Reverb asking price. TIER_F / class F. Not a realised Irish sale.",
+                        evidence_class="F",
                     )
                 )
         except Exception as exc:
@@ -583,6 +627,20 @@ def evaluate_listing(
         listing_type=listing.listing_type,
         sandbox_source=settings.ebay_api_env == "sandbox" and listing.source_id == "ebay_browse",
     )
+    rank = commercial_rank(
+        money_ready_decision=gates.money_ready_decision,
+        engine_decision=decision.decision.value,
+        identity_level=identity.level,
+        identity_confidence=identity.confidence,
+        product_class=getattr(identity, "product_class", "primary") or "primary",
+        realised_count=valuation.realised_count,
+        binding_count=valuation.binding_count,
+        expected_profit=costs.expected_profit_eur,
+        valuation_confidence=valuation.confidence,
+        liquidity_score=liquidity.score,
+        downside_profit=costs.downside_profit_eur,
+        failed_gates=gates.failures,
+    )
     ev = expected_value(
         base_profit=costs.expected_profit_eur,
         upside_profit=costs.upside_profit_eur,
@@ -629,6 +687,8 @@ def evaluate_listing(
         liquidity_score=liquidity.score,
         provenance=valuation.provenance,
         valued_at=_now(),
+        algorithm_version=VALUATION_ALGORITHM_VERSION,
+        evidence_as_of=_now(),
     )
     session.add(val_row)
     session.flush()
@@ -718,7 +778,29 @@ def evaluate_listing(
                 "expected": liquidity.expected_days_to_sale,
                 "high": liquidity.expected_days_to_sale_high,
                 "confidence": str(liquidity.liquidity_confidence),
+                "kind": getattr(liquidity, "kind", "UNKNOWN"),
             },
+            "algorithm_version": VALUATION_ALGORITHM_VERSION,
+            "evaluated_at": _now().isoformat(),
+            "evidence_as_of": _now().isoformat(),
+            "value_status": valuation.value_status,
+            "ranking_group": rank.group,
+            "local_market_method": valuation.local_market_method,
+            "local_sample_n": valuation.local_sample_n,
+            "foreign_sample_n": valuation.foreign_sample_n,
+            "localisation_confidence": str(valuation.localisation_confidence),
+            "why_this_value": {
+                "method": valuation.method,
+                "value_status": valuation.value_status,
+                "realised_comp_count": valuation.realised_count,
+                "asking_implied_eur": str(valuation.asking_implied_eur),
+                "median": str(valuation.median),
+                "p25": str(valuation.p25),
+                "p75": str(valuation.p75),
+                "evidence_age_days": valuation.evidence_age_days,
+            },
+            "identity_attributes": getattr(identity, "attributes", {}) or {},
+            "product_class": getattr(identity, "product_class", "primary"),
         },
         score=decision.score,
         expected_profit_eur=costs.expected_profit_eur,
@@ -753,12 +835,24 @@ def evaluate_listing(
                     "label": line.label,
                     "amount_eur": str(line.amount_eur),
                     "assumption_class": line.assumption_class,
+                    "assumption_display": {
+                        "measured": "VERIFIED_RATE",
+                        "configured": "CONFIGURED_ASSUMPTION",
+                        "assumption": "CONFIGURED_ASSUMPTION",
+                        "accountant_required": "ACCOUNTANT_REQUIRED",
+                    }.get(line.assumption_class, "CONFIGURED_ASSUMPTION"),
                     "notes": line.notes,
                 }
                 for line in costs.lines
             ],
             "tax_notes": tax.notes,
             "tax_class": tax.assumption_class.value,
+            "tax_class_display": {
+                "measured": "VERIFIED_RATE",
+                "configured": "CONFIGURED_ASSUMPTION",
+                "assumption": "CONFIGURED_ASSUMPTION",
+                "accountant_required": "ACCOUNTANT_REQUIRED",
+            }.get(tax.assumption_class.value, "ACCOUNTANT_REQUIRED"),
             "used_existing_margin_engine": costs.used_existing_margin_engine,
             "best_exit_net": str(best_quote.net_proceeds),
             "inbound_shipping": inbound.notes,
@@ -766,6 +860,11 @@ def evaluate_listing(
         },
         risks=[{"code": f.code, "severity": f.severity, "detail": f.detail} for f in risk.flags],
         last_evaluated_at=_now(),
+        ranking_group=rank.group,
+        ranking_score=rank.score,
+        algorithm_version=VALUATION_ALGORITHM_VERSION,
+        evidence_as_of=_now(),
+        value_status=valuation.value_status,
     )
     if existing is None:
         existing = Opportunity(listing_id=listing.id, **payload)
@@ -778,7 +877,11 @@ def evaluate_listing(
     extras = dict(listing.extras or {})
     extras["failed_gates"] = gates.failures
     extras["what_prevented_buy_ready"] = gates.failures
-    extras["near_buy"] = existing.money_ready_decision in {"WATCH", "REVIEW"} and gates.gates.get("PRODUCTION_SOURCE_PASS", False)
+    extras["near_buy"] = (
+        existing.money_ready_decision == "WATCH"
+        and valuation.realised_count >= 1
+        and gates.gates.get("PRICE_EVIDENCE_PASS", False)
+    )
     extras["rejected_comps"] = getattr(listing, "_rejected_comps", [])
     extras["accepted_comps"] = [c.title for c in comps[:8]]
     if trade_ins:
@@ -803,7 +906,15 @@ def evaluate_listing(
     }
     record_observation(session, listing, asking=listing.asking_price)
     open_paper_trade(session, existing)
-    record_metric(session, "valuation_count", run_id=str(listing.id))
+    record_metric(session, "valuations_generated", run_id=str(listing.id))
+    record_metric(session, "listings_scanned", run_id=str(listing.id))
+    if identity.level.value in {"exact", "variant"}:
+        record_metric(session, "exact_products", run_id=str(listing.id))
+    record_metric(session, "realised_hits", value=valuation.realised_count, run_id=str(listing.id))
+    if valuation.realised_count == 0 and comps:
+        record_metric(session, "sold_provider_zero", run_id=str(listing.id), warning="true")
+    if existing.money_ready_decision in {"IGNORE"} or rank.group == "REJECTED":
+        record_metric(session, "opportunities_rejected", run_id=str(listing.id))
     if existing.money_ready:
         record_metric(session, "BUY_READY_count", run_id=str(listing.id))
     from app.notifications import notify_opportunity
@@ -881,3 +992,58 @@ async def run_scan(
         job.finished_at = _now()
         session.flush()
     return job
+
+
+async def revalue_all_active(
+    session: Session,
+    *,
+    reason: str = "algorithm_version_change",
+    limit: int = 400,
+) -> dict[str, object]:
+    """Re-identify, re-cost, and re-rank the live book. Old valuations must not stay current."""
+    from app.identity.resolvers import identify_with_resolvers
+    from app.condition.category import assess_category_condition
+
+    rates = await refresh_fx(session)
+    listings = session.scalars(
+        select(Listing).where(Listing.status == "active").order_by(Listing.last_seen_at.desc()).limit(limit)
+    ).all()
+    written = 0
+    skipped = 0
+    for listing in listings:
+        identity = identify_with_resolvers(
+            title=listing.title,
+            description=listing.description or "",
+            brand_hint=listing.brand,
+            model_hint=listing.model,
+            gtin=listing.gtin,
+            mpn=listing.mpn,
+            category=listing.category,
+        )
+        extras = listing.extras or {}
+        condition = assess_category_condition(
+            listing.condition_raw,
+            "\n".join([listing.description or "", str(extras.get("conditionDescription") or "")]),
+            identity.category or listing.category,
+            condition_id=str(extras.get("conditionId") or "") or None,
+            specifics=extras.get("itemSpecifics") if isinstance(extras.get("itemSpecifics"), dict) else None,
+        )
+        listing.condition_grade = condition.grade.value
+        listing.brand = identity.brand or listing.brand
+        listing.model = identity.model or listing.model
+        listing.variant = identity.variant or listing.variant
+        listing.category = identity.category or listing.category
+        listing._identity = identity  # type: ignore[attr-defined]
+        listing._condition = condition  # type: ignore[attr-defined]
+        comps = await _comps_for(listing, rates, session)
+        evaluate_listing(session, listing, comps, rates)
+        written += 1
+    session.flush()
+    logger.info("revalue_all_active", reason=reason, written=written, skipped=skipped, version=VALUATION_ALGORITHM_VERSION)
+    record_metric(session, "full_book_revalue", value=written, reason=reason, version=VALUATION_ALGORITHM_VERSION)
+    return {
+        "ok": True,
+        "reason": reason,
+        "revalued": written,
+        "algorithm_version": VALUATION_ALGORITHM_VERSION,
+    }
