@@ -2,6 +2,10 @@
 
 Asking prices and dealer guides are not sold prices.
 
+Owner Fulfillment orders are class C calibration, not market-wide comps.
+
+Marketplace Insights is Limited Release / not entitled (`EBAY_MARKETPLACE_INSIGHTS = BLOCKED_EXTERNAL_ACCESS`). Do not circumvent it.
+
 ## Providers (`SoldEvidenceProvider`)
 
 | Provider | Access | Quality | Status |

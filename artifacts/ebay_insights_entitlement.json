@@ -1,0 +1,37 @@
+{
+  "generated_at": "2026-08-27T19:20:00+00:00",
+  "endpoint": "https://api.ebay.com/buy/marketplace_insights/v1_beta/item_sales/search",
+  "official_endpoint_only": true,
+  "marketplace": "EBAY_IE",
+  "category": "31388",
+  "required_param": "category_ids",
+  "docs": "https://developer.ebay.com/api-docs/buy/marketplace-insights/resources/item_sales/methods/search",
+  "buy_api_requirements": "https://developer.ebay.com/develop/guides-v2/buy-apis-requirements",
+  "first_party_access_status": "Limited Release. Current eBay documentation states Marketplace Insights is restricted and is not open to new users at this time. First-party HTML docs returned HTTP 403 from this host; OpenAPI and eBay's Limited Release note remain the verified surface.",
+  "openapi_corroboration": "https://raw.githubusercontent.com/api-evangelist/ebay/refs/heads/main/openapi/ebay-item-sales-api-openapi.yml",
+  "historical_depth_if_entitled": "Last 90 days of sold items. Ticket-level itemSales records. Not a multi-year Terapeak substitute.",
+  "this_environment_probe": {
+    "http_status": null,
+    "entitlement_result": "AUTH_ERROR",
+    "response_classification": "AUTH_ERROR",
+    "note": "No eBay client credentials in this cloud-agent process. A token was not minted. Secrets were not logged."
+  },
+  "prior_production_probe": {
+    "date": "2026-08-25T23:40:24+00:00",
+    "source_artifact": "artifacts/COMMERCIAL_READINESS_REPORT.json",
+    "host": "https://auction-system-l6je.onrender.com",
+    "http_status": 403,
+    "entitlement_result": "NOT_ENTITLED",
+    "response_classification": "not_entitled_403",
+    "note": "Ordinary Buy app / production keyset is not entitled. This is the last live Production entitlement result with credentials present."
+  },
+    "current_production_health_insights": {
+      "url": "https://auction-system-l6je.onrender.com/health/insights",
+      "http_status": 404,
+      "body": {"detail": "Not Found"},
+      "probed_at": "2026-08-27T19:20:00+00:00",
+      "note": "GET /health/insights is added on this branch. After deploy, that route performs one official v1_beta probe using the host's existing Browse client-credentials token. Do not brute-force other hosts or versions."
+    },
+  "EBAY_MARKETPLACE_INSIGHTS": "BLOCKED_EXTERNAL_ACCESS",
+  "engineering_decision": "Stop spending engineering time trying to circumvent Marketplace Insights. Do not scrape sold listings. Do not call deprecated Finding findCompletedItems. Do not probe undocumented v1 non-beta hosts."
+}
