@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.models.enums import SourceStatus
 from app.sources.base import SourceAdapter
+from app.sources.compsniper import CompSniperAdapter
 from app.sources.ebay import EbayBrowseAdapter
 from app.sources.ecb import EcbFxAdapter
 from app.sources.manual import BlockedAdapter, CsvImportAdapter, ManualAdapter
@@ -40,6 +41,7 @@ def all_adapters() -> list[SourceAdapter]:
         ScryfallAdapter(),
         EcbFxAdapter(),
         EbayBrowseAdapter(),
+        CompSniperAdapter(),
         CsvImportAdapter(),
         ManualAdapter(),
         _blocked("donedeal", "DoneDeal", "IE", "Dealer API is not licensed for multi-dealer aggregation."),

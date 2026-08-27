@@ -76,6 +76,10 @@ class ValuationResult:
     algorithm_version: str = VALUATION_ALGORITHM_VERSION
     asking_implied_eur: Decimal = ZERO
     binding_count: int = 0
+    uk_comp_count: int = 0
+    eu_comp_count: int = 0
+    valuation_anomaly: bool = False
+    valuation_anomaly_reason: str = ""
 
 
 def _weight(comp: Comp, now: datetime) -> Decimal:
@@ -167,6 +171,14 @@ def value_from_comps(comps: list[Comp], *, now: datetime | None = None) -> Valua
     foreign = len(usable) - local
     local_realised = sum(1 for c in comps if c.evidence_type in REALISED_TYPES and c.country.upper() == "IE")
     foreign_realised = realised - local_realised
+    uk_comps = [c for c in usable if c.evidence_type in REALISED_TYPES and c.country.upper() in {"GB", "UK"}]
+    eu_comps = [
+        c
+        for c in usable
+        if c.evidence_type in REALISED_TYPES and c.country.upper() in {"DE", "FR", "IT", "ES", "NL", "BE", "AT"}
+    ]
+    uk_comp_count = len(uk_comps)
+    eu_comp_count = len(eu_comps)
     asking_count = sum(1 for c in comps if c.evidence_type is EvidenceType.CURRENT_ASKING)
     asking_implied = ZERO
     if asking:
@@ -192,11 +204,26 @@ def value_from_comps(comps: list[Comp], *, now: datetime | None = None) -> Valua
         value_status = "VALIDATED_VALUE"
         quick = p25 if len(ordered) >= 3 else money(expected * Decimal("0.88"))
         optimistic = p75 if len(ordered) >= 3 else high
+    elif uk_comp_count:
+        local_market_method = "UK_REALIZED_PROXY"
+        recency_bonus = Decimal("0.08") if (evidence_age is not None and evidence_age <= 21) else Decimal("0")
+        localisation_confidence = min(
+            Decimal("0.78"),
+            Decimal("0.32") + Decimal(uk_comp_count) * Decimal("0.04") + recency_bonus,
+        )
+        method = "uk_realized_proxy"
+        confidence += min(Decimal("0.40"), Decimal(uk_comp_count) * Decimal("0.045"))
+        if evidence_age is not None and evidence_age > 45:
+            confidence = min(confidence, Decimal("0.72"))
+        confidence = min(confidence, Decimal("0.85"))
+        value_status = "VALIDATED_VALUE"
+        quick = p25 if len(ordered) >= 3 else money(expected * Decimal("0.88"))
+        optimistic = p75 if len(ordered) >= 3 else high
     elif realised:
-        local_market_method = "GB_EU_REALISED_HAIRCUT"
-        localisation_confidence = min(Decimal("0.55"), Decimal("0.20") + Decimal(foreign_realised) * Decimal("0.05"))
+        local_market_method = "EU_REALIZED_PROXY" if eu_comp_count else "GB_EU_REALISED_HAIRCUT"
+        localisation_confidence = min(Decimal("0.50"), Decimal("0.18") + Decimal(foreign_realised) * Decimal("0.04"))
         method = "foreign_realised_localised"
-        confidence = min(confidence, Decimal("0.62"))
+        confidence = min(confidence, Decimal("0.70"))
         value_status = "VALIDATED_VALUE"
         quick = p25 if len(ordered) >= 3 else money(expected * Decimal("0.88"))
         optimistic = p75 if len(ordered) >= 3 else high
@@ -251,15 +278,19 @@ def value_from_comps(comps: list[Comp], *, now: datetime | None = None) -> Valua
             if value_status == "UNVALIDATED_VALUE"
             else ""
         ),
-        "localisation": {
+            "localisation": {
             "method": local_market_method,
             "local_sample_n": local_realised,
             "foreign_sample_n": foreign_realised,
+            "uk_comp_count": uk_comp_count,
+            "eu_comp_count": eu_comp_count,
             "localisation_confidence": str(localisation_confidence),
             "note": (
                 "Irish realised used at full weight. No Ireland premium invented."
                 if local_realised
-                else "No Irish realised sales. GB/EU realised used with explicit lower confidence."
+                else "UK realised used as Ireland proxy. No Ireland premium invented."
+                if uk_comp_count
+                else "No Irish or UK realised sales. EU realised used with explicit lower confidence."
                 if realised
                 else "No realised evidence. Asking is not an Ireland expected resale."
             ),
@@ -313,4 +344,6 @@ def value_from_comps(comps: list[Comp], *, now: datetime | None = None) -> Valua
         algorithm_version=VALUATION_ALGORITHM_VERSION,
         asking_implied_eur=asking_implied,
         binding_count=binding_n,
+        uk_comp_count=uk_comp_count,
+        eu_comp_count=eu_comp_count,
     )

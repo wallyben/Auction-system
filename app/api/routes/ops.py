@@ -91,11 +91,14 @@ def health_sources(session: Session = Depends(get_db)) -> dict[str, Any]:
 
 
 @router.get("/health/evidence")
-def health_evidence(session: Session = Depends(get_db)) -> dict[str, Any]:
+async def health_evidence(session: Session = Depends(get_db)) -> dict[str, Any]:
     """Source/evidence counters. A sold provider returning zero unexpectedly is a warning."""
     from sqlalchemy import func
 
-    from app.models.orm import MetricEvent, SoldEvidence
+    from app.evidence.providers.compsniper import compsniper_health
+    from app.models.orm import MetricEvent, SoldEvidence, SoldQueryCache
+    from app.sold.cache import cache_stats
+    from app.sold.provider import sold_provider_health
 
     names = [
         "listings_scanned",
@@ -107,25 +110,65 @@ def health_evidence(session: Session = Depends(get_db)) -> dict[str, Any]:
         "BUY_READY_count",
         "sold_provider_zero",
         "full_book_revalue",
+        "compsniper_requests",
+        "sold_cache_hit",
+        "sold_rejected",
     ]
     counts: dict[str, float] = {}
     for name in names:
         total = session.scalar(select(func.coalesce(func.sum(MetricEvent.value), 0)).where(MetricEvent.name == name))
         counts[name] = float(total or 0)
     realised_n = session.scalar(select(func.count()).select_from(SoldEvidence)) or 0
+    accepted_n = 0
+    rejected_n = 0
+    camera_n = 0
+    try:
+        rows = session.scalars(select(SoldEvidence).limit(5000)).all()
+        for row in rows:
+            extras = row.extras or {}
+            if extras.get("accepted_for_valuation") is False:
+                rejected_n += 1
+            else:
+                accepted_n += 1
+            if extras.get("product_class") == "camera_body" or (row.canonical_product_id or "").startswith("sony|a7") or (row.canonical_product_id or "").startswith("canon|") or (row.canonical_product_id or "").startswith("nikon|") or (row.canonical_product_id or "").startswith("fujifilm|"):
+                if extras.get("accepted_for_valuation") is not False:
+                    camera_n += 1
+    except Exception:
+        accepted_n = int(realised_n)
     buy_ready_n = session.scalar(
         select(func.count()).select_from(Opportunity).where(Opportunity.money_ready_decision == "BUY_READY")
     ) or 0
     warning = None
     if counts.get("evidence_queries", 0) > 0 and counts.get("realised_hits", 0) == 0:
         warning = "Sold provider returned zero realised hits after evidence queries."
+    cs = compsniper_health()
+    cache: dict[str, object] = {"entries": 0, "fresh": 0, "stale": 0, "products": 0, "accepted_total": 0}
+    last_refresh = None
+    try:
+        cache = cache_stats(session)
+        latest = session.scalars(select(SoldQueryCache).order_by(SoldQueryCache.queried_at.desc()).limit(1)).first()
+        last_refresh = latest.queried_at.isoformat() if latest and latest.queried_at else None
+    except Exception:
+        pass
+    hits = counts.get("sold_cache_hit", 0)
+    misses = counts.get("compsniper_requests", 0)
+    hit_pct = round(100.0 * hits / (hits + misses), 1) if (hits + misses) else None
+    providers = await sold_provider_health(session)
     return {
         "status": "ok",
         "metrics": counts,
         "realised_evidence_rows": int(realised_n),
+        "valid_camera_sold_records": int(camera_n),
+        "rejected_records": int(rejected_n),
+        "accepted_sold_records": int(accepted_n),
+        "query_cache": cache,
+        "query_cache_hit_rate": hit_pct,
+        "last_refresh": last_refresh,
         "BUY_READY": int(buy_ready_n),
         "warning": warning,
-        "providers": [],
+        "providers": providers,
+        "compsniper": cs,
+        "provider_quota": cs.get("quota_remaining"),
     }
 
 

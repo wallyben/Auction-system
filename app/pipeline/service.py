@@ -71,6 +71,21 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _acquisition_queries(query: str | None, trigger: str) -> list[str]:
+    """Exact camera bodies first so SCAN_QUERIES env cannot drop the commercial category."""
+    from app.sold.cameras import CAMERA_BODIES
+
+    cameras = [body.aliases[0] for body in CAMERA_BODIES]
+    if query:
+        return [query]
+    configured = settings.query_list()
+    seen = {q.lower() for q in cameras}
+    merged = cameras + [q for q in configured if q.lower() not in seen]
+    if trigger in {"production-proof", "cli", "dashboard", "red-team"}:
+        return merged
+    return merged[:12]
+
+
 def _fingerprint(source_id: str, external_id: str, url: str) -> str:
     return hashlib.sha256(f"{source_id}|{external_id}|{url}".encode()).hexdigest()
 
@@ -104,7 +119,8 @@ def seed_sources(session: Session) -> None:
                 status_reason="Not health-checked yet.",
                 cadence_minutes=adapter.cadence_minutes,
                 enabled=adapter.source_id in settings.source_ids()
-                or adapter.source_id in {"csv_import", "manual", "ecb_fx"},
+                or adapter.source_id in {"csv_import", "manual", "ecb_fx"}
+                or (adapter.source_id == "compsniper" and settings.compsniper_enabled),
                 commercial_quality=(
                     "LOW"
                     if adapter.source_id == "scryfall"
@@ -344,9 +360,23 @@ async def _comps_for(listing: Listing, rates: dict[str, Decimal], session=None) 
     )[:80]
     if identity and identity.model:
         query = identity.model[:80]
+    from app.sold.cameras import camera_from_identity
+
+    camera_body = camera_from_identity(
+        brand=getattr(identity, "brand", None) if identity else listing.brand,
+        model=getattr(identity, "model", None) if identity else listing.model,
+        canonical_key=getattr(identity, "canonical_key", None) if identity else None,
+        title=listing.title or "",
+    )
+    if camera_body is not None:
+        query = camera_body.canonical_id
     if session is not None:
         try:
-            sold = await search_sold_evidence(session, query, listing.country or "IE", listing.condition_grade or "")
+            if camera_body is not None:
+                from app.sold.refresh import ensure_sold_for_listing
+
+                await ensure_sold_for_listing(session, listing, rates)
+            sold = await search_sold_evidence(session, query, listing.country or "IE", listing.condition_grade or "", limit=80)
             record_metric(session, "evidence_queries", run_id=str(listing.id), query=query[:80])
             for hit in sold:
                 if hit.source in {"owner_recorded", "owner_sales", "ebay_owner_fulfillment"}:
@@ -363,17 +393,35 @@ async def _comps_for(listing: Listing, rates: dict[str, Decimal], session=None) 
                         "source": hit.source,
                     })
                     continue
-                verdict = match_comp(
-                    listing.title,
-                    hit.title,
-                    subject_condition=listing.condition_raw,
-                    comp_condition=hit.condition,
-                    subject_description=listing.description or "",
-                    subject_condition_id=str((listing.extras or {}).get("conditionId") or "") or None,
-                )
-                if not verdict.accepted:
-                    rejected.append({"title": hit.title, "reject_reason": verdict.reason, "source": hit.source})
+                if (hit.quality or "") == "rejected":
+                    rejected.append({
+                        "title": hit.title,
+                        "reject_reason": hit.notes or "rejected_sold_candidate",
+                        "source": hit.source,
+                    })
                     continue
+                gated = (
+                    hit.source == "compsniper"
+                    and camera_body is not None
+                    and hit.identity_key == camera_body.canonical_id
+                )
+                if gated:
+                    condition_score = Decimal("0.90")
+                    product_score = Decimal("0.95")
+                else:
+                    verdict = match_comp(
+                        listing.title,
+                        hit.title,
+                        subject_condition=listing.condition_raw,
+                        comp_condition=hit.condition,
+                        subject_description=listing.description or "",
+                        subject_condition_id=str((listing.extras or {}).get("conditionId") or "") or None,
+                    )
+                    if not verdict.accepted:
+                        rejected.append({"title": hit.title, "reject_reason": verdict.reason, "source": hit.source})
+                        continue
+                    condition_score = verdict.condition_match
+                    product_score = verdict.identity_similarity
                 price = hit.sold_price_eur
                 if hit.currency and hit.currency.upper() != "EUR":
                     price = to_eur(hit.sold_price_eur, hit.currency, _eur_per_unit(rates, hit.currency))
@@ -385,10 +433,10 @@ async def _comps_for(listing: Listing, rates: dict[str, Decimal], session=None) 
                         price_eur=price,
                         evidence_type=hit.evidence_type,
                         country=hit.territory,
-                        condition_score=verdict.condition_match,
-                        product_score=verdict.identity_similarity,
+                        condition_score=condition_score,
+                        product_score=product_score,
                         observed_at=hit.sold_date,
-                        notes=hit.notes,
+                        notes=hit.notes or ("MARKET_WIDE_COMPLETED_SALE" if hit.source == "compsniper" else ""),
                         evidence_class="C" if hit.evidence_type.value == "owner_recorded" else "A",
                     )
                 )
@@ -551,13 +599,34 @@ def evaluate_listing(
     costs.expected_profit_eur = money(best_quote.net_proceeds - costs.all_in_acquisition_eur)
     costs.roi = money(costs.expected_profit_eur / costs.all_in_acquisition_eur) if costs.all_in_acquisition_eur else ZERO
     lot = split_lot(listing.title, listing.description)
-    liquidity = estimate_liquidity(
-        comparable_count=valuation.comparable_count,
-        realised_count=valuation.realised_count,
-        local_count=valuation.local_count,
-        category=listing.category,
-        is_lot=lot.is_lot,
+    from app.sold.cameras import camera_from_identity
+    from app.sold.refresh import evidence_freshness
+    from app.market.reference import check_anomaly
+    from app.liquidity.realized import liquidity_from_sold, sold_velocity
+
+    camera_body = camera_from_identity(
+        brand=identity.brand, model=identity.model, canonical_key=identity.canonical_key, title=listing.title or ""
     )
+    velocity = None
+    if camera_body is not None:
+        velocity = sold_velocity(session, camera_body.canonical_id)
+        liquidity = liquidity_from_sold(
+            velocity, comparable_count=valuation.comparable_count, is_lot=lot.is_lot
+        )
+    else:
+        liquidity = estimate_liquidity(
+            comparable_count=valuation.comparable_count,
+            realised_count=valuation.realised_count,
+            local_count=valuation.local_count,
+            category=listing.category,
+            is_lot=lot.is_lot,
+        )
+    sold_fresh = True
+    anomaly_info = {"anomaly": False, "reason": ""}
+    if camera_body is not None:
+        if valuation.realised_count:
+            sold_fresh = bool(evidence_freshness(session, camera_body.canonical_id).get("fresh"))
+        anomaly_info = check_anomaly(camera_body, valuation.median if valuation.value_status == "VALIDATED_VALUE" else None)
     risk = assess_risk(
         title=listing.title,
         identity_level=identity.level,
@@ -626,6 +695,11 @@ def evaluate_listing(
         tax_modelled=True,
         listing_type=listing.listing_type,
         sandbox_source=settings.ebay_api_env == "sandbox" and listing.source_id == "ebay_browse",
+        local_market_method=valuation.local_market_method,
+        uk_comp_count=valuation.uk_comp_count,
+        localisation_confidence=valuation.localisation_confidence,
+        sold_evidence_fresh=sold_fresh,
+        valuation_anomaly=bool(anomaly_info.get("anomaly")),
     )
     rank = commercial_rank(
         money_ready_decision=gates.money_ready_decision,
@@ -779,6 +853,7 @@ def evaluate_listing(
                 "high": liquidity.expected_days_to_sale_high,
                 "confidence": str(liquidity.liquidity_confidence),
                 "kind": getattr(liquidity, "kind", "UNKNOWN"),
+                "realized_velocity": velocity,
             },
             "algorithm_version": VALUATION_ALGORITHM_VERSION,
             "evaluated_at": _now().isoformat(),
@@ -793,11 +868,16 @@ def evaluate_listing(
                 "method": valuation.method,
                 "value_status": valuation.value_status,
                 "realised_comp_count": valuation.realised_count,
+                "uk_comp_count": valuation.uk_comp_count,
+                "eu_comp_count": valuation.eu_comp_count,
                 "asking_implied_eur": str(valuation.asking_implied_eur),
                 "median": str(valuation.median),
                 "p25": str(valuation.p25),
                 "p75": str(valuation.p75),
                 "evidence_age_days": valuation.evidence_age_days,
+                "local_market_method": valuation.local_market_method,
+                "sold_evidence_fresh": sold_fresh,
+                "valuation_anomaly": anomaly_info,
             },
             "identity_attributes": getattr(identity, "attributes", {}) or {},
             "product_class": getattr(identity, "product_class", "primary"),
@@ -949,12 +1029,7 @@ async def run_scan(
     try:
         await record_health(session, source_id=source_id if source_id and source_id != "all" else None)
         rates = await refresh_fx(session)
-        if query:
-            queries = [query]
-        elif trigger in {"production-proof", "cli", "dashboard", "red-team"}:
-            queries = settings.query_list()
-        else:
-            queries = settings.query_list()[:6]
+        queries = _acquisition_queries(query, trigger)
         adapters = adapter_map()
         targets = [source_id] if source_id and source_id not in {None, "all"} else [
             sid for sid in settings.source_ids() if sid in adapters

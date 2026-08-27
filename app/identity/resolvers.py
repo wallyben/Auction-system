@@ -57,19 +57,24 @@ def resolve_camera(base: ProductIdentity, text: str) -> ProductIdentity:
             "body_or_kit": parsed.body_or_kit or "body",
         }
         key = "|".join(parsed.canonical_parts())
-        exact = parsed.tier in {"A7", "A7R", "A7S", "A7C"} and bool(parsed.generation)
+        exact = bool(parsed.generation and parsed.model)
+        product_class = "camera_body" if (parsed.body_or_kit or "body") == "body" else "camera_kit"
+        from app.sold.cameras import camera_from_identity
+
+        catalog = camera_from_identity(brand=parsed.manufacturer, model=parsed.model, title=text)
+        key = catalog.canonical_id if catalog else "|".join(parsed.canonical_parts())
         return _finish(
             base,
             brand=parsed.manufacturer or base.brand or "Sony",
-            family="Alpha",
+            family=parsed.tier or "Alpha",
             model=parsed.model,
             variant=parsed.body_or_kit or "body",
             category="cameras",
-            level=IdentityLevel.EXACT if exact else IdentityLevel.VARIANT,
+            level=IdentityLevel.EXACT if exact and product_class == "camera_body" else IdentityLevel.VARIANT,
             confidence=max(base.confidence, Decimal("0.92") if exact else Decimal("0.84")),
             canonical_key=key or "sony|a7",
             attributes=attrs,
-            product_class="primary",
+            product_class=product_class,
         )
     if re.search(r"ilce-7m4|a7\s*iv|a7iv", text) and not re.search(r"a7r|ilce-7rm4", text):
         return _finish(
@@ -83,7 +88,7 @@ def resolve_camera(base: ProductIdentity, text: str) -> ProductIdentity:
             confidence=max(base.confidence, Decimal("0.92")),
             canonical_key="sony|a7-iv|body",
             attributes={"manufacturer": "Sony", "model": "A7 IV", "generation": "IV", "body_or_kit": "body"},
-            product_class="primary",
+            product_class="camera_body",
         )
     if re.search(r"ilce-7m3|a7\s*iii|a7iii", text) and not re.search(r"a7\s*iv|a7iv", text):
         return _finish(
@@ -96,6 +101,7 @@ def resolve_camera(base: ProductIdentity, text: str) -> ProductIdentity:
             level=IdentityLevel.EXACT,
             confidence=max(base.confidence, Decimal("0.90")),
             canonical_key="sony|a7-iii|body",
+            product_class="camera_body",
         )
     match = _A7.search(text)
     if match:
@@ -111,6 +117,7 @@ def resolve_camera(base: ProductIdentity, text: str) -> ProductIdentity:
             level=IdentityLevel.EXACT,
             confidence=max(base.confidence, Decimal("0.90")),
             canonical_key=f"sony|{model.lower()}|{base.storage or ''}",
+            product_class="camera_body",
         )
     return _finish(base, category=base.category or "cameras")
 

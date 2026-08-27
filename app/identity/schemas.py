@@ -17,6 +17,9 @@ _IPHONE = re.compile(
     re.I,
 )
 _A7 = re.compile(r"\ba7\s*(r|s|c)?\s*(iv|iii|ii|v|i)?\b|\bilce-7(r|s|c)?m?(\d)\b", re.I)
+_CANON_R = re.compile(r"\b(?:canon\s+)?(?:eos\s+)?r(5|6)(?:\s*(c|ii|mark\s*ii))?\b", re.I)
+_NIKON_Z = re.compile(r"\b(?:nikon\s+)?z\s*(6|7)\s*(ii|iii)?\b", re.I)
+_FUJI_XT = re.compile(r"\b(?:fuji(?:film)?\s+)?x-?t([345])\b", re.I)
 _GPU = re.compile(r"\b(rtx|gtx|rx)\s*(\d{3,4})\s*(ti|super|xt|xtx)?\b", re.I)
 _UNLOCKED = re.compile(r"\b(unlocked|sim[- ]?free|ohne simlock)\b", re.I)
 
@@ -117,19 +120,96 @@ def parse_macbook(text: str) -> StructuredIdentity | None:
 def parse_camera(text: str) -> StructuredIdentity | None:
     blob = text or ""
     body = "kit" if re.search(r"\bkit\b", blob, re.I) else "body"
-    if re.search(r"ilce-7m4|a7\s*iv|a7iv", blob, re.I) and not re.search(r"a7r|ilce-7rm", blob, re.I):
+    if re.search(r"ilce-7m4|a7\s*iv|a7iv", blob, re.I) and not re.search(r"a7r|ilce-7rm|a7s|a7c", blob, re.I):
         return StructuredIdentity(
-            product_class="primary",
+            product_class="camera_body",
             manufacturer="Sony",
             model="A7 IV",
             generation="IV",
             tier="A7",
             body_or_kit=body,
         )
+    if re.search(r"ilce-7m3|a7\s*iii|a7iii", blob, re.I) and not re.search(r"a7\s*iv|a7r|a7s|a7c", blob, re.I):
+        return StructuredIdentity(
+            product_class="camera_body",
+            manufacturer="Sony",
+            model="A7 III",
+            generation="III",
+            tier="A7",
+            body_or_kit=body,
+        )
+    if re.search(r"a7r\s*iv|a7riv|ilce-7rm4", blob, re.I):
+        return StructuredIdentity(
+            product_class="camera_body",
+            manufacturer="Sony",
+            model="A7R IV",
+            generation="IV",
+            tier="A7R",
+            body_or_kit=body,
+        )
+    if re.search(r"a7r\s*iii|a7riii|ilce-7rm3", blob, re.I):
+        return StructuredIdentity(
+            product_class="camera_body",
+            manufacturer="Sony",
+            model="A7R III",
+            generation="III",
+            tier="A7R",
+            body_or_kit=body,
+        )
+    if re.search(r"a7s\s*iii|a7siii|ilce-7sm3", blob, re.I):
+        return StructuredIdentity(
+            product_class="camera_body",
+            manufacturer="Sony",
+            model="A7S III",
+            generation="III",
+            tier="A7S",
+            body_or_kit=body,
+        )
+    canon = _CANON_R.search(blob)
+    if canon:
+        num = canon.group(1)
+        extra = (canon.group(2) or "").lower()
+        if extra in {"ii", "mark ii"}:
+            model, gen = f"EOS R{num} II", "II"
+        elif extra == "c":
+            model, gen = f"EOS R{num}C", "C"
+        else:
+            model, gen = f"EOS R{num}", "I"
+        return StructuredIdentity(
+            product_class="camera_body",
+            manufacturer="Canon",
+            model=model,
+            generation=gen,
+            tier="EOS R",
+            body_or_kit=body,
+        )
+    nikon = _NIKON_Z.search(blob)
+    if nikon:
+        num = nikon.group(1)
+        gen = (nikon.group(2) or "I").upper()
+        return StructuredIdentity(
+            product_class="camera_body",
+            manufacturer="Nikon",
+            model=f"Z{num} {gen}".strip(),
+            generation=gen,
+            tier="Z",
+            body_or_kit=body,
+        )
+    fuji = _FUJI_XT.search(blob)
+    if fuji:
+        num = fuji.group(1)
+        return StructuredIdentity(
+            product_class="camera_body",
+            manufacturer="Fujifilm",
+            model=f"X-T{num}",
+            generation=num,
+            tier="X-T",
+            body_or_kit=body,
+        )
     if re.search(r"a7r|ilce-7rm", blob, re.I):
         gen = "IV" if re.search(r"iv|7rm4", blob, re.I) else "III" if re.search(r"iii|7rm3", blob, re.I) else None
         return StructuredIdentity(
-            product_class="primary",
+            product_class="camera_body",
             manufacturer="Sony",
             model=f"A7R {gen or ''}".strip(),
             generation=gen,
@@ -143,7 +223,7 @@ def parse_camera(text: str) -> StructuredIdentity | None:
     gen = (match.group(2) or "").upper()
     model = f"A7{series} {gen}".strip()
     return StructuredIdentity(
-        product_class="primary",
+        product_class="camera_body",
         manufacturer="Sony",
         model=model,
         generation=gen or None,

@@ -89,8 +89,8 @@ def dashboard(request: Request, session: Session = Depends(get_db)) -> HTMLRespo
     jobs = session.scalars(select(ScanJob).order_by(ScanJob.created_at.desc()).limit(8)).all()
     inventory = session.scalars(select(InventoryItem).order_by(InventoryItem.purchased_at.desc()).limit(20)).all()
     buys = [o for o in opps if o.money_ready_decision == "BUY_READY" or o.ranking_group == "BUY_READY"]
-    watch_high = [o for o in opps if o.ranking_group == "WATCH_HIGH_EVIDENCE"]
-    needs_data = [o for o in opps if o.ranking_group in {"UNVALUED", "REVIEW_INTERESTING"}]
+    watch_high = [o for o in opps if o.ranking_group in {"WATCH_HIGH_EVIDENCE", "HIGH_EVIDENCE_WATCH"}]
+    needs_data = [o for o in opps if o.ranking_group in {"UNVALUED", "NEEDS_DATA", "REVIEW_INTERESTING"}]
     rejected = [o for o in opps if o.ranking_group == "REJECTED"]
 
     def _extras(row: Opportunity) -> dict:
@@ -100,7 +100,7 @@ def dashboard(request: Request, session: Session = Depends(get_db)) -> HTMLRespo
     near = [
         o
         for o in opps
-        if o.ranking_group == "WATCH_HIGH_EVIDENCE"
+        if o.ranking_group in {"WATCH_HIGH_EVIDENCE", "HIGH_EVIDENCE_WATCH"}
         or (_extras(o).get("near_buy") and (o.gate_results or {}).get("gates", {}).get("PRICE_EVIDENCE_PASS"))
     ]
     closing = [o for o in opps if o.urgency in {"act_now", "bid_later"}]

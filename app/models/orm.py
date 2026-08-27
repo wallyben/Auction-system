@@ -451,6 +451,32 @@ class Outcome(Base, TimestampMixin):
     extras: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
 
 
+class SoldQueryCache(Base, TimestampMixin):
+    """One CompSniper product/marketplace lookup. Shared by every matching listing."""
+
+    __tablename__ = "sold_query_cache"
+    __table_args__ = (
+        UniqueConstraint("cache_key", name="uq_sold_query_cache_key"),
+        Index("ix_sold_query_cache_product", "canonical_product_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    cache_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    canonical_product_id: Mapped[str] = mapped_column(String(512), nullable=False)
+    variant: Mapped[str] = mapped_column(String(64), nullable=False, default="body")
+    marketplace: Mapped[str] = mapped_column(String(8), nullable=False, default="GB")
+    condition_bucket: Mapped[str] = mapped_column(String(32), nullable=False, default="used")
+    keyword: Mapped[str] = mapped_column(String(1024), nullable=False, default="")
+    queried_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    raw_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    accepted_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    rejected_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_http_status: Mapped[int | None] = mapped_column(Integer)
+    quota_remaining: Mapped[int | None] = mapped_column(Integer)
+    ttl_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=24)
+    extras: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+
+
 class SoldEvidence(Base, TimestampMixin):
     __tablename__ = "sold_evidence"
     __table_args__ = (
@@ -724,6 +750,7 @@ __all__ = [
     "ScanStrategy",
     "SelfAudit",
     "SoldEvidence",
+    "SoldQueryCache",
     "Source",
     "SourceHealth",
     "TaxRule",

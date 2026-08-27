@@ -66,6 +66,14 @@ def describe_source(source_id: str, *, technical_status: str, records: int = 0) 
             "SOLD_EVIDENCE": False,
             "note": "Owner-typed asking scenario. Not a live marketplace.",
         },
+        "compsniper": {
+            "TECHNICAL_STATUS": technical_status,
+            "COMMERCIAL_DATA_QUALITY": "HIGH" if technical_status == "LIVE" else "UNKNOWN",
+            "ACQUISITION_OR_VALUATION_ROLE": "VALUATION",
+            "REAL_MONEY_ELIGIBLE": technical_status == "LIVE",
+            "SOLD_EVIDENCE": True,
+            "note": "Licensed CompSniper completed-sale API. Ticket-level eBay sold rows. ARIE identity gate required.",
+        },
         "rss_generic": {
             "TECHNICAL_STATUS": technical_status,
             "COMMERCIAL_DATA_QUALITY": "UNKNOWN",
