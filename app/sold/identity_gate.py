@@ -39,6 +39,7 @@ _LENS_ADDON = re.compile(
     r"|\+\s*\d{2,3}\s*-\s*\d{2,3}\b"
     r"|\+\s*(?:fe|ef|rf|xf|xc)?\s*\d(?:\.\d)?\s*/\s*\d{2,3}"
     r"|\bwith\s+(?:(?:fe|ef|rf|xf|xc)\s+)?(?:lens|\d{2,3}(?:\s*-\s*\d{2,3})?\s*mm)\b"
+    r"|\bwith\s+(?:[a-z][\w-]*\s+){1,4}\d{2,3}(?:\s*-\s*\d{2,3})?\s*mm\b"
     r"|\(\s*(?:with|w/)\s+[^)]*\d{2,3}(?:\s*-\s*\d{2,3})?\s*mm"
     r"|\b(?:xf|xc)\s*\d{2,3}(?:\s*-\s*\d{2,3})?(?:\s*mm)?\b"
     r")",
@@ -332,6 +333,11 @@ def identity_precision_corpus() -> list[dict[str, str]]:
         (
             "fujifilm|x-t4|body",
             "Fujifilm X-T4 26.1 MP Mirrorless Camera - Black (with XF 16-80mm f/4 R OIS WR)",
+            "kit_or_bundle",
+        ),
+        (
+            "sony|a7-iii|body",
+            "Sony Alpha A7 III Camera Body with Tamron 28-75mm F2.8 Lens + More!",
             "kit_or_bundle",
         ),
     ]

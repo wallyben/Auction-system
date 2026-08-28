@@ -344,7 +344,9 @@ def persist_listing(session: Session, item: NormalizedListing) -> Listing:
     return listing
 
 
-async def _comps_for(listing: Listing, rates: dict[str, Decimal], session=None) -> list[Comp]:
+async def _comps_for(
+    listing: Listing, rates: dict[str, Decimal], session=None, *, refresh_sold: bool = True
+) -> list[Comp]:
     comps: list[Comp] = []
     rejected: list[dict[str, str]] = []
     identity = getattr(listing, "_identity", None)
@@ -372,7 +374,7 @@ async def _comps_for(listing: Listing, rates: dict[str, Decimal], session=None) 
         query = camera_body.canonical_id
     if session is not None:
         try:
-            if camera_body is not None:
+            if camera_body is not None and refresh_sold:
                 from app.sold.refresh import ensure_sold_for_listing
 
                 await ensure_sold_for_listing(session, listing, rates)
@@ -1135,7 +1137,7 @@ async def revalue_all_active(
         listing.category = identity.category or listing.category
         listing._identity = identity  # type: ignore[attr-defined]
         listing._condition = condition  # type: ignore[attr-defined]
-        comps = await _comps_for(listing, rates, session)
+        comps = await _comps_for(listing, rates, session, refresh_sold=False)
         evaluate_listing(session, listing, comps, rates)
         written += 1
     session.flush()

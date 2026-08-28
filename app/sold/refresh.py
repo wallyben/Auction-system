@@ -322,10 +322,14 @@ async def refresh_sold_evidence(
     bodies: list[CameraBody] | None = None,
     force: bool = False,
     markets: tuple[str, ...] | None = None,
+    revalidate: bool = False,
 ) -> dict[str, Any]:
     rates = _fx_map(session)
-    reval = revalidate_stored_sold_evidence(session, rates=rates)
-    revalue_ids: set[str] = set(reval.get("changed_product_ids") or [])
+    reval: dict[str, Any] = {"ok": True, "skipped": True, "quota_used": 0}
+    revalue_ids: set[str] = set()
+    if revalidate:
+        reval = revalidate_stored_sold_evidence(session, rates=rates)
+        revalue_ids = set(reval.get("changed_product_ids") or [])
     health = compsniper_health()
     if health["status"] in {"DISABLED", "BLOCKED_CREDENTIALS"}:
         revalued = await revalue_matching(session, revalue_ids) if revalue_ids else 0
@@ -415,7 +419,7 @@ async def revalue_matching(session: Session, canonical_ids: set[str]) -> int:
         )
         listing._identity = identity  # type: ignore[attr-defined]
         listing._condition = condition  # type: ignore[attr-defined]
-        comps = await _comps_for(listing, rates, session)
+        comps = await _comps_for(listing, rates, session, refresh_sold=False)
         evaluate_listing(session, listing, comps, rates)
         written += 1
     session.flush()
@@ -426,7 +430,17 @@ async def ensure_sold_for_listing(session: Session, listing: Listing, rates: dic
     body = camera_from_identity(brand=listing.brand, model=listing.model, title=listing.title or "")
     if body is None:
         return {"ok": False, "reason": "not_camera_body"}
-    return await refresh_sold_evidence(session, bodies=[body], markets=("GB", "DE", "FR"))
+    cached = get_cache(session, canonical_product_id=body.canonical_id, marketplace="GB")
+    if cache_is_successful(cached):
+        return {
+            "ok": True,
+            "skipped": "fresh_cache",
+            "canonical_product_id": body.canonical_id,
+            "quota_used": 0,
+        }
+    return await refresh_sold_evidence(
+        session, bodies=[body], markets=("GB", "DE", "FR"), revalidate=False
+    )
 
 
 def evidence_freshness(
