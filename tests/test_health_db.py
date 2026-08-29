@@ -40,7 +40,10 @@ def test_health_stays_lightweight(monkeypatch: pytest.MonkeyPatch) -> None:
     with _client(monkeypatch, None) as client:
         response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["valuation_algorithm"].startswith("2.")
+    assert "git_sha" in body
 
 
 def test_health_db_missing_url(monkeypatch: pytest.MonkeyPatch) -> None:

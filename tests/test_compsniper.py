@@ -883,6 +883,160 @@ async def test_ensure_sold_skips_fresh_cache() -> None:
     session.close()
 
 
+def test_revalue_all_active_does_not_refresh_sold() -> None:
+    import inspect
+
+    from app.pipeline.service import revalue_all_active
+    from app.sold.refresh import ensure_sold_for_listing, refresh_sold_evidence
+
+    assert "refresh_sold=False" in inspect.getsource(revalue_all_active)
+    src = inspect.getsource(ensure_sold_for_listing)
+    assert "fresh_cache" in src
+    refresh_src = inspect.getsource(refresh_sold_evidence)
+    assert "if revalidate:" in refresh_src
+
+
+@pytest.mark.asyncio
+async def test_irish_panel_canonical_query_does_not_miss_older_product() -> None:
+    """A global 400-row window dropped older camera tickets and rematched every row."""
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.dialects.postgresql import JSONB, UUID
+    from sqlalchemy.ext.compiler import compiles
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app.db.base import Base
+    from app.models.orm import SoldEvidence
+    from app.sold.provider import IrishPanelProvider
+
+    @compiles(JSONB, "sqlite")
+    def _jsonb(type_, compiler, **kw):  # noqa: ARG001
+        return "JSON"
+
+    @compiles(UUID, "sqlite")
+    def _uuid(type_, compiler, **kw):  # noqa: ARG001
+        return "CHAR(36)"
+
+    import app.models.orm  # noqa: F401
+
+    eng = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(eng)
+    factory = sessionmaker(bind=eng, autoflush=False, expire_on_commit=False)
+    session = factory()
+    now = datetime(2026, 8, 29, tzinfo=timezone.utc)
+    filler_title = "Sony Alpha A7 IV Camera Body with Tamron 28-75mm F2.8 Lens + More!"
+    for i in range(410):
+        session.add(
+            SoldEvidence(
+                canonical_product_id="sony|a7-iv|body",
+                condition="good",
+                channel="ebay",
+                territory="GB",
+                sold_price=Decimal("1500.00"),
+                currency="EUR",
+                sold_date=now - timedelta(minutes=i),
+                source="compsniper",
+                evidence_quality="high",
+                url_or_reference=f"https://www.ebay.co.uk/itm/filler{i}",
+                fingerprint=f"filler{i:04d}" + ("a" * 52),
+                extras={
+                    "title": filler_title,
+                    "accepted_for_valuation": True,
+                    "ticket_level": True,
+                    "evidence_class": "A",
+                    "price_certainty": "KNOWN_TRANSACTION",
+                },
+            )
+        )
+    session.add(
+        SoldEvidence(
+            canonical_product_id="sony|a7-iii|body",
+            condition="good",
+            channel="ebay",
+            territory="GB",
+            sold_price=Decimal("699.94"),
+            currency="EUR",
+            sold_date=now - timedelta(days=20),
+            source="compsniper",
+            evidence_quality="high",
+            url_or_reference="https://www.ebay.co.uk/itm/a7iii-body",
+            fingerprint="a7iii-target" + ("b" * 52),
+            extras={
+                "title": "Sony A7 Mark III ILCE-7M3 Mirrorless Camera Body 42,829 Actuations",
+                "accepted_for_valuation": True,
+                "ticket_level": True,
+                "evidence_class": "A",
+                "price_certainty": "KNOWN_TRANSACTION",
+            },
+        )
+    )
+    session.flush()
+    hits = await IrishPanelProvider(session).search_realised_sales("sony|a7-iii|body", "GB", "good", limit=80)
+    assert len(hits) == 1
+    assert hits[0].identity_key == "sony|a7-iii|body"
+    assert "Tamron" not in hits[0].title
+    session.close()
+
+
+def test_sold_quality_flags_stored_kit_false_accept() -> None:
+    from datetime import datetime, timezone
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.dialects.postgresql import JSONB, UUID
+    from sqlalchemy.ext.compiler import compiles
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app.db.base import Base
+    from app.models.orm import SoldEvidence
+    from app.sold.quality import sold_quality_report
+
+    @compiles(JSONB, "sqlite")
+    def _jsonb(type_, compiler, **kw):  # noqa: ARG001
+        return "JSON"
+
+    @compiles(UUID, "sqlite")
+    def _uuid(type_, compiler, **kw):  # noqa: ARG001
+        return "CHAR(36)"
+
+    import app.models.orm  # noqa: F401
+
+    eng = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(eng)
+    factory = sessionmaker(bind=eng, autoflush=False, expire_on_commit=False)
+    session = factory()
+    session.add(
+        SoldEvidence(
+            canonical_product_id="sony|a7-iii|body",
+            condition="good",
+            channel="ebay",
+            territory="GB",
+            sold_price=Decimal("1509.17"),
+            currency="EUR",
+            sold_date=datetime(2026, 8, 1, tzinfo=timezone.utc),
+            source="compsniper",
+            evidence_quality="high",
+            url_or_reference="https://www.ebay.co.uk/itm/tamron-kit",
+            fingerprint="tamron-kit" + ("c" * 54),
+            extras={
+                "title": "Sony Alpha A7 III Camera Body with Tamron 28-75mm F2.8 Lens + More!",
+                "accepted_for_valuation": True,
+                "ticket_level": True,
+                "evidence_class": "A",
+            },
+        )
+    )
+    session.flush()
+    report = sold_quality_report(session)
+    model = report["models"]["sony|a7-iii|body"]
+    assert model["matcher_false_accept_count"] >= 1
+    assert any("Tamron" in row["title"] for row in model["matcher_false_accepts"])
+    assert report["totals"]["matcher_false_accepts"] >= 1
+    session.close()
+
+
 def test_uncertified_category_keeps_250_cap(monkeypatch) -> None:
     from app.decision import gates as gates_mod
 

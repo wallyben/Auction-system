@@ -11,4 +11,7 @@ def test_health_endpoint_returns_ok() -> None:
         response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["valuation_algorithm"].startswith("2.")
+    assert "git_sha" in body
