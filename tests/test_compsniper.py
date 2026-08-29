@@ -206,6 +206,10 @@ def test_identity_rejects_live_kit_false_accepts() -> None:
             camera_by_id("fujifilm|x-t4|body"),
             "Fujifilm X-T4 26.1 MP Mirrorless Camera - Black (with XF 16-80mm f/4 R OIS WR)",
         ),
+        (
+            a7iii,
+            "Sony Alpha A7 III Camera Body with Tamron 28-75mm F2.8 Lens + More!",
+        ),
     ]
     for body, title in kits:
         verdict = validate_camera_sold(target=body, sold_title=title)
@@ -825,6 +829,57 @@ def test_revalidate_stored_kit_without_provider_call() -> None:
     assert summary["flipped_to_reject"] == 1
     assert row.extras["accepted_for_valuation"] is False
     assert row.extras["rejection_reason"] == "kit_or_bundle"
+    session.close()
+
+
+@pytest.mark.asyncio
+async def test_ensure_sold_skips_fresh_cache() -> None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.dialects.postgresql import JSONB, UUID
+    from sqlalchemy.ext.compiler import compiles
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app.db.base import Base
+    from app.sold.cache import upsert_cache
+    from app.sold.refresh import ensure_sold_for_listing
+
+    @compiles(JSONB, "sqlite")
+    def _jsonb(type_, compiler, **kw):  # noqa: ARG001
+        return "JSON"
+
+    @compiles(UUID, "sqlite")
+    def _uuid(type_, compiler, **kw):  # noqa: ARG001
+        return "CHAR(36)"
+
+    import app.models.orm  # noqa: F401
+
+    eng = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(eng)
+    factory = sessionmaker(bind=eng, autoflush=False, expire_on_commit=False)
+    session = factory()
+    upsert_cache(
+        session,
+        canonical_product_id="sony|a7-iii|body",
+        variant="body",
+        marketplace="GB",
+        condition_bucket="used",
+        keyword="Sony A7 III",
+        raw_count=10,
+        accepted_count=8,
+        rejected_count=2,
+        last_http_status=200,
+        quota_remaining=80,
+    )
+
+    class _Listing:
+        brand = "Sony"
+        model = "A7 III"
+        title = "Sony A7 III body only"
+
+    result = await ensure_sold_for_listing(session, _Listing(), {})  # type: ignore[arg-type]
+    assert result["ok"] is True
+    assert result["skipped"] == "fresh_cache"
     session.close()
 
 

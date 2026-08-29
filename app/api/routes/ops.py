@@ -530,6 +530,7 @@ async def ops_sold_refresh(
         bodies=bodies,
         force=force,
         markets=market_tuple,
+        revalidate=True,
     )
     return result
 
