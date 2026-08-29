@@ -104,15 +104,16 @@ def live_camera_body_certification(session: Session, *, ttl_seconds: float = 45.
         body = camera_from_identity(brand=listing.brand, model=listing.model, title=listing.title or "")
         if body is not None:
             cameras.append((listing, body))
+    sold_rows = session.scalars(select(SoldEvidence)).all()
+    sold_by_product: dict[str, list] = {}
+    for row in sold_rows:
+        sold_by_product.setdefault(row.canonical_product_id, []).append(row)
     covered = 0
     fresh_n = 0
     liquid_n = 0
     condition_n = 0
     for listing, body in cameras:
-        n_accepted = 0
-        rows = session.scalars(
-            select(SoldEvidence).where(SoldEvidence.canonical_product_id == body.canonical_id)
-        ).all()
+        rows = sold_by_product.get(body.canonical_id) or []
         n_accepted = sum(1 for r in rows if (r.extras or {}).get("accepted_for_valuation") is not False)
         if n_accepted >= 3:
             covered += 1

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.models.orm import SoldEvidence, SoldQueryCache
 from app.sold.cameras import CAMERA_BODIES
-from app.sold.identity_gate import measure_identity_precision
+from app.sold.identity_gate import measure_identity_precision, validate_camera_sold
 
 REASON_CODES = {
     "accessory": "ACCESSORY",
@@ -54,6 +54,19 @@ def sold_quality_report(session: Session) -> dict[str, Any]:
         for rec in rejected:
             extras = rec.extras or {}
             breakdown[_code(str(extras.get("rejection_reason") or ""))] += 1
+        false_accepts: list[dict[str, Any]] = []
+        for rec in accepted:
+            title = str((rec.extras or {}).get("title") or "")
+            verdict = validate_camera_sold(target=body, sold_title=title)
+            if title and not verdict.accepted:
+                false_accepts.append(
+                    {
+                        "title": title,
+                        "url": rec.url_or_reference,
+                        "reason": verdict.reason,
+                        "price": str(rec.sold_price),
+                    }
+                )
         cache = cache_by_product.get(body.canonical_id) or []
         raw_from_cache = sum(int(c.raw_count or 0) for c in cache)
         by_model[body.canonical_id] = {
@@ -66,6 +79,8 @@ def sold_quality_report(session: Session) -> dict[str, Any]:
             "best_offer_upper_bound": sum(
                 1 for r in tickets if (r.extras or {}).get("best_offer_accepted")
             ),
+            "matcher_false_accept_count": len(false_accepts),
+            "matcher_false_accepts": false_accepts[:20],
             "sample_accepted_titles": [
                 {
                     "title": (r.extras or {}).get("title"),
@@ -76,7 +91,7 @@ def sold_quality_report(session: Session) -> dict[str, Any]:
                     "sold_date": r.sold_date.isoformat() if r.sold_date else None,
                     "price_certainty": (r.extras or {}).get("price_certainty"),
                 }
-                for r in accepted[:5]
+                for r in accepted[:25]
             ],
         }
     precision = measure_identity_precision()
@@ -87,5 +102,6 @@ def sold_quality_report(session: Session) -> dict[str, Any]:
             "rows": len(rows),
             "accepted": sum(m["accepted"] for m in by_model.values()),
             "rejected": sum(m["rejected"] for m in by_model.values()),
+            "matcher_false_accepts": sum(m["matcher_false_accept_count"] for m in by_model.values()),
         },
     }

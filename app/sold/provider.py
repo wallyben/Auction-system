@@ -87,9 +87,15 @@ class IrishPanelProvider:
         self, product: str, market: str, condition: str, *, limit: int = 20
     ) -> list[SoldEvidenceHit]:
         needle = (product or "").lower()[:80]
-        rows = self.session.scalars(
-            select(SoldEvidence).order_by(SoldEvidence.sold_date.desc()).limit(400)
-        ).all()
+        ident = (product or "").strip()
+        canonical_query = ident.count("|") >= 2
+        stmt = select(SoldEvidence).order_by(SoldEvidence.sold_date.desc())
+        if canonical_query:
+            stmt = stmt.where(SoldEvidence.canonical_product_id == ident)
+            stmt = stmt.limit(max(limit * 2, 80))
+        else:
+            stmt = stmt.limit(400)
+        rows = self.session.scalars(stmt).all()
         hits: list[SoldEvidenceHit] = []
         for row in rows:
             extras = row.extras or {}
@@ -103,15 +109,14 @@ class IrishPanelProvider:
                     str(extras.get("product_identity") or ""),
                 ]
             ).lower()
-            ident = (product or "").lower()
-            if ident and row.canonical_product_id.lower() == ident:
+            if canonical_query:
+                pass
+            elif ident and row.canonical_product_id.lower() == ident.lower():
                 pass
             elif needle and needle not in hay:
                 tokens = [part for part in needle.replace("-", " ").split() if len(part) > 2]
                 if tokens and not all(token in hay for token in tokens[:3]):
                     continue
-            from app.sold.match import variant_reject
-
             if (row.source or "") in {"owner_recorded", "owner_sales", "ebay_owner_fulfillment", "owner_trade_floor"}:
                 continue
             if extras.get("ticket_level") is False:
@@ -120,8 +125,13 @@ class IrishPanelProvider:
                 continue
             if str(extras.get("evidence_class") or "") in {"E", "F", "G", "X"}:
                 continue
-            if product and variant_reject(product, str(extras.get("title") or row.canonical_product_id)):
-                continue
+            # Stored camera tickets were identity-gated at ingest/revalidate.
+            # Do not rematch every ticket per listing (that pinned the single worker).
+            if not canonical_query:
+                from app.sold.match import variant_reject
+
+                if product and variant_reject(product, str(extras.get("title") or row.canonical_product_id)):
+                    continue
             if market and market.upper() not in {row.territory.upper(), "ALL", ""}:
                 if row.territory.upper() not in {market.upper(), "IE", "GB", "DE", "FR", "IT", "ES", "NL"}:
                     continue

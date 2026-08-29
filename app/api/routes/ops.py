@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -22,6 +23,7 @@ from app.pipeline.service import evaluate_listing, persist_listing, record_healt
 from app.pipeline.service import _comps_for
 from app.privacy.ebay_health import notification_health
 from app.sources.manual import CsvImportAdapter
+from app.valuation.version import VALUATION_ALGORITHM_VERSION
 
 router = APIRouter()
 
@@ -43,10 +45,22 @@ class OutcomeRequest(BaseModel):
     notes: str = ""
 
 
+def _runtime_sha() -> str:
+    for key in ("RENDER_GIT_COMMIT", "SOURCE_VERSION", "GIT_COMMIT"):
+        value = (os.environ.get(key) or "").strip()
+        if value:
+            return value[:40]
+    return "unknown"
+
+
 @router.get("/health")
 @router.head("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "valuation_algorithm": VALUATION_ALGORITHM_VERSION,
+        "git_sha": _runtime_sha(),
+    }
 
 
 @router.get("/health/db")
@@ -549,7 +563,6 @@ async def ops_sold_revalidate(session: Session = Depends(get_db)) -> dict[str, A
 @router.post("/ops/revalue")
 async def ops_revalue(session: Session = Depends(get_db)) -> dict[str, Any]:
     from app.pipeline.service import revalue_all_active
-    from app.valuation.version import VALUATION_ALGORITHM_VERSION
 
     return await revalue_all_active(session, reason=f"ops:{VALUATION_ALGORITHM_VERSION}")
 
