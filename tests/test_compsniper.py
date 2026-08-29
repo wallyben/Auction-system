@@ -59,6 +59,7 @@ def _gates(**overrides):
         localisation_confidence=Decimal("0.55"),
         sold_evidence_fresh=True,
         valuation_anomaly=False,
+        product_class="camera_body",
     )
     data.update(overrides)
     return apply_money_ready_gates(**data)

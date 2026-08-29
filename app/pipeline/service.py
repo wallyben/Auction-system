@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.certification.engine import category_is_certified
@@ -286,7 +286,12 @@ def persist_listing(session: Session, item: NormalizedListing) -> Listing:
             observed_at=item.observed_at,
             fingerprint=fp,
             source_confidence=item.source_confidence,
-            extras=item.extras,
+            extras={
+                **(item.extras or {}),
+                "product_class": identity.product_class,
+                "compatible_camera_ids": list(getattr(identity, "compatible_camera_ids", ()) or ()),
+                "identity_canonical_key": identity.canonical_key,
+            },
             images=item.images,
         )
         session.add(listing)
@@ -304,6 +309,9 @@ def persist_listing(session: Session, item: NormalizedListing) -> Listing:
             extras["price_drop"] = item.asking_price < prev_ask
             extras["price_drop_needs_reeval"] = True
         extras.update(item.extras or {})
+        extras["product_class"] = identity.product_class
+        extras["compatible_camera_ids"] = list(getattr(identity, "compatible_camera_ids", ()) or ())
+        extras["identity_canonical_key"] = identity.canonical_key
         listing.extras = extras
         listing.seller = item.seller
         listing.seller_location = item.seller_location
@@ -353,7 +361,9 @@ async def _comps_for(
     identity = getattr(listing, "_identity", None)
     category = (identity.category if identity else None) or listing.category
     product_class = getattr(identity, "product_class", None) if identity else None
-    if product_class in {"accessory", "game", "consumable"}:
+    from app.identity.product_class import ACCESSORY_CLASSES
+
+    if product_class in ACCESSORY_CLASSES or product_class in {"accessory", "game", "consumable"}:
         listing._rejected_comps = [{"title": listing.title, "reject_reason": f"subject_is_{product_class}"}]
         return []
     is_card = listing.category == "trading_cards" or category == "trading_cards"
@@ -364,13 +374,16 @@ async def _comps_for(
     if identity and identity.model:
         query = identity.model[:80]
     from app.sold.cameras import camera_from_identity
+    from app.identity.product_class import is_camera_body
 
-    camera_body = camera_from_identity(
-        brand=getattr(identity, "brand", None) if identity else listing.brand,
-        model=getattr(identity, "model", None) if identity else listing.model,
-        canonical_key=getattr(identity, "canonical_key", None) if identity else None,
-        title=listing.title or "",
-    )
+    camera_body = None
+    if is_camera_body(product_class):
+        camera_body = camera_from_identity(
+            brand=getattr(identity, "brand", None) if identity else listing.brand,
+            model=getattr(identity, "model", None) if identity else listing.model,
+            canonical_key=getattr(identity, "canonical_key", None) if identity else None,
+            title=listing.title or "",
+        )
     if camera_body is not None:
         query = camera_body.canonical_id
     if session is not None:
@@ -534,6 +547,7 @@ def evaluate_listing(
     rates: dict[str, Decimal],
     *,
     live_cert: dict[str, Any] | None = None,
+    generation=None,
 ) -> Opportunity:
     identity = getattr(listing, "_identity", None) or identify_with_resolvers(
         title=listing.title, description=listing.description, category=listing.category
@@ -608,11 +622,15 @@ def evaluate_listing(
     from app.sold.refresh import evidence_freshness
     from app.market.reference import check_anomaly
     from app.liquidity.realized import liquidity_from_sold, sold_velocity
+    from app.identity.product_class import is_camera_body
+    from app.opportunity.book import STATUS_BUILDING, STATUS_CURRENT, stamp_opportunity
 
-    camera_body = camera_from_identity(
-        brand=identity.brand, model=identity.model, canonical_key=identity.canonical_key, title=listing.title or ""
-    )
     product_class = getattr(identity, "product_class", None)
+    camera_body = None
+    if is_camera_body(product_class):
+        camera_body = camera_from_identity(
+            brand=identity.brand, model=identity.model, canonical_key=identity.canonical_key, title=listing.title or ""
+        )
     if live_cert is not None and (
         camera_body is not None
         or (product_class or "").lower() == "camera_body"
@@ -683,6 +701,8 @@ def evaluate_listing(
         max_buy=costs.max_purchase_eur,
     )
     age_hours = (_now() - listing.observed_at).total_seconds() / 3600 if listing.observed_at else 0
+    write_gen = generation
+    book_current = write_gen is None or write_gen.status in {STATUS_BUILDING, STATUS_CURRENT}
     gates = apply_money_ready_gates(
         engine=decision.decision,
         identity_level=identity.level,
@@ -710,7 +730,7 @@ def evaluate_listing(
         exit_present=bool(exits.quotes),
         provenance_complete=bool(valuation.provenance),
         source_fresh=age_hours <= 36,
-        tax_modelled=True,
+        tax_modelled=tax is not None and bool(getattr(tax, "notes", None) or getattr(tax, "assumption_class", None)),
         listing_type=listing.listing_type,
         sandbox_source=settings.ebay_api_env == "sandbox" and listing.source_id == "ebay_browse",
         local_market_method=valuation.local_market_method,
@@ -721,6 +741,7 @@ def evaluate_listing(
         product_class=getattr(identity, "product_class", None),
         liquidity_kind=getattr(liquidity, "kind", None),
         p25_sale_eur=valuation.p25,
+        book_current=book_current,
     )
     rank = commercial_rank(
         money_ready_decision=gates.money_ready_decision,
@@ -920,6 +941,7 @@ def evaluate_listing(
             },
             "identity_attributes": getattr(identity, "attributes", {}) or {},
             "product_class": getattr(identity, "product_class", "primary"),
+            "compatible_camera_ids": list(getattr(identity, "compatible_camera_ids", ()) or ()),
         },
         score=decision.score,
         expected_profit_eur=costs.expected_profit_eur,
@@ -991,6 +1013,7 @@ def evaluate_listing(
     else:
         for key, value in payload.items():
             setattr(existing, key, value)
+    stamp_opportunity(existing, write_gen)
     session.flush()
     trade_ins = [c for c in comps if c.evidence_type.value == "trade_in"]
     extras = dict(listing.extras or {})
@@ -1071,6 +1094,8 @@ async def run_scan(
         from app.sold.certify import live_camera_body_certification
 
         live_cert = live_camera_body_certification(session)
+        from app.opportunity.book import current_generation
+
         queries = _acquisition_queries(query, trigger)
         adapters = adapter_map()
         targets = [source_id] if source_id and source_id not in {None, "all"} else [
@@ -1093,7 +1118,14 @@ async def run_scan(
                     seen += 1
                     listing = persist_listing(session, item)
                     comps = await _comps_for(listing, rates, session)
-                    evaluate_listing(session, listing, comps, rates, live_cert=live_cert)
+                    evaluate_listing(
+                        session,
+                        listing,
+                        comps,
+                        rates,
+                        live_cert=live_cert,
+                        generation=current_generation(session),
+                    )
                     record_metric(session, "records_seen", run_id=job.correlation_id, source=sid)
                     written += 1
                     await maybe_yield(seen, every=3)
@@ -1116,58 +1148,137 @@ async def revalue_all_active(
     session: Session,
     *,
     reason: str = "algorithm_version_change",
-    limit: int = 400,
+    limit: int | None = None,
     job=None,
+    batch_size: int = 100,
 ) -> dict[str, object]:
-    """Re-identify, re-cost, and re-rank the live book. Old valuations must not stay current."""
+    """Re-identify the entire active book in batches. Partial runs never become current.
+
+    A full-book revalue has no silent newest-400 window. ``limit`` is only for tests.
+    """
     from app.identity.resolvers import identify_with_resolvers
     from app.condition.category import assess_category_condition
     from app.sold.certify import live_camera_body_certification
+    from app.opportunity.book import fail_generation, promote_generation, start_generation
+    from app.models.orm import BookGeneration
 
     rates = await refresh_fx(session)
     live_cert = live_camera_body_certification(session)
-    listings = session.scalars(
-        select(Listing).where(Listing.status == "active").order_by(Listing.last_seen_at.desc()).limit(limit)
-    ).all()
+    total = int(session.scalar(select(func.count()).select_from(Listing).where(Listing.status == "active")) or 0)
+    generation = start_generation(
+        session,
+        listings_total=total if limit is None else min(total, int(limit)),
+        details={"reason": reason, "batch_size": batch_size},
+    )
+    session.commit()
+    gen_id = generation.id
     written = 0
     skipped = 0
-    for index, listing in enumerate(listings):
-        identity = identify_with_resolvers(
-            title=listing.title,
-            description=listing.description or "",
-            brand_hint=listing.brand,
-            model_hint=listing.model,
-            gtin=listing.gtin,
-            mpn=listing.mpn,
-            category=listing.category,
+    offset = 0
+    processed = 0
+    try:
+        while True:
+            remaining = None if limit is None else max(0, int(limit) - processed)
+            if remaining == 0:
+                break
+            take = batch_size if remaining is None else min(batch_size, remaining)
+            listings = session.scalars(
+                select(Listing)
+                .where(Listing.status == "active")
+                .order_by(Listing.id.asc())
+                .offset(offset)
+                .limit(take)
+            ).all()
+            if not listings:
+                break
+            for listing in listings:
+                identity = identify_with_resolvers(
+                    title=listing.title,
+                    description=listing.description or "",
+                    brand_hint=listing.brand,
+                    model_hint=listing.model,
+                    gtin=listing.gtin,
+                    mpn=listing.mpn,
+                    category=listing.category,
+                )
+                extras = dict(listing.extras or {})
+                extras.update(
+                    {
+                        "identity_canonical_key": identity.canonical_key,
+                        "identity_confidence": str(identity.confidence),
+                        "identity_level": identity.level.value,
+                        "identity_reasons": identity.missing,
+                        "product_class": identity.product_class,
+                        "compatible_camera_ids": list(getattr(identity, "compatible_camera_ids", ()) or ()),
+                    }
+                )
+                listing.extras = extras
+                condition = assess_category_condition(
+                    listing.condition_raw,
+                    "\n".join([listing.description or "", str(extras.get("conditionDescription") or "")]),
+                    identity.category or listing.category,
+                    condition_id=str(extras.get("conditionId") or "") or None,
+                    specifics=extras.get("itemSpecifics") if isinstance(extras.get("itemSpecifics"), dict) else None,
+                )
+                listing.condition_grade = condition.grade.value
+                listing.brand = identity.brand or listing.brand
+                listing.model = identity.model or listing.model
+                listing.variant = identity.variant or listing.variant
+                listing.category = identity.category or listing.category
+                listing._identity = identity  # type: ignore[attr-defined]
+                listing._condition = condition  # type: ignore[attr-defined]
+                comps = await _comps_for(listing, rates, session, refresh_sold=False)
+                evaluate_listing(
+                    session,
+                    listing,
+                    comps,
+                    rates,
+                    live_cert=live_cert,
+                    generation=generation,
+                )
+                written += 1
+                processed += 1
+                await maybe_yield(processed, every=4)
+            offset += len(listings)
+            generation.listings_done = processed
+            generation.details = {
+                **(generation.details or {}),
+                "processed": processed,
+                "written": written,
+                "skipped": skipped,
+                "offset": offset,
+            }
+            session.flush()
+            session.commit()
+            generation = session.get(BookGeneration, gen_id) or generation
+            if job is not None:
+                heartbeat(session, job)
+                session.commit()
+        promote_generation(session, generation)
+        session.flush()
+        logger.info(
+            "revalue_all_active",
+            reason=reason,
+            written=written,
+            skipped=skipped,
+            processed=processed,
+            version=VALUATION_ALGORITHM_VERSION,
+            generation=str(gen_id),
         )
-        extras = listing.extras or {}
-        condition = assess_category_condition(
-            listing.condition_raw,
-            "\n".join([listing.description or "", str(extras.get("conditionDescription") or "")]),
-            identity.category or listing.category,
-            condition_id=str(extras.get("conditionId") or "") or None,
-            specifics=extras.get("itemSpecifics") if isinstance(extras.get("itemSpecifics"), dict) else None,
-        )
-        listing.condition_grade = condition.grade.value
-        listing.brand = identity.brand or listing.brand
-        listing.model = identity.model or listing.model
-        listing.variant = identity.variant or listing.variant
-        listing.category = identity.category or listing.category
-        listing._identity = identity  # type: ignore[attr-defined]
-        listing._condition = condition  # type: ignore[attr-defined]
-        comps = await _comps_for(listing, rates, session, refresh_sold=False)
-        evaluate_listing(session, listing, comps, rates, live_cert=live_cert)
-        written += 1
-        await maybe_yield(index, every=4)
-        if job is not None and written % 10 == 0:
-            heartbeat(session, job)
-    session.flush()
-    logger.info("revalue_all_active", reason=reason, written=written, skipped=skipped, version=VALUATION_ALGORITHM_VERSION)
-    record_metric(session, "full_book_revalue", value=written, reason=reason, version=VALUATION_ALGORITHM_VERSION)
-    return {
-        "ok": True,
-        "reason": reason,
-        "revalued": written,
-        "algorithm_version": VALUATION_ALGORITHM_VERSION,
-    }
+        record_metric(session, "full_book_revalue", value=written, reason=reason, version=VALUATION_ALGORITHM_VERSION)
+        return {
+            "ok": True,
+            "reason": reason,
+            "revalued": written,
+            "processed": processed,
+            "skipped": skipped,
+            "generation": str(gen_id),
+            "algorithm_version": VALUATION_ALGORITHM_VERSION,
+        }
+    except Exception as exc:
+        session.rollback()
+        generation = session.get(BookGeneration, gen_id)
+        if generation is not None:
+            fail_generation(session, generation, str(exc))
+            session.commit()
+        raise

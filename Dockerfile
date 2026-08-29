@@ -13,7 +13,7 @@ COPY scripts /app/scripts
 
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir ".[dev]" \
-    && chmod +x /app/scripts/start.sh
+    && chmod +x /app/scripts/start.sh /app/scripts/start-worker.sh
 
 EXPOSE 8000
 

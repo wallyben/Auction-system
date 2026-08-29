@@ -66,7 +66,9 @@ def commercial_rank(
         money_ready_decision or ""
     )
     ident = identity_level.value if isinstance(identity_level, IdentityLevel) else str(identity_level or "unknown")
-    accessory = product_class in {"accessory", "game", "consumable"}
+    from app.identity.product_class import ACCESSORY_CLASSES
+
+    accessory = product_class in ACCESSORY_CLASSES or product_class in {"accessory", "game", "consumable"}
     notes: list[str] = []
     has_binding = (realised_count + binding_count) > 0
     value_status = VALIDATED_VALUE if has_binding else UNVALIDATED_VALUE

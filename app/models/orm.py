@@ -354,6 +354,9 @@ class Opportunity(Base, TimestampMixin):
     algorithm_version: Mapped[str] = mapped_column(String(32), nullable=False, default="")
     evidence_as_of: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     value_status: Mapped[str] = mapped_column(String(32), nullable=False, default="UNVALIDATED_VALUE")
+    valuation_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("book_generations.id"), index=True
+    )
 
 
 class ScanJob(Base, TimestampMixin):
@@ -374,7 +377,7 @@ class ScanJob(Base, TimestampMixin):
 
 
 class PipelineJob(Base, TimestampMixin):
-    """Exclusive pipeline lease + history. One running job on the single worker."""
+    """Durable pipeline queue. Web enqueues; a dedicated worker claims and runs."""
 
     __tablename__ = "pipeline_jobs"
     __table_args__ = (
@@ -385,13 +388,44 @@ class PipelineJob(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     name: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     trigger: Mapped[str] = mapped_column(String(32), nullable=False, default="scheduler")
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="running", index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued", index=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error: Mapped[str | None] = mapped_column(Text)
     details: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    claimed_by: Mapped[str | None] = mapped_column(String(64), index=True)
+
+
+class BookGeneration(Base, TimestampMixin):
+    """Atomic valuation book. Rankings use only status=current."""
+
+    __tablename__ = "book_generations"
+    __table_args__ = (Index("ix_book_generations_status", "status"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    algorithm_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="building")
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    listings_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    listings_done: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error: Mapped[str | None] = mapped_column(Text)
+    details: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class PipelineWorker(Base, TimestampMixin):
+    """Liveness heartbeats from dedicated pipeline workers."""
+
+    __tablename__ = "pipeline_workers"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    worker_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    hostname: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    pid: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class WatchlistItem(Base, TimestampMixin):

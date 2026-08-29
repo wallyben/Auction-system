@@ -17,10 +17,11 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.session import get_db_session, get_session_factory, probe_database
 from app.db.url import classify_db_error
-from app.jobs.lease import dispatch_http, lease_status, recent_jobs
+from app.jobs.lease import dispatch_http
+from app.jobs.queue import lease_status, recent_jobs
 from app.jobs.scheduler import REQUIRED_JOB_IDS, scheduler_status
 from app.models.orm import Listing, Opportunity, Purchase, ScanJob, Source, WatchlistItem
-from app.pipeline.service import evaluate_listing, persist_listing, record_health, refresh_fx, run_scan, seed_sources
+from app.pipeline.service import evaluate_listing, persist_listing, record_health, refresh_fx, seed_sources
 from app.pipeline.service import _comps_for
 from app.privacy.ebay_health import notification_health
 from app.sources.manual import CsvImportAdapter
@@ -250,24 +251,11 @@ def health_ebay_notifications() -> dict[str, Any]:
 
 @router.post("/scans")
 async def create_scan(payload: ScanRequest) -> JSONResponse:
-    async def runner(session: Session, _job) -> dict[str, Any]:
-        job = await run_scan(
-            session,
-            source_id=payload.source_id,
-            query=payload.query,
-            trigger="api",
-            limit=payload.limit,
-        )
-        return {
-            "id": str(job.id),
-            "status": job.status,
-            "listings_seen": job.listings_seen,
-            "opportunities_written": job.opportunities_written,
-            "error": job.error,
-            "details": job.details,
-        }
-
-    result = await dispatch_http("scan", "api", runner)
+    result = await dispatch_http(
+        "scan",
+        "api",
+        {"source_id": payload.source_id, "query": payload.query, "limit": payload.limit},
+    )
     code = int(result.pop("http_status", 202))
     return JSONResponse(result, status_code=code)
 
@@ -331,9 +319,14 @@ def list_opportunities(decision: str | None = None, session: Session = Depends(g
     stmt = select(Opportunity)
     if decision:
         stmt = stmt.where(Opportunity.decision == decision.upper())
-    rows = list(session.scalars(stmt.limit(400)).all())
+    rows = list(session.scalars(stmt.limit(2000)).all())
+    from app.opportunity.book import current_generation, is_current_opportunity
     from app.opportunity.ranking import GROUP_ORDER
 
+    generation = current_generation(session)
+    rows = [row for row in rows if is_current_opportunity(row, generation)]
+    if decision:
+        rows = [row for row in rows if row.decision == decision.upper()]
     rows = sorted(
         rows,
         key=lambda o: (
@@ -341,7 +334,14 @@ def list_opportunities(decision: str | None = None, session: Session = Depends(g
             -(float(getattr(o, "ranking_score", 0) or 0)),
         ),
     )[:250]
-    return {"opportunities": [_summary(session, row) for row in rows]}
+    return {
+        "opportunities": [_summary(session, row) for row in rows],
+        "book": {
+            "algorithm_version": VALUATION_ALGORITHM_VERSION,
+            "generation_id": str(generation.id) if generation else None,
+            "generation_status": generation.status if generation else None,
+        },
+    }
 
 
 @router.get("/opportunities/{opportunity_id}")
@@ -412,7 +412,7 @@ async def import_csv(file: UploadFile = File(...), session: Session = Depends(ge
     for item in items:
         listing = persist_listing(session, item)
         comps = await _comps_for(listing, rates, session)
-        evaluate_listing(session, listing, comps, rates, live_cert=live_cert)
+        evaluate_listing(session, listing, comps, rates, live_cert=live_cert, generation=current_generation(session))
         written += 1
         await maybe_yield(written, every=4)
     return {"imported": written}
@@ -532,11 +532,14 @@ def health_jobs() -> dict[str, Any]:
             session.close()
     except Exception:
         recent = []
+    worker = (status.get("pipeline") or {}).get("worker") if isinstance(status.get("pipeline"), dict) else None
+    worker_connected = bool(isinstance(worker, dict) and worker.get("connected"))
     return {
         **status,
         "recent_pipeline_jobs": recent,
         "required_jobs": sorted(required),
         "missing_jobs": sorted(required - ids),
+        "worker_connected": worker_connected,
         "ok": required.issubset(ids) and bool(status.get("scheduler_running")),
     }
 
@@ -549,28 +552,15 @@ async def ops_sold_refresh(
     product: str | None = None,
 ) -> JSONResponse:
     """Quota-efficient CompSniper ingest: one query per canonical camera × marketplace."""
-    from app.sold.cameras import CAMERA_BODIES, camera_by_id
-    from app.sold.refresh import refresh_sold_evidence
+    from app.sold.cameras import camera_by_id
 
-    if product:
-        body = camera_by_id(product)
-        bodies = [body] if body else []
-        if not bodies:
-            raise HTTPException(status_code=404, detail=f"Unknown camera product {product}")
-    else:
-        bodies = list(CAMERA_BODIES)[: max(1, min(limit, 12))]
-    market_tuple = tuple(part.strip().upper() for part in markets.split(",") if part.strip()) or ("GB",)
-
-    async def runner(session: Session, _job) -> dict[str, Any]:
-        return await refresh_sold_evidence(
-            session,
-            bodies=bodies,
-            force=force,
-            markets=market_tuple,
-            revalidate=True,
-        )
-
-    result = await dispatch_http("sold-refresh", "api", runner)
+    if product and camera_by_id(product) is None:
+        raise HTTPException(status_code=404, detail=f"Unknown camera product {product}")
+    result = await dispatch_http(
+        "sold-refresh",
+        "api",
+        {"force": force, "markets": markets, "limit": limit, "product": product, "revalidate": True},
+    )
     code = int(result.pop("http_status", 202))
     return JSONResponse(result, status_code=code)
 
@@ -578,27 +568,18 @@ async def ops_sold_refresh(
 @router.post("/ops/sold-revalidate")
 async def ops_sold_revalidate() -> JSONResponse:
     """Re-run identity matching on stored CompSniper tickets. Zero quota."""
-    from app.sold.refresh import revalidate_stored_sold_evidence, revalue_matching
-
-    async def runner(session: Session, job) -> dict[str, Any]:
-        summary = await revalidate_stored_sold_evidence(session, job=job)
-        changed = set(summary.get("changed_product_ids") or [])
-        revalued = await revalue_matching(session, changed, job=job) if changed else 0
-        return {**summary, "revalued": revalued}
-
-    result = await dispatch_http("sold-revalidate", "api", runner)
+    result = await dispatch_http("sold-revalidate", "api", {})
     code = int(result.pop("http_status", 202))
     return JSONResponse(result, status_code=code)
 
 
 @router.post("/ops/revalue")
 async def ops_revalue() -> JSONResponse:
-    from app.pipeline.service import revalue_all_active
-
-    async def runner(session: Session, job) -> dict[str, Any]:
-        return await revalue_all_active(session, reason=f"ops:{VALUATION_ALGORITHM_VERSION}", job=job)
-
-    result = await dispatch_http("revalue", "api", runner)
+    result = await dispatch_http(
+        "revalue",
+        "api",
+        {"reason": f"ops:{VALUATION_ALGORITHM_VERSION}"},
+    )
     code = int(result.pop("http_status", 202))
     return JSONResponse(result, status_code=code)
 
@@ -628,8 +609,15 @@ def ops_camera_pipeline(session: Session = Depends(get_db)) -> dict[str, Any]:
     from app.sold.certify import live_camera_body_certification
     from app.sold.quality import sold_quality_report
     from app.evidence.providers.compsniper import compsniper_health
+    from app.identity.product_class import CAMERA_BODY, classify_listing
+    from app.opportunity.book import current_generation, is_current_opportunity
 
-    opps = list(session.scalars(select(Opportunity).limit(400)).all())
+    generation = current_generation(session)
+    opps = [
+        opp
+        for opp in session.scalars(select(Opportunity).limit(2000)).all()
+        if is_current_opportunity(opp, generation)
+    ]
     listing_ids = [opp.listing_id for opp in opps]
     listings_by_id = {}
     if listing_ids:
@@ -640,10 +628,16 @@ def ops_camera_pipeline(session: Session = Depends(get_db)) -> dict[str, Any]:
         listing = listings_by_id.get(opp.listing_id)
         pack = opp.provenance_pack or {}
         whyv = pack.get("why_this_value") or {}
+        product_class = pack.get("product_class") or ""
+        title = listing.title if listing else ""
+        if not product_class and title:
+            product_class = classify_listing(title, listing.description if listing else "").product_class
+        if product_class and product_class != CAMERA_BODY:
+            continue
         rows.append(
             {
                 "id": str(opp.id),
-                "title": listing.title if listing else "",
+                "title": title,
                 "url": listing.url if listing else "",
                 "ask": str(listing.asking_price) if listing and listing.asking_price is not None else None,
                 "currency": listing.currency if listing else None,
@@ -663,6 +657,8 @@ def ops_camera_pipeline(session: Session = Depends(get_db)) -> dict[str, Any]:
                 "failed_gates": (opp.gate_results or {}).get("failures") or [],
                 "value_status": getattr(opp, "value_status", None),
                 "algorithm_version": getattr(opp, "algorithm_version", None),
+                "product_class": product_class,
+                "valuation_run_id": str(getattr(opp, "valuation_run_id", "") or ""),
             }
         )
     rows.sort(key=lambda r: float(r.get("expected_profit") or 0), reverse=True)
@@ -671,6 +667,11 @@ def ops_camera_pipeline(session: Session = Depends(get_db)) -> dict[str, Any]:
         "sold_quality": sold_quality_report(session, rematch=False),
         "certification": live_camera_body_certification(session),
         "scheduler": scheduler_status(),
+        "book": {
+            "algorithm_version": VALUATION_ALGORITHM_VERSION,
+            "generation_id": str(generation.id) if generation else None,
+            "generation_status": generation.status if generation else None,
+        },
         "top20": rows[:20],
         "buy_ready": [r for r in rows if r["decision"] == "BUY_READY"],
         "count": len(rows),

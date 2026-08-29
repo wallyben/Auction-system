@@ -33,6 +33,7 @@ def _gates(**overrides):
         provenance_complete=True,
         source_fresh=True,
         tax_modelled=True,
+        product_class="camera_body",
     )
     data.update(overrides)
     return apply_money_ready_gates(**data)
@@ -57,6 +58,11 @@ def test_buy_ready_can_pass_inside_safe_start(monkeypatch) -> None:
         expected_profit=Decimal("80"),
         net_proceeds=Decimal("300"),
         downside_profit=Decimal("10"),
+        realised_count=8,
+        liquidity_kind="MEASURED",
+        p25_sale_eur=Decimal("400"),
+        valuation_confidence=Decimal("0.85"),
+        roi=Decimal("0.30"),
     )
     assert result.money_ready is True
     assert result.money_ready_decision.value == "BUY_READY"
@@ -122,3 +128,40 @@ def test_sandbox_source_cannot_be_buy_ready(monkeypatch) -> None:
 def test_high_risk_blocks_buy_ready() -> None:
     result = _gates(high_risk=True, risk_score=Decimal("0.80"), asking=Decimal("200"), purchase_price=Decimal("200"), all_in_cost=Decimal("220"))
     assert result.money_ready is False
+
+
+def test_stale_book_cannot_be_buy_ready() -> None:
+    result = _gates(
+        asking=Decimal("200"),
+        purchase_price=Decimal("200"),
+        all_in_cost=Decimal("220"),
+        expected_profit=Decimal("80"),
+        net_proceeds=Decimal("300"),
+        downside_profit=Decimal("10"),
+        realised_count=8,
+        liquidity_kind="MEASURED",
+        p25_sale_eur=Decimal("400"),
+        book_current=False,
+    )
+    assert result.money_ready is False
+    assert "DATA_PROVENANCE_PASS" in result.failures
+    assert result.money_ready_decision != MoneyReadyDecision.BUY_READY
+
+
+def test_non_camera_body_cannot_be_buy_ready_in_camera_category() -> None:
+    result = _gates(
+        asking=Decimal("200"),
+        purchase_price=Decimal("200"),
+        all_in_cost=Decimal("220"),
+        expected_profit=Decimal("80"),
+        net_proceeds=Decimal("300"),
+        downside_profit=Decimal("10"),
+        realised_count=8,
+        liquidity_kind="MEASURED",
+        p25_sale_eur=Decimal("400"),
+        product_class="cage",
+        category="cameras",
+    )
+    assert result.money_ready is False
+    assert "PRODUCT_IDENTITY_PASS" in result.failures
+    assert result.money_ready_decision != MoneyReadyDecision.BUY_READY

@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
-from app.jobs.lease import finish, release_memory, try_acquire
+from app.jobs.queue import claim_next, enqueue, finish, recover_stale
 
 
 @compiles(JSONB, "sqlite")
@@ -34,32 +34,35 @@ def _session():
 
 
 def test_second_job_is_rejected_while_lease_held() -> None:
-    release_memory()
     session = _session()
-    first = try_acquire(session, "scan", "test")
+    first, first_result = enqueue(session, "scan", "test")
     assert first is not None
-    second = try_acquire(session, "revalue", "test")
+    assert first_result["ok"] is True
+    claimed = claim_next(session, "w1")
+    assert claimed is not None
+    second, second_result = enqueue(session, "revalue", "test")
     assert second is None
-    finish(session, first, ok=True)
-    third = try_acquire(session, "revalue", "test")
+    assert second_result["reason"] == "busy"
+    finish(session, claimed, ok=True)
+    third, third_result = enqueue(session, "revalue", "test")
     assert third is not None
-    finish(session, third, ok=True)
+    assert third_result["ok"] is True
     session.close()
-    release_memory()
 
 
 def test_stale_lease_can_be_stolen() -> None:
-    release_memory()
     session = _session()
-    first = try_acquire(session, "scan", "test")
+    first, _ = enqueue(session, "scan", "test")
     assert first is not None
-    first.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    claimed = claim_next(session, "w1")
+    assert claimed is not None
+    claimed.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
     session.flush()
-    release_memory()
-    stolen = try_acquire(session, "revalue", "test")
+    recovered = recover_stale(session)
+    assert str(claimed.id) in recovered
+    stolen = claim_next(session, "w2")
     assert stolen is not None
-    assert first.status == "failed"
-    assert first.error == "stale_lease"
+    assert stolen.id == claimed.id
+    assert stolen.claimed_by == "w2"
     finish(session, stolen, ok=True)
     session.close()
-    release_memory()
