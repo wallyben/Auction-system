@@ -1,0 +1,29 @@
+# Render Blueprint for ARIE web + dedicated pipeline worker.
+# Web enqueues only. The worker claims Postgres pipeline_jobs and runs
+# scan / revalue / sold-revalidate / sold-refresh.
+services:
+  - type: web
+    name: auction-system
+    runtime: python
+    plan: starter
+    buildCommand: pip install -e .
+    startCommand: sh scripts/start.sh
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+
+  - type: worker
+    name: auction-system-worker
+    runtime: python
+    plan: starter
+    buildCommand: pip install -e .
+    startCommand: sh scripts/start-worker.sh
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: DATABASE_URL
+        fromService:
+          type: web
+          name: auction-system
+          envVarKey: DATABASE_URL

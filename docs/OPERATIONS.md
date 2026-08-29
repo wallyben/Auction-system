@@ -14,6 +14,15 @@ APScheduler starts with the API if `SCAN_ENABLED=true`. Cadence: `FAST_MARKETPLA
 
 Disable: `SCAN_ENABLED=false`.
 
+## Render production (web + worker)
+
+The web process must not run scan/revalue/sold jobs. Add a Background Worker on the same service group / `DATABASE_URL`:
+
+- Web start command: `sh scripts/start.sh` (alembic + uvicorn)
+- Worker start command: `sh scripts/start-worker.sh` (`python -m app.jobs.worker`)
+
+See `render.yaml`. After deploy, confirm `GET /health/jobs` shows `worker_connected: true` before triggering revalue.
+
 ## Credentials
 
 - eBay: `EBAY_CLIENT_ID` / `EBAY_CLIENT_SECRET`

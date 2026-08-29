@@ -71,6 +71,7 @@ class ProductIdentity:
     canonical_key: str = ""
     product_class: str = "primary"
     attributes: dict[str, str] = field(default_factory=dict)
+    compatible_camera_ids: tuple[str, ...] = ()
 
 
 def _norm(text: str | None) -> str:

@@ -428,7 +428,9 @@ def identify_with_resolvers(
     mpn: str | None = None,
     category: str | None = None,
 ) -> ProductIdentity:
-    """Generic parse first, then a category plugin upgrades variant exactness."""
+    """Product class first, then a category plugin upgrades variant exactness."""
+    from app.identity.product_class import ACCESSORY_CLASSES, CAMERA_BODY, classify_listing
+
     base = generic_identify(
         title=title,
         description=description,
@@ -438,7 +440,38 @@ def identify_with_resolvers(
         mpn=mpn,
         category=category,
     )
+    classified = classify_listing(title, description)
     blob = f"{title}\n{description}\n{brand_hint or ''}\n{model_hint or ''}".lower()
+    if classified.product_class in ACCESSORY_CLASSES:
+        missing = list(base.missing) + ["product_class_not_camera_body", classified.reason]
+        if classified.product_class == "lens":
+            resolved = resolve_lens(base, blob)
+            return _finish(
+                resolved,
+                product_class="lens",
+                category=resolved.category or "lenses",
+                compatible_camera_ids=classified.compatible_camera_ids,
+                missing=list(resolved.missing) + missing,
+            )
+        return _finish(
+            base,
+            level=IdentityLevel.CATEGORY,
+            confidence=min(base.confidence, Decimal("0.20")),
+            missing=missing,
+            canonical_key=f"{classified.product_class}|compat|{'-'.join(classified.compatible_camera_ids[:2])}",
+            product_class=classified.product_class,
+            category=classified.product_class,
+            compatible_camera_ids=classified.compatible_camera_ids,
+            variant=classified.product_class,
+        )
+    if classified.product_class == CAMERA_BODY:
+        resolved = resolve_camera(base, blob)
+        return _finish(
+            resolved,
+            product_class=CAMERA_BODY,
+            compatible_camera_ids=classified.compatible_camera_ids,
+            category=resolved.category or "cameras",
+        )
     from app.sources.ebay_filters import ACCESSORY_RE, KIT_RE
 
     if ACCESSORY_RE.search(blob) or KIT_RE.search(blob):
@@ -451,6 +484,7 @@ def identify_with_resolvers(
             canonical_key=f"accessory|{base.canonical_key}",
             product_class="accessory",
             category=base.category or category or "accessory",
+            compatible_camera_ids=classified.compatible_camera_ids,
         )
     if GAME_RE.search(blob) and re.search(r"\b(ps5|playstation|xbox|switch|console)\b", blob):
         if not re.search(r"\b(console|disc edition|digital edition)\b", blob):

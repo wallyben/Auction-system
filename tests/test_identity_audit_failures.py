@@ -25,7 +25,7 @@ def test_ddj_stand_is_not_controller() -> None:
 
 def test_case_is_not_camera() -> None:
     ident = identify_with_resolvers(title="Sony A7 IV leather case")
-    assert ident.product_class == "accessory"
+    assert ident.product_class == "case"
     assert ident.level != IdentityLevel.EXACT
     assert variant_reject("Sony A7 IV body", "Sony A7 IV leather case") == "accessory"
 

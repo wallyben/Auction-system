@@ -32,15 +32,21 @@ def _fingerprint(hit: SoldEvidenceHit) -> str:
 def persist_sold_hits(session: Session, hits: list[SoldEvidenceHit]) -> dict[str, int]:
     written = 0
     skipped = 0
+    eligible: list[tuple[SoldEvidenceHit, str]] = []
     for hit in hits:
         if hit.evidence_type in {EvidenceType.CURRENT_ASKING, EvidenceType.DEALER_RETAIL, EvidenceType.ESTIMATE}:
             skipped += 1
             continue
-        fp = _fingerprint(hit)
-        existing = session.scalar(select(SoldEvidence).where(SoldEvidence.fingerprint == fp))
-        if existing:
+        eligible.append((hit, _fingerprint(hit)))
+    existing: set[str] = set()
+    fingerprints = [fp for _, fp in eligible]
+    if fingerprints:
+        existing = set(session.scalars(select(SoldEvidence.fingerprint).where(SoldEvidence.fingerprint.in_(fingerprints))).all())
+    for hit, fp in eligible:
+        if fp in existing:
             skipped += 1
             continue
+        existing.add(fp)
         session.add(
             SoldEvidence(
                 canonical_product_id=hit.identity_key or hit.title[:512],

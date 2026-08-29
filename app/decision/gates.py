@@ -140,13 +140,22 @@ def apply_money_ready_gates(
     product_class: str | None = None,
     liquidity_kind: str | None = None,
     p25_sale_eur: Decimal | None = None,
+    book_current: bool = True,
 ) -> GateResult:
+    from app.identity.product_class import ACCESSORY_CLASSES, CAMERA_BODY
+
     min_id = as_decimal(settings.buy_ready_min_identity)
     min_cond = as_decimal(settings.buy_ready_min_condition)
     min_val = as_decimal(settings.buy_ready_min_valuation)
     min_down = as_decimal(settings.min_downside_margin)
     gates = {name: False for name in GATES}
-    gates["PRODUCT_IDENTITY_PASS"] = identity_level in {IdentityLevel.EXACT, IdentityLevel.VARIANT} and identity_confidence >= min_id
+    klass = (product_class or "").lower()
+    identity_ok = identity_level in {IdentityLevel.EXACT, IdentityLevel.VARIANT} and identity_confidence >= min_id
+    if klass in ACCESSORY_CLASSES or klass in {"accessory", "game", "consumable"}:
+        identity_ok = False
+    elif (category or "").lower() in {"cameras", "camera", "camera_body"} or klass == CAMERA_BODY:
+        identity_ok = identity_ok and klass == CAMERA_BODY
+    gates["PRODUCT_IDENTITY_PASS"] = identity_ok
     gates["CONDITION_PASS"] = condition_confidence >= min_cond
     strong = comparable_count >= settings.buy_ready_min_comps
     realised_ok = realised_count >= 1 or not settings.buy_ready_require_realised
@@ -182,7 +191,7 @@ def apply_money_ready_gates(
     gates["DOWNSIDE_PASS"] = downside_profit >= min_down
     under_max = asking is None or asking <= max_buy
     gates["MAX_BUY_PASS"] = under_max and max_buy > ZERO
-    gates["DATA_PROVENANCE_PASS"] = provenance_complete and not valuation_anomaly
+    gates["DATA_PROVENANCE_PASS"] = provenance_complete and not valuation_anomaly and book_current
     gates["CATEGORY_CERT_PASS"] = category_certified or settings.owner_override_uncertified
     safe_conf = as_decimal(settings.safe_start_min_confidence) if settings.safe_start_mode else as_decimal(settings.min_confidence)
     purchase = asking or purchase_price
@@ -237,6 +246,13 @@ def apply_money_ready_gates(
         money_ready = False
     if high_risk:
         money_ready = False
+        if action is MoneyReadyDecision.BUY_READY:
+            action = MoneyReadyDecision.REVIEW
+    if not book_current:
+        money_ready = False
+        gates["DATA_PROVENANCE_PASS"] = False
+        if "DATA_PROVENANCE_PASS" not in failures:
+            failures.append("DATA_PROVENANCE_PASS")
         if action is MoneyReadyDecision.BUY_READY:
             action = MoneyReadyDecision.REVIEW
     why = (

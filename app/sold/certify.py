@@ -28,8 +28,8 @@ def camera_body_certification_snapshot(
     listings: int = 0,
     realised_comp_coverage: Decimal = Decimal("0"),
     condition_reliable_rate: Decimal = Decimal("0.85"),
-    exit_channel_credible: bool = True,
-    risk_controls_pass: bool = True,
+    exit_channel_credible: bool = False,
+    risk_controls_pass: bool = False,
 ) -> dict[str, Any]:
     """Certify camera_body only from measured bars."""
     identity_rate = Decimal(str(precision.get("exact_match_precision") or 0))
@@ -99,9 +99,18 @@ def live_camera_body_certification(session: Session, *, ttl_seconds: float = 600
 
     precision = measure_identity_precision()
     backtest = synthetic_lookahead_backtest()
-    listings = session.scalars(select(Listing).where(Listing.status == "active").limit(500)).all()
+    listings = session.scalars(select(Listing).where(Listing.status == "active")).all()
     cameras = []
+    from app.identity.product_class import CAMERA_BODY, classify_listing
+    from app.sold.cameras import CAMERA_BODIES
+
     for listing in listings:
+        extras = listing.extras or {}
+        product_class = (extras.get("product_class") or "").lower()
+        if not product_class:
+            product_class = classify_listing(listing.title or "", listing.description or "").product_class
+        if product_class != CAMERA_BODY:
+            continue
         body = camera_from_identity(brand=listing.brand, model=listing.model, title=listing.title or "")
         if body is not None:
             cameras.append((listing, body))
@@ -136,18 +145,25 @@ def live_camera_body_certification(session: Session, *, ttl_seconds: float = 600
     condition_rate = Decimal(condition_n) / Decimal(n) if cameras else Decimal("0")
     freshness_rate = Decimal(fresh_n) / Decimal(n) if cameras else Decimal("0")
     liquidity_rate = Decimal(liquid_n) / Decimal(n) if cameras else Decimal("0")
-    opps = session.scalars(select(Opportunity).limit(400)).all()
+    opps = session.scalars(select(Opportunity).limit(2000)).all()
     listing_ids = [opp.listing_id for opp in opps]
     listings_by_id = {}
     if listing_ids:
         for row in session.scalars(select(Listing).where(Listing.id.in_(listing_ids))).all():
             listings_by_id[row.id] = row
+    from app.opportunity.book import current_generation, is_current_opportunity
+
+    generation = current_generation(session)
     camera_opps = []
     for opp in opps:
+        if not is_current_opportunity(opp, generation):
+            continue
         listing = listings_by_id.get(opp.listing_id)
         if listing is None:
             continue
-        if camera_from_identity(brand=listing.brand, model=listing.model, title=listing.title or ""):
+        pack = opp.provenance_pack or {}
+        product_class = (pack.get("product_class") or (listing.extras or {}).get("product_class") or "").lower()
+        if product_class == CAMERA_BODY:
             camera_opps.append(opp)
     cost_ok = 0
     exit_ok = 0
@@ -161,7 +177,17 @@ def live_camera_body_certification(session: Session, *, ttl_seconds: float = 600
     exit_channel_credible = bool(camera_opps) and exit_ok >= max(1, int(0.5 * len(camera_opps)))
     from app.core.config import settings
 
-    risk_controls_pass = bool(settings.safe_start_mode and settings.buy_ready_require_realised)
+    risk_evaluated = 0
+    for opp in camera_opps:
+        gates = (opp.gate_results or {}).get("gates") or {}
+        if "RISK_PASS" in gates:
+            risk_evaluated += 1
+    risk_controls_pass = (
+        bool(settings.safe_start_mode)
+        and bool(settings.buy_ready_require_realised)
+        and bool(camera_opps)
+        and risk_evaluated >= max(1, int(0.5 * len(camera_opps)))
+    )
     live_backtest = dict(backtest)
     live_backtest["evidence_freshness_rate"] = str(freshness_rate)
     live_backtest["liquidity_coverage"] = str(liquidity_rate)
@@ -175,8 +201,52 @@ def live_camera_body_certification(session: Session, *, ttl_seconds: float = 600
         exit_channel_credible=exit_channel_credible,
         risk_controls_pass=risk_controls_pass,
     )
+    now_dt = datetime.now(timezone.utc)
+    bodies_report: list[dict[str, Any]] = []
+    needs_refresh: list[str] = []
+    for body in CAMERA_BODIES:
+        rows = sold_by_product.get(body.canonical_id) or []
+        accepted = [
+            row
+            for row in rows
+            if (row.extras or {}).get("accepted_for_valuation") is not False
+            and (row.source or "") == "compsniper"
+        ]
+        dates = [row.sold_date for row in accepted if row.sold_date]
+        caches = cache_by_product.get(body.canonical_id) or []
+        cache_ok = any(cache_is_successful(row) for row in caches)
+        freshness = evidence_freshness_from_rows(rows, cache_ok=cache_ok)
+        last_refresh = max((row.queried_at for row in caches if row.queried_at), default=None)
+        if last_refresh is not None and last_refresh.tzinfo is None:
+            last_refresh = last_refresh.replace(tzinfo=timezone.utc)
+        cache_age = (now_dt - last_refresh).days if last_refresh else None
+        listing_n = sum(1 for _, matched in cameras if matched.canonical_id == body.canonical_id)
+        newest = max(dates) if dates else None
+        oldest = min(dates) if dates else None
+        rec = {
+            "canonical_id": body.canonical_id,
+            "accepted_n": len(accepted),
+            "newest_accepted": newest.isoformat() if newest else None,
+            "oldest_accepted": oldest.isoformat() if oldest else None,
+            "fresh": bool(freshness.get("fresh")),
+            "freshness_reason": freshness.get("reason"),
+            "age_days": freshness.get("age_days"),
+            "cache_ok": cache_ok,
+            "cache_age_days": cache_age,
+            "last_sold_refresh": last_refresh.isoformat() if last_refresh else None,
+            "camera_body_listings": listing_n,
+        }
+        bodies_report.append(rec)
+        if listing_n and not rec["fresh"]:
+            needs_refresh.append(body.canonical_id)
     snapshot["live"] = True
     snapshot["camera_listings"] = len(cameras)
     snapshot["covered_listings"] = covered
+    snapshot["bodies"] = bodies_report
+    snapshot["freshness_needs_refresh"] = needs_refresh
+    snapshot["freshness_note"] = (
+        "Freshness is accepted CompSniper tickets ≤21d AND a successful in-TTL cache. "
+        "Threshold remains 0.50. Do not lower it. Refresh only the listed canonical ids."
+    )
     _LIVE_CACHE = (now, snapshot)
     return snapshot

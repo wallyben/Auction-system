@@ -36,5 +36,17 @@ services:
       sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/arie
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh scripts/start-worker.sh
+
 volumes:
   postgres_data:

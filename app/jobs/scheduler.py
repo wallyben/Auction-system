@@ -1,4 +1,4 @@
-"""Background scheduler for continuous scanning."""
+"""Background scheduler: enqueue only. Heavy work runs in the worker process."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from apscheduler.triggers.interval import IntervalTrigger
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.db.session import get_session_factory
-from app.jobs.lease import lease_status, run_leased
-from app.pipeline.service import run_scan
+from app.jobs.queue import enqueue, lease_status
+from app.valuation.version import VALUATION_ALGORITHM_VERSION
 
 logger = get_logger("arie.jobs")
 _scheduler: AsyncIOScheduler | None = None
@@ -45,26 +45,26 @@ def scheduler_status() -> dict[str, object]:
     return payload
 
 
-async def _scheduled_scan() -> None:
+def _enqueue_or_skip(name: str, trigger: str, payload: dict | None = None) -> dict:
     session = get_session_factory()()
     try:
-        async def runner(sess, _job):
-            job = await run_scan(sess, trigger="scheduler", limit=8)
-            return {
-                "listings_seen": job.listings_seen,
-                "opportunities_written": job.opportunities_written,
-                "status": job.status,
-            }
-
-        result = await run_leased(session, "scan", "scheduler", runner)
+        job, result = enqueue(session, name, trigger, payload)
         session.commit()
         if not result.get("ok") and result.get("reason") == "busy":
-            logger.info("scan_skipped_lease_held", **{k: result.get(k) for k in ("name", "job_id")})
+            logger.info("pipeline_enqueue_skipped_busy", name=name, trigger=trigger)
+        else:
+            logger.info("pipeline_enqueued", name=name, trigger=trigger, job_id=result.get("job_id"))
+        return result
     except Exception:
         session.rollback()
-        logger.exception("scheduled_scan_failed")
+        logger.exception("pipeline_enqueue_failed", name=name)
+        return {"ok": False, "reason": "error"}
     finally:
         session.close()
+
+
+async def _scheduled_scan() -> None:
+    _enqueue_or_skip("scan", "scheduler", {"limit": 8})
 
 
 async def _scheduled_deletion_retry() -> None:
@@ -116,52 +116,17 @@ async def _scheduled_sold_ingest() -> None:
 
 
 async def _scheduled_sold_refresh() -> None:
-    from app.sold.refresh import refresh_sold_evidence
-
-    session = get_session_factory()()
-    try:
-        async def runner(sess, _job):
-            return await refresh_sold_evidence(sess)
-
-        result = await run_leased(session, "sold-refresh", "scheduler", runner)
-        session.commit()
-        logger.info(
-            "scheduled_sold_refresh",
-            ok=result.get("ok"),
-            revalued=result.get("revalued"),
-            reason=result.get("reason"),
-        )
-    except Exception:
-        session.rollback()
-        logger.exception("scheduled_sold_refresh_failed")
-    finally:
-        session.close()
+    _enqueue_or_skip("sold-refresh", "scheduler", {"limit": 12, "markets": "GB"})
 
 
 async def _scheduled_revalue() -> None:
-    from app.pipeline.service import revalue_all_active
-    from app.valuation.version import VALUATION_ALGORITHM_VERSION
-
-    session = get_session_factory()()
-    try:
-        async def runner(sess, job):
-            return await revalue_all_active(
-                sess, reason=f"scheduled:{VALUATION_ALGORITHM_VERSION}", job=job
-            )
-
-        result = await run_leased(session, "revalue", "scheduler", runner)
-        session.commit()
-        logger.info("scheduled_revalue", **{k: result.get(k) for k in ("revalued", "algorithm_version", "ok", "reason")})
-    except Exception:
-        session.rollback()
-        logger.exception("scheduled_revalue_failed")
-    finally:
-        session.close()
+    _enqueue_or_skip("revalue", "scheduler", {"reason": f"scheduled:{VALUATION_ALGORITHM_VERSION}"})
 
 
 def start_scheduler() -> None:
     global _scheduler
     import sys
+
     if "pytest" in sys.modules:
         logger.info("scheduler_skipped_under_pytest")
         return
