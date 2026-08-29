@@ -138,18 +138,16 @@ def compute_landed_cost(
     )
     net_resale = money(expected_resale_eur - platform_fee - pay_out - outbound - returns - warranty)
     profit = money(net_resale - acquisition)
-    down = money(
-        quick_sale_eur
-        - money(quick_sale_eur * platform_fee_rate * (Decimal("1") + platform_fee_vat))
-        - outbound
-        - acquisition
-    )
-    up = money(
-        high_sale_eur
-        - money(high_sale_eur * platform_fee_rate * (Decimal("1") + platform_fee_vat))
-        - outbound
-        - acquisition
-    )
+    quick_platform = money(quick_sale_eur * platform_fee_rate * (Decimal("1") + platform_fee_vat))
+    quick_pay = _fee(quick_sale_eur, payment_fee_rate, payment_fee_fixed)
+    quick_returns = money(quick_sale_eur * returns_allowance)
+    quick_warranty = money(quick_sale_eur * warranty_allowance)
+    down = money(quick_sale_eur - quick_platform - quick_pay - outbound - quick_returns - quick_warranty - acquisition)
+    high_platform = money(high_sale_eur * platform_fee_rate * (Decimal("1") + platform_fee_vat))
+    high_pay = _fee(high_sale_eur, payment_fee_rate, payment_fee_fixed)
+    high_returns = money(high_sale_eur * returns_allowance)
+    high_warranty = money(high_sale_eur * warranty_allowance)
+    up = money(high_sale_eur - high_platform - high_pay - outbound - high_returns - high_warranty - acquisition)
     roi = money(profit / acquisition) if acquisition else ZERO
 
     # Reverse max purchase: keep non-purchase lines fixed.
@@ -169,7 +167,6 @@ def compute_landed_cost(
         + import_vat_eur
         + refurb_eur
         + outbound
-        + Decimal("0.25")
     )
     target_profit = money(expected_resale_eur * target_margin_percent)
     net_after_resale_fees = money(expected_resale_eur - platform_fee - pay_out - returns - warranty)

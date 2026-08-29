@@ -91,16 +91,24 @@ def persist_canonical_sold(session: Session, records: list[Any]) -> dict[str, in
     skipped = 0
     imported_accepted = 0
     rejected = 0
+    fingerprints = [_canonical_fingerprint(rec.provider, rec.marketplace, rec.source_listing_id) for rec in records]
+    existing_by_fp: dict[str, SoldEvidence] = {}
+    if fingerprints:
+        for row in session.scalars(select(SoldEvidence).where(SoldEvidence.fingerprint.in_(fingerprints))).all():
+            existing_by_fp[row.fingerprint] = row
+    urls = [rec.source_url for rec in records if rec.source_url]
+    existing_by_url: dict[str, SoldEvidence] = {}
+    if urls:
+        for row in session.scalars(
+            select(SoldEvidence).where(SoldEvidence.source == "compsniper", SoldEvidence.url_or_reference.in_(urls))
+        ).all():
+            if row.url_or_reference:
+                existing_by_url[row.url_or_reference] = row
     for rec in records:
         fp = _canonical_fingerprint(rec.provider, rec.marketplace, rec.source_listing_id)
-        existing = session.scalar(select(SoldEvidence).where(SoldEvidence.fingerprint == fp))
+        existing = existing_by_fp.get(fp)
         if existing is None and rec.source_url:
-            existing = session.scalar(
-                select(SoldEvidence).where(
-                    SoldEvidence.source == rec.provider,
-                    SoldEvidence.url_or_reference == rec.source_url,
-                )
-            )
+            existing = existing_by_url.get(rec.source_url)
         extras = {
             "title": rec.title,
             "variant": rec.variant,

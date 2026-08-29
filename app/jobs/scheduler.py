@@ -9,11 +9,11 @@ from apscheduler.triggers.interval import IntervalTrigger
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.db.session import get_session_factory
+from app.jobs.lease import lease_status, run_leased
 from app.pipeline.service import run_scan
 
 logger = get_logger("arie.jobs")
 _scheduler: AsyncIOScheduler | None = None
-_running = False
 
 REQUIRED_JOB_IDS = (
     "scan-live-sources",
@@ -33,25 +33,38 @@ def scheduler_status() -> dict[str, object]:
             }
             for job in _scheduler.get_jobs()
         ]
-    return {"scheduler_running": bool(_scheduler and _scheduler.running), "jobs": jobs}
+    payload: dict[str, object] = {"scheduler_running": bool(_scheduler and _scheduler.running), "jobs": jobs}
+    try:
+        session = get_session_factory()()
+        try:
+            payload["pipeline"] = lease_status(session)
+        finally:
+            session.close()
+    except Exception:
+        payload["pipeline"] = lease_status(None)
+    return payload
 
 
 async def _scheduled_scan() -> None:
-    global _running
-    if _running:
-        logger.info("scan_skipped_already_running")
-        return
-    _running = True
     session = get_session_factory()()
     try:
-        await run_scan(session, trigger="scheduler", limit=8)
+        async def runner(sess, _job):
+            job = await run_scan(sess, trigger="scheduler", limit=8)
+            return {
+                "listings_seen": job.listings_seen,
+                "opportunities_written": job.opportunities_written,
+                "status": job.status,
+            }
+
+        result = await run_leased(session, "scan", "scheduler", runner)
         session.commit()
+        if not result.get("ok") and result.get("reason") == "busy":
+            logger.info("scan_skipped_lease_held", **{k: result.get(k) for k in ("name", "job_id")})
     except Exception:
         session.rollback()
         logger.exception("scheduled_scan_failed")
     finally:
         session.close()
-        _running = False
 
 
 async def _scheduled_deletion_retry() -> None:
@@ -107,13 +120,16 @@ async def _scheduled_sold_refresh() -> None:
 
     session = get_session_factory()()
     try:
-        result = await refresh_sold_evidence(session)
+        async def runner(sess, _job):
+            return await refresh_sold_evidence(sess)
+
+        result = await run_leased(session, "sold-refresh", "scheduler", runner)
         session.commit()
         logger.info(
             "scheduled_sold_refresh",
             ok=result.get("ok"),
             revalued=result.get("revalued"),
-            queries=len(result.get("queries") or []),
+            reason=result.get("reason"),
         )
     except Exception:
         session.rollback()
@@ -128,9 +144,14 @@ async def _scheduled_revalue() -> None:
 
     session = get_session_factory()()
     try:
-        result = await revalue_all_active(session, reason=f"scheduled:{VALUATION_ALGORITHM_VERSION}")
+        async def runner(sess, job):
+            return await revalue_all_active(
+                sess, reason=f"scheduled:{VALUATION_ALGORITHM_VERSION}", job=job
+            )
+
+        result = await run_leased(session, "revalue", "scheduler", runner)
         session.commit()
-        logger.info("scheduled_revalue", **{k: result.get(k) for k in ("revalued", "algorithm_version", "ok")})
+        logger.info("scheduled_revalue", **{k: result.get(k) for k in ("revalued", "algorithm_version", "ok", "reason")})
     except Exception:
         session.rollback()
         logger.exception("scheduled_revalue_failed")

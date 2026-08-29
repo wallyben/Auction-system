@@ -25,11 +25,18 @@ def _aware(dt: datetime | None) -> datetime | None:
     return dt
 
 
-def sold_velocity(session: Session, canonical_product_id: str, *, now: datetime | None = None) -> dict[str, object]:
+def sold_velocity(
+    session: Session,
+    canonical_product_id: str,
+    *,
+    now: datetime | None = None,
+    rows: list[SoldEvidence] | None = None,
+) -> dict[str, object]:
     now = now or datetime.now(timezone.utc)
-    rows = session.scalars(
-        select(SoldEvidence).where(SoldEvidence.canonical_product_id == canonical_product_id)
-    ).all()
+    if rows is None:
+        rows = session.scalars(
+            select(SoldEvidence).where(SoldEvidence.canonical_product_id == canonical_product_id)
+        ).all()
     accepted = [
         row
         for row in rows

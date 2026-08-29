@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Protocol
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.enums import EvidenceType
@@ -141,7 +141,7 @@ class IrishPanelProvider:
         return hits
 
     async def healthcheck(self) -> dict[str, object]:
-        count = len(self.session.scalars(select(SoldEvidence).limit(500)).all())
+        count = int(self.session.scalar(select(func.count()).select_from(SoldEvidence)) or 0)
         return {"provider": self.name, "rows": count, "ok": True, "classification": "REALIZED_SOLD"}
 
     async def freshness(self) -> datetime | None:
