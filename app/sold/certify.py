@@ -10,10 +10,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.certification.engine import CategoryMetrics, evaluate_category_certification
+from app.liquidity.realized import sold_velocity
+from app.models.orm import Listing, Opportunity, SoldEvidence, SoldQueryCache
 from app.sold.backtest_sold import synthetic_lookahead_backtest
+from app.sold.cache import cache_is_successful
 from app.sold.cameras import camera_from_identity
 from app.sold.identity_gate import measure_identity_precision
-from app.sold.refresh import evidence_freshness
+from app.sold.refresh import evidence_freshness_from_rows
 
 _LIVE_CACHE: tuple[float, dict[str, Any]] | None = None
 
@@ -87,14 +90,12 @@ def camera_body_certification_snapshot(
     }
 
 
-def live_camera_body_certification(session: Session, *, ttl_seconds: float = 45.0) -> dict[str, Any]:
+def live_camera_body_certification(session: Session, *, ttl_seconds: float = 600.0) -> dict[str, Any]:
     """Measure camera_body bars from the live book. Never override a fail."""
     global _LIVE_CACHE
     now = datetime.now(timezone.utc).timestamp()
     if _LIVE_CACHE and (now - _LIVE_CACHE[0]) < ttl_seconds:
         return _LIVE_CACHE[1]
-    from app.models.orm import Listing, Opportunity, SoldEvidence
-    from app.liquidity.realized import sold_velocity
 
     precision = measure_identity_precision()
     backtest = synthetic_lookahead_backtest()
@@ -108,6 +109,10 @@ def live_camera_body_certification(session: Session, *, ttl_seconds: float = 45.
     sold_by_product: dict[str, list] = {}
     for row in sold_rows:
         sold_by_product.setdefault(row.canonical_product_id, []).append(row)
+    cache_rows = session.scalars(select(SoldQueryCache)).all()
+    cache_by_product: dict[str, list] = {}
+    for row in cache_rows:
+        cache_by_product.setdefault(row.canonical_product_id, []).append(row)
     covered = 0
     fresh_n = 0
     liquid_n = 0
@@ -117,10 +122,11 @@ def live_camera_body_certification(session: Session, *, ttl_seconds: float = 45.
         n_accepted = sum(1 for r in rows if (r.extras or {}).get("accepted_for_valuation") is not False)
         if n_accepted >= 3:
             covered += 1
-        freshness = evidence_freshness(session, body.canonical_id)
+        cache_ok = any(cache_is_successful(row) for row in cache_by_product.get(body.canonical_id) or [])
+        freshness = evidence_freshness_from_rows(rows, cache_ok=cache_ok)
         if freshness.get("fresh"):
             fresh_n += 1
-        velocity = sold_velocity(session, body.canonical_id)
+        velocity = sold_velocity(session, body.canonical_id, rows=rows)
         if str(velocity.get("kind") or "UNKNOWN") != "UNKNOWN":
             liquid_n += 1
         if (listing.condition_grade or "").lower() not in {"", "unknown"}:
@@ -131,19 +137,31 @@ def live_camera_body_certification(session: Session, *, ttl_seconds: float = 45.
     freshness_rate = Decimal(fresh_n) / Decimal(n) if cameras else Decimal("0")
     liquidity_rate = Decimal(liquid_n) / Decimal(n) if cameras else Decimal("0")
     opps = session.scalars(select(Opportunity).limit(400)).all()
+    listing_ids = [opp.listing_id for opp in opps]
+    listings_by_id = {}
+    if listing_ids:
+        for row in session.scalars(select(Listing).where(Listing.id.in_(listing_ids))).all():
+            listings_by_id[row.id] = row
     camera_opps = []
     for opp in opps:
-        listing = session.get(Listing, opp.listing_id)
+        listing = listings_by_id.get(opp.listing_id)
         if listing is None:
             continue
         if camera_from_identity(brand=listing.brand, model=listing.model, title=listing.title or ""):
             camera_opps.append(opp)
     cost_ok = 0
+    exit_ok = 0
     for opp in camera_opps:
         breakdown = opp.cost_breakdown or {}
         if breakdown:
             cost_ok += 1
+        if opp.best_exit_channel:
+            exit_ok += 1
     cost_rate = Decimal(cost_ok) / Decimal(len(camera_opps)) if camera_opps else Decimal("0")
+    exit_channel_credible = bool(camera_opps) and exit_ok >= max(1, int(0.5 * len(camera_opps)))
+    from app.core.config import settings
+
+    risk_controls_pass = bool(settings.safe_start_mode and settings.buy_ready_require_realised)
     live_backtest = dict(backtest)
     live_backtest["evidence_freshness_rate"] = str(freshness_rate)
     live_backtest["liquidity_coverage"] = str(liquidity_rate)
@@ -154,8 +172,8 @@ def live_camera_body_certification(session: Session, *, ttl_seconds: float = 45.
         listings=len(cameras),
         realised_comp_coverage=coverage,
         condition_reliable_rate=condition_rate if cameras else Decimal("0"),
-        exit_channel_credible=True,
-        risk_controls_pass=True,
+        exit_channel_credible=exit_channel_credible,
+        risk_controls_pass=risk_controls_pass,
     )
     snapshot["live"] = True
     snapshot["camera_listings"] = len(cameras)

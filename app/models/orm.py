@@ -373,6 +373,27 @@ class ScanJob(Base, TimestampMixin):
     details: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
 
 
+class PipelineJob(Base, TimestampMixin):
+    """Exclusive pipeline lease + history. One running job on the single worker."""
+
+    __tablename__ = "pipeline_jobs"
+    __table_args__ = (
+        Index("ix_pipeline_jobs_status_started", "status", "started_at"),
+        Index("ix_pipeline_jobs_name_started", "name", "started_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    trigger: Mapped[str] = mapped_column(String(32), nullable=False, default="scheduler")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="running", index=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error: Mapped[str | None] = mapped_column(Text)
+    details: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+
+
 class WatchlistItem(Base, TimestampMixin):
     __tablename__ = "watchlist_items"
 

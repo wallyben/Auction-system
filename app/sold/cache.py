@@ -102,6 +102,9 @@ def upsert_cache(
     key = cache_key(canonical_product_id, variant, marketplace, condition_bucket)
     row = session.scalar(select(SoldQueryCache).where(SoldQueryCache.cache_key == key))
     hours = ttl_hours(accepted_count=accepted_count, sales_30d=sales_30d)
+    if last_http_status != 200:
+        # Failed scrapes must not lock out a retry for the full hot/slow TTL.
+        hours = 1 if last_http_status in {429, 500, 502, 503, 504} else 0
     payload = dict(
         canonical_product_id=canonical_product_id,
         variant=variant,

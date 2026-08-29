@@ -39,7 +39,7 @@ def _code(reason: str) -> str:
     return REASON_CODES.get(reason, (reason or "OTHER").upper())
 
 
-def sold_quality_report(session: Session) -> dict[str, Any]:
+def sold_quality_report(session: Session, *, rematch: bool = True) -> dict[str, Any]:
     rows = session.scalars(select(SoldEvidence)).all()
     cache_rows = session.scalars(select(SoldQueryCache)).all()
     cache_by_product = defaultdict(list)
@@ -55,18 +55,19 @@ def sold_quality_report(session: Session) -> dict[str, Any]:
             extras = rec.extras or {}
             breakdown[_code(str(extras.get("rejection_reason") or ""))] += 1
         false_accepts: list[dict[str, Any]] = []
-        for rec in accepted:
-            title = str((rec.extras or {}).get("title") or "")
-            verdict = validate_camera_sold(target=body, sold_title=title)
-            if title and not verdict.accepted:
-                false_accepts.append(
-                    {
-                        "title": title,
-                        "url": rec.url_or_reference,
-                        "reason": verdict.reason,
-                        "price": str(rec.sold_price),
-                    }
-                )
+        if rematch:
+            for rec in accepted:
+                title = str((rec.extras or {}).get("title") or "")
+                verdict = validate_camera_sold(target=body, sold_title=title)
+                if title and not verdict.accepted:
+                    false_accepts.append(
+                        {
+                            "title": title,
+                            "url": rec.url_or_reference,
+                            "reason": verdict.reason,
+                            "price": str(rec.sold_price),
+                        }
+                    )
         cache = cache_by_product.get(body.canonical_id) or []
         raw_from_cache = sum(int(c.raw_count or 0) for c in cache)
         by_model[body.canonical_id] = {

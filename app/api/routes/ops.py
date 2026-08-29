@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.session import get_db_session, get_session_factory, probe_database
 from app.db.url import classify_db_error
+from app.jobs.lease import dispatch_http, lease_status, recent_jobs
 from app.jobs.scheduler import REQUIRED_JOB_IDS, scheduler_status
 from app.models.orm import Listing, Opportunity, Purchase, ScanJob, Source, WatchlistItem
 from app.pipeline.service import evaluate_listing, persist_listing, record_health, refresh_fx, run_scan, seed_sources
@@ -133,22 +134,23 @@ async def health_evidence(session: Session = Depends(get_db)) -> dict[str, Any]:
         total = session.scalar(select(func.coalesce(func.sum(MetricEvent.value), 0)).where(MetricEvent.name == name))
         counts[name] = float(total or 0)
     realised_n = session.scalar(select(func.count()).select_from(SoldEvidence)) or 0
-    accepted_n = 0
-    rejected_n = 0
+    rejected_n = session.scalar(
+        select(func.count()).select_from(SoldEvidence).where(SoldEvidence.evidence_quality == "rejected")
+    ) or 0
+    accepted_n = int(realised_n) - int(rejected_n)
+    from app.sold.cameras import CAMERA_BODIES
+
+    camera_ids = [body.canonical_id for body in CAMERA_BODIES]
     camera_n = 0
-    try:
-        rows = session.scalars(select(SoldEvidence).limit(5000)).all()
-        for row in rows:
-            extras = row.extras or {}
-            if extras.get("accepted_for_valuation") is False:
-                rejected_n += 1
-            else:
-                accepted_n += 1
-            if extras.get("product_class") == "camera_body" or (row.canonical_product_id or "").startswith("sony|a7") or (row.canonical_product_id or "").startswith("canon|") or (row.canonical_product_id or "").startswith("nikon|") or (row.canonical_product_id or "").startswith("fujifilm|"):
-                if extras.get("accepted_for_valuation") is not False:
-                    camera_n += 1
-    except Exception:
-        accepted_n = int(realised_n)
+    if camera_ids:
+        camera_n = session.scalar(
+            select(func.count())
+            .select_from(SoldEvidence)
+            .where(
+                SoldEvidence.canonical_product_id.in_(camera_ids),
+                SoldEvidence.evidence_quality != "rejected",
+            )
+        ) or 0
     buy_ready_n = session.scalar(
         select(func.count()).select_from(Opportunity).where(Opportunity.money_ready_decision == "BUY_READY")
     ) or 0
@@ -247,22 +249,27 @@ def health_ebay_notifications() -> dict[str, Any]:
 
 
 @router.post("/scans")
-async def create_scan(payload: ScanRequest, session: Session = Depends(get_db)) -> dict[str, Any]:
-    job = await run_scan(
-        session,
-        source_id=payload.source_id,
-        query=payload.query,
-        trigger="api",
-        limit=payload.limit,
-    )
-    return {
-        "id": str(job.id),
-        "status": job.status,
-        "listings_seen": job.listings_seen,
-        "opportunities_written": job.opportunities_written,
-        "error": job.error,
-        "details": job.details,
-    }
+async def create_scan(payload: ScanRequest) -> JSONResponse:
+    async def runner(session: Session, _job) -> dict[str, Any]:
+        job = await run_scan(
+            session,
+            source_id=payload.source_id,
+            query=payload.query,
+            trigger="api",
+            limit=payload.limit,
+        )
+        return {
+            "id": str(job.id),
+            "status": job.status,
+            "listings_seen": job.listings_seen,
+            "opportunities_written": job.opportunities_written,
+            "error": job.error,
+            "details": job.details,
+        }
+
+    result = await dispatch_http("scan", "api", runner)
+    code = int(result.pop("http_status", 202))
+    return JSONResponse(result, status_code=code)
 
 
 @router.get("/scans")
@@ -397,12 +404,17 @@ async def import_csv(file: UploadFile = File(...), session: Session = Depends(ge
     text = (await file.read()).decode("utf-8", errors="replace")
     items = CsvImportAdapter().parse(text)
     rates = await refresh_fx(session)
+    from app.sold.certify import live_camera_body_certification
+    from app.jobs.lease import maybe_yield
+
+    live_cert = live_camera_body_certification(session)
     written = 0
     for item in items:
         listing = persist_listing(session, item)
-        comps = await _comps_for(listing, rates)
-        evaluate_listing(session, listing, comps, rates)
+        comps = await _comps_for(listing, rates, session)
+        evaluate_listing(session, listing, comps, rates, live_cert=live_cert)
         written += 1
+        await maybe_yield(written, every=4)
     return {"imported": written}
 
 
@@ -511,8 +523,18 @@ def health_jobs() -> dict[str, Any]:
     status = scheduler_status()
     ids = {job.get("id") for job in status.get("jobs") or []}
     required = set(REQUIRED_JOB_IDS)
+    recent: list[dict[str, object]] = []
+    try:
+        session = get_session_factory()()
+        try:
+            recent = recent_jobs(session)
+        finally:
+            session.close()
+    except Exception:
+        recent = []
     return {
         **status,
+        "recent_pipeline_jobs": recent,
         "required_jobs": sorted(required),
         "missing_jobs": sorted(required - ids),
         "ok": required.issubset(ids) and bool(status.get("scheduler_running")),
@@ -525,8 +547,7 @@ async def ops_sold_refresh(
     markets: str = "GB",
     limit: int = 12,
     product: str | None = None,
-    session: Session = Depends(get_db),
-) -> dict[str, Any]:
+) -> JSONResponse:
     """Quota-efficient CompSniper ingest: one query per canonical camera × marketplace."""
     from app.sold.cameras import CAMERA_BODIES, camera_by_id
     from app.sold.refresh import refresh_sold_evidence
@@ -539,32 +560,52 @@ async def ops_sold_refresh(
     else:
         bodies = list(CAMERA_BODIES)[: max(1, min(limit, 12))]
     market_tuple = tuple(part.strip().upper() for part in markets.split(",") if part.strip()) or ("GB",)
-    result = await refresh_sold_evidence(
-        session,
-        bodies=bodies,
-        force=force,
-        markets=market_tuple,
-        revalidate=True,
-    )
-    return result
+
+    async def runner(session: Session, _job) -> dict[str, Any]:
+        return await refresh_sold_evidence(
+            session,
+            bodies=bodies,
+            force=force,
+            markets=market_tuple,
+            revalidate=True,
+        )
+
+    result = await dispatch_http("sold-refresh", "api", runner)
+    code = int(result.pop("http_status", 202))
+    return JSONResponse(result, status_code=code)
 
 
 @router.post("/ops/sold-revalidate")
-async def ops_sold_revalidate(session: Session = Depends(get_db)) -> dict[str, Any]:
+async def ops_sold_revalidate() -> JSONResponse:
     """Re-run identity matching on stored CompSniper tickets. Zero quota."""
     from app.sold.refresh import revalidate_stored_sold_evidence, revalue_matching
 
-    summary = revalidate_stored_sold_evidence(session)
-    changed = set(summary.get("changed_product_ids") or [])
-    revalued = await revalue_matching(session, changed) if changed else 0
-    return {**summary, "revalued": revalued}
+    async def runner(session: Session, job) -> dict[str, Any]:
+        summary = await revalidate_stored_sold_evidence(session, job=job)
+        changed = set(summary.get("changed_product_ids") or [])
+        revalued = await revalue_matching(session, changed, job=job) if changed else 0
+        return {**summary, "revalued": revalued}
+
+    result = await dispatch_http("sold-revalidate", "api", runner)
+    code = int(result.pop("http_status", 202))
+    return JSONResponse(result, status_code=code)
 
 
 @router.post("/ops/revalue")
-async def ops_revalue(session: Session = Depends(get_db)) -> dict[str, Any]:
+async def ops_revalue() -> JSONResponse:
     from app.pipeline.service import revalue_all_active
 
-    return await revalue_all_active(session, reason=f"ops:{VALUATION_ALGORITHM_VERSION}")
+    async def runner(session: Session, job) -> dict[str, Any]:
+        return await revalue_all_active(session, reason=f"ops:{VALUATION_ALGORITHM_VERSION}", job=job)
+
+    result = await dispatch_http("revalue", "api", runner)
+    code = int(result.pop("http_status", 202))
+    return JSONResponse(result, status_code=code)
+
+
+@router.get("/ops/jobs")
+def ops_jobs(session: Session = Depends(get_db)) -> dict[str, Any]:
+    return {"pipeline": lease_status(session), "jobs": recent_jobs(session, limit=20)}
 
 
 @router.get("/ops/sold-quality")
@@ -589,9 +630,14 @@ def ops_camera_pipeline(session: Session = Depends(get_db)) -> dict[str, Any]:
     from app.evidence.providers.compsniper import compsniper_health
 
     opps = list(session.scalars(select(Opportunity).limit(400)).all())
+    listing_ids = [opp.listing_id for opp in opps]
+    listings_by_id = {}
+    if listing_ids:
+        for row in session.scalars(select(Listing).where(Listing.id.in_(listing_ids))).all():
+            listings_by_id[row.id] = row
     rows = []
     for opp in opps:
-        listing = session.get(Listing, opp.listing_id)
+        listing = listings_by_id.get(opp.listing_id)
         pack = opp.provenance_pack or {}
         whyv = pack.get("why_this_value") or {}
         rows.append(
@@ -622,7 +668,7 @@ def ops_camera_pipeline(session: Session = Depends(get_db)) -> dict[str, Any]:
     rows.sort(key=lambda r: float(r.get("expected_profit") or 0), reverse=True)
     return {
         "compsniper": compsniper_health(),
-        "sold_quality": sold_quality_report(session),
+        "sold_quality": sold_quality_report(session, rematch=False),
         "certification": live_camera_body_certification(session),
         "scheduler": scheduler_status(),
         "top20": rows[:20],

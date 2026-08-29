@@ -160,7 +160,8 @@ def apply_money_ready_gates(
         and uk_comp_count >= settings.buy_ready_min_comps
         and (localisation_confidence or ZERO) >= Decimal("0.40")
     )
-    gates["LOCALISATION_PASS"] = local_count >= 1 or uk_proxy_ok or valuation_confidence >= Decimal("0.85")
+    # High valuation confidence is not a substitute for local or UK-proxy evidence.
+    gates["LOCALISATION_PASS"] = local_count >= 1 or uk_proxy_ok
     gates["EXIT_CHANNEL_PASS"] = exit_present
     days_ok = expected_days is None or expected_days <= settings.max_days_to_sale
     gates["LIQUIDITY_PASS"] = liquidity_confidence >= Decimal("0.35") and days_ok

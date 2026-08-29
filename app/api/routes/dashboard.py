@@ -17,6 +17,7 @@ from app.audit.self_audit import run_self_audit
 from app.certification.engine import CATEGORY_DEFAULTS, EXIT_DEFAULTS, current_level
 from app.core.config import settings
 from app.inventory.service import mark_purchased, mark_sold
+from app.jobs.lease import dispatch_http
 from app.jobs.scheduler import scheduler_status
 from app.models.orm import (
     Comparable,
@@ -84,8 +85,14 @@ def dashboard(request: Request, session: Session = Depends(get_db)) -> HTMLRespo
             -(float(o.expected_profit_eur or 0) if getattr(o, "value_status", "") == "VALIDATED_VALUE" else 0),
         ),
     )
+    listing_ids = [opp.listing_id for opp in opps]
+    listings_by_id = {}
+    if listing_ids:
+        for row in session.scalars(select(Listing).where(Listing.id.in_(listing_ids))).all():
+            listings_by_id[row.id] = row
     for opp in opps:
-        _attach_listing(session, opp)
+        listing = listings_by_id.get(opp.listing_id)
+        opp.listing = listing  # type: ignore[attr-defined]
     jobs = session.scalars(select(ScanJob).order_by(ScanJob.created_at.desc()).limit(8)).all()
     inventory = session.scalars(select(InventoryItem).order_by(InventoryItem.purchased_at.desc()).limit(20)).all()
     buys = [o for o in opps if o.money_ready_decision == "BUY_READY" or o.ranking_group == "BUY_READY"]
@@ -126,43 +133,65 @@ def dashboard(request: Request, session: Session = Depends(get_db)) -> HTMLRespo
 
 
 @router.post("/scan-now")
-async def scan_now(session: Session = Depends(get_db)) -> RedirectResponse:
-    await run_scan(session, trigger="dashboard", limit=12)
+async def scan_now() -> RedirectResponse:
+    async def runner(session: Session, _job) -> dict:
+        job = await run_scan(session, trigger="dashboard", limit=12)
+        return {"listings_seen": job.listings_seen, "opportunities_written": job.opportunities_written}
+
+    await dispatch_http("scan", "dashboard", runner)
     return RedirectResponse("/", status_code=303)
 
 
 @router.post("/sold-refresh")
-async def dash_sold_refresh(session: Session = Depends(get_db)) -> RedirectResponse:
+async def dash_sold_refresh() -> RedirectResponse:
     from app.sold.cameras import CAMERA_BODIES
     from app.sold.refresh import refresh_sold_evidence
 
-    await refresh_sold_evidence(session, bodies=list(CAMERA_BODIES), markets=("GB",))
+    async def runner(session: Session, _job) -> dict:
+        return await refresh_sold_evidence(session, bodies=list(CAMERA_BODIES), markets=("GB",))
+
+    await dispatch_http("sold-refresh", "dashboard", runner)
     return RedirectResponse("/", status_code=303)
 
 
 @router.post("/revalue-now")
-async def dash_revalue(session: Session = Depends(get_db)) -> RedirectResponse:
+async def dash_revalue() -> RedirectResponse:
     from app.pipeline.service import revalue_all_active
 
-    await revalue_all_active(session, reason="dashboard")
+    async def runner(session: Session, job) -> dict:
+        return await revalue_all_active(session, reason="dashboard", job=job)
+
+    await dispatch_http("revalue", "dashboard", runner)
     return RedirectResponse("/", status_code=303)
 
 
 @router.post("/scan-source")
-async def scan_source(source_id: str = Form(...), session: Session = Depends(get_db)) -> RedirectResponse:
-    await run_scan(session, source_id=source_id, trigger="dashboard-source", limit=12)
+async def scan_source(source_id: str = Form(...)) -> RedirectResponse:
+    async def runner(session: Session, _job) -> dict:
+        job = await run_scan(session, source_id=source_id, trigger="dashboard-source", limit=12)
+        return {"listings_seen": job.listings_seen}
+
+    await dispatch_http("scan", "dashboard-source", runner)
     return RedirectResponse("/", status_code=303)
 
 
 @router.post("/scan-search")
-async def scan_search(query: str = Form(...), session: Session = Depends(get_db)) -> RedirectResponse:
-    await run_scan(session, query=query, trigger="dashboard-search", limit=12)
+async def scan_search(query: str = Form(...)) -> RedirectResponse:
+    async def runner(session: Session, _job) -> dict:
+        job = await run_scan(session, query=query, trigger="dashboard-search", limit=12)
+        return {"listings_seen": job.listings_seen}
+
+    await dispatch_http("scan", "dashboard-search", runner)
     return RedirectResponse("/", status_code=303)
 
 
 @router.post("/scan-category")
-async def scan_category(category: str = Form(...), session: Session = Depends(get_db)) -> RedirectResponse:
-    await run_scan(session, query=category, trigger="dashboard-category", limit=12)
+async def scan_category(category: str = Form(...)) -> RedirectResponse:
+    async def runner(session: Session, _job) -> dict:
+        job = await run_scan(session, query=category, trigger="dashboard-category", limit=12)
+        return {"listings_seen": job.listings_seen}
+
+    await dispatch_http("scan", "dashboard-category", runner)
     return RedirectResponse("/", status_code=303)
 
 

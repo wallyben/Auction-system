@@ -2,10 +2,11 @@
 
 Worker: APScheduler `AsyncIOScheduler` inside the FastAPI lifespan.
 
-- Job id `scan-live-sources`
-- Interval `max(FAST_MARKETPLACE_MINUTES, 5)` plus jitter 30s
-- `max_instances=1`, `coalesce=True`
-- In-process `_running` guard
+- Job ids: `scan-live-sources`, `sold-evidence-refresh`, `revalue-after-evidence`, `revalue-all-active`
+- Scan interval `max(FAST_MARKETPLACE_MINUTES, 5)` plus jitter 30s
+- `max_instances=1`, `coalesce=True` per job
+- Global `pipeline_jobs` lease so scan / sold-refresh / revalue cannot overlap on the single worker
+- HTTP `/ops/*` and dashboard triggers enqueue (202) instead of blocking the request
 - Skipped under pytest
 - Each source search is try/except; errors append to `scan_jobs.details`
 

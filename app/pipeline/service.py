@@ -28,6 +28,7 @@ from app.economics.urgency import classify_urgency
 from app.exits.engine import compare_exits
 from app.identity.engine import identify_listing
 from app.identity.resolvers import identify_with_resolvers
+from app.jobs.lease import heartbeat, maybe_yield
 from app.liquidity.engine import estimate_liquidity
 from app.lots.engine import split_lot
 from app.models.enums import EvidenceType, SourceStatus
@@ -531,6 +532,8 @@ def evaluate_listing(
     listing: Listing,
     comps: list[Comp],
     rates: dict[str, Decimal],
+    *,
+    live_cert: dict[str, Any] | None = None,
 ) -> Opportunity:
     identity = getattr(listing, "_identity", None) or identify_with_resolvers(
         title=listing.title, description=listing.description, category=listing.category
@@ -609,6 +612,19 @@ def evaluate_listing(
     camera_body = camera_from_identity(
         brand=identity.brand, model=identity.model, canonical_key=identity.canonical_key, title=listing.title or ""
     )
+    product_class = getattr(identity, "product_class", None)
+    if live_cert is not None and (
+        camera_body is not None
+        or (product_class or "").lower() == "camera_body"
+        or (listing.category or identity.category or "").lower() in {"cameras", "camera", "camera_body"}
+    ):
+        category_certified = bool(live_cert.get("certified"))
+    else:
+        category_certified = category_is_certified(
+            listing.category or identity.category,
+            session=None,
+            product_class=product_class,
+        )
     velocity = None
     if camera_body is not None:
         velocity = sold_velocity(session, camera_body.canonical_id)
@@ -690,11 +706,7 @@ def evaluate_listing(
         gross_sale=costs.expected_resale_eur,
         net_proceeds=costs.expected_net_resale_eur,
         category=listing.category or identity.category,
-        category_certified=category_is_certified(
-            listing.category or identity.category,
-            session=session,
-            product_class=getattr(identity, "product_class", None),
-        ),
+        category_certified=category_certified,
         exit_present=bool(exits.quotes),
         provenance_complete=bool(valuation.provenance),
         source_fresh=age_hours <= 36,
@@ -1056,6 +1068,9 @@ async def run_scan(
     try:
         await record_health(session, source_id=source_id if source_id and source_id != "all" else None)
         rates = await refresh_fx(session)
+        from app.sold.certify import live_camera_body_certification
+
+        live_cert = live_camera_body_certification(session)
         queries = _acquisition_queries(query, trigger)
         adapters = adapter_map()
         targets = [source_id] if source_id and source_id not in {None, "all"} else [
@@ -1078,9 +1093,10 @@ async def run_scan(
                     seen += 1
                     listing = persist_listing(session, item)
                     comps = await _comps_for(listing, rates, session)
-                    evaluate_listing(session, listing, comps, rates)
+                    evaluate_listing(session, listing, comps, rates, live_cert=live_cert)
                     record_metric(session, "records_seen", run_id=job.correlation_id, source=sid)
                     written += 1
+                    await maybe_yield(seen, every=3)
         job.status = "partial" if errors else "success"
         job.listings_seen = seen
         job.opportunities_written = written
@@ -1101,18 +1117,21 @@ async def revalue_all_active(
     *,
     reason: str = "algorithm_version_change",
     limit: int = 400,
+    job=None,
 ) -> dict[str, object]:
     """Re-identify, re-cost, and re-rank the live book. Old valuations must not stay current."""
     from app.identity.resolvers import identify_with_resolvers
     from app.condition.category import assess_category_condition
+    from app.sold.certify import live_camera_body_certification
 
     rates = await refresh_fx(session)
+    live_cert = live_camera_body_certification(session)
     listings = session.scalars(
         select(Listing).where(Listing.status == "active").order_by(Listing.last_seen_at.desc()).limit(limit)
     ).all()
     written = 0
     skipped = 0
-    for listing in listings:
+    for index, listing in enumerate(listings):
         identity = identify_with_resolvers(
             title=listing.title,
             description=listing.description or "",
@@ -1138,8 +1157,11 @@ async def revalue_all_active(
         listing._identity = identity  # type: ignore[attr-defined]
         listing._condition = condition  # type: ignore[attr-defined]
         comps = await _comps_for(listing, rates, session, refresh_sold=False)
-        evaluate_listing(session, listing, comps, rates)
+        evaluate_listing(session, listing, comps, rates, live_cert=live_cert)
         written += 1
+        await maybe_yield(index, every=4)
+        if job is not None and written % 10 == 0:
+            heartbeat(session, job)
     session.flush()
     logger.info("revalue_all_active", reason=reason, written=written, skipped=skipped, version=VALUATION_ALGORITHM_VERSION)
     record_metric(session, "full_book_revalue", value=written, reason=reason, version=VALUATION_ALGORITHM_VERSION)

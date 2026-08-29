@@ -210,6 +210,22 @@ def test_identity_rejects_live_kit_false_accepts() -> None:
             a7iii,
             "Sony Alpha A7 III Camera Body with Tamron 28-75mm F2.8 Lens + More!",
         ),
+        (
+            a7iii,
+            "Sony Alpha a7 III ILCE-7M3 24.2MP 4K Wi-Fi + SEL2870 28-70mm Black",
+        ),
+        (
+            camera_by_id("fujifilm|x-t4|body"),
+            "Black Fujifilm X-T4 26.1 MP Mirrorless Camera + Sigma  18-50mm f2.8",
+        ),
+        (
+            xt5,
+            "Fujifilm X-T5 Silver with TTArtisan AF 56mmF1.8 - Very Good Condition",
+        ),
+        (
+            xt5,
+            "Fujifilm X-T5 40.2 MP Mirrorless Digital Camera, 2 Fuji film lenses, Godox flash",
+        ),
     ]
     for body, title in kits:
         verdict = validate_camera_sold(target=body, sold_title=title)
@@ -219,6 +235,16 @@ def test_identity_rejects_live_kit_false_accepts() -> None:
         target=a7iii, sold_title="Sony A7 III ILCE-7M3 Body Only + extras"
     )
     assert extras.accepted is True
+    accessories = validate_camera_sold(
+        target=camera_by_id("canon|r5|body"),
+        sold_title="Canon EOS R5 Body  + Accessories - Mint Condition, Shutter Count 4000",
+    )
+    assert accessories.accepted is True
+    batteries = validate_camera_sold(
+        target=xt5,
+        sold_title="Fujifilm X-T5 40.2 MP Mirrorless Digital Camera - Black + 4 spare batteries",
+    )
+    assert batteries.accepted is True
     lens = validate_camera_sold(target=a7iii, sold_title="Sony FE 50mm f/1.8")
     assert lens.accepted is False
 
@@ -774,7 +800,8 @@ def test_camera_safe_start_is_evidence_not_250_cap(monkeypatch) -> None:
     assert over_cap.gates["SAFE_START_PASS"] is False
 
 
-def test_revalidate_stored_kit_without_provider_call() -> None:
+@pytest.mark.asyncio
+async def test_revalidate_stored_kit_without_provider_call() -> None:
     from sqlalchemy import create_engine, select
     from sqlalchemy.dialects.postgresql import JSONB, UUID
     from sqlalchemy.ext.compiler import compiles
@@ -823,7 +850,7 @@ def test_revalidate_stored_kit_without_provider_call() -> None:
     persist_canonical_sold(session, [rec])
     row = session.scalars(select(SoldEvidence)).first()
     assert row.extras["accepted_for_valuation"] is True
-    summary = revalidate_stored_sold_evidence(session)
+    summary = await revalidate_stored_sold_evidence(session)
     session.refresh(row)
     assert summary["quota_used"] == 0
     assert summary["flipped_to_reject"] == 1
@@ -883,6 +910,44 @@ async def test_ensure_sold_skips_fresh_cache() -> None:
     session.close()
 
 
+@pytest.mark.asyncio
+async def test_ensure_sold_does_not_spend_quota_on_eval_miss() -> None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.dialects.postgresql import JSONB, UUID
+    from sqlalchemy.ext.compiler import compiles
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app.db.base import Base
+    from app.sold.refresh import ensure_sold_for_listing
+
+    @compiles(JSONB, "sqlite")
+    def _jsonb(type_, compiler, **kw):  # noqa: ARG001
+        return "JSON"
+
+    @compiles(UUID, "sqlite")
+    def _uuid(type_, compiler, **kw):  # noqa: ARG001
+        return "CHAR(36)"
+
+    import app.models.orm  # noqa: F401
+
+    eng = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(eng)
+    factory = sessionmaker(bind=eng, autoflush=False, expire_on_commit=False)
+    session = factory()
+
+    class _Listing:
+        brand = "Sony"
+        model = "A7 III"
+        title = "Sony A7 III body only"
+
+    result = await ensure_sold_for_listing(session, _Listing(), {})  # type: ignore[arg-type]
+    assert result["ok"] is True
+    assert result["skipped"] == "no_paid_refresh_on_eval"
+    assert result["quota_used"] == 0
+    session.close()
+
+
 def test_revalue_all_active_does_not_refresh_sold() -> None:
     import inspect
 
@@ -892,6 +957,8 @@ def test_revalue_all_active_does_not_refresh_sold() -> None:
     assert "refresh_sold=False" in inspect.getsource(revalue_all_active)
     src = inspect.getsource(ensure_sold_for_listing)
     assert "fresh_cache" in src
+    assert "no_paid_refresh_on_eval" in src
+    assert "refresh_sold_evidence" not in src
     refresh_src = inspect.getsource(refresh_sold_evidence)
     assert "if revalidate:" in refresh_src
 

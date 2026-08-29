@@ -40,7 +40,9 @@ async def value_url(session: Session, url: str) -> object:
     rates = await refresh_fx(session)
     listing = persist_listing(session, item)
     comps = await _comps_for(listing, rates, session)
-    return evaluate_listing(session, listing, comps, rates)
+    from app.sold.certify import live_camera_body_certification
+
+    return evaluate_listing(session, listing, comps, rates, live_cert=live_camera_body_certification(session))
 
 
 async def value_manual(
@@ -71,4 +73,6 @@ async def value_manual(
     rates = await refresh_fx(session)
     listing = persist_listing(session, item)
     comps = await _comps_for(listing, rates, session)
-    return evaluate_listing(session, listing, comps, rates)
+    from app.sold.certify import live_camera_body_certification
+
+    return evaluate_listing(session, listing, comps, rates, live_cert=live_camera_body_certification(session))

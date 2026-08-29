@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.evidence.providers.compsniper import CompSniperProvider, HEALTH, compsniper_health
+from app.jobs.lease import heartbeat, maybe_yield, yield_loop
 from app.models.orm import Listing, SoldEvidence
 from app.observability.metrics import record_metric
 from app.sold.cache import cache_is_fresh, cache_is_successful, get_cache, upsert_cache
@@ -247,8 +248,8 @@ def _item_from_sold_row(row: SoldEvidence):
     )
 
 
-def revalidate_stored_sold_evidence(
-    session: Session, *, rates: dict[str, Decimal] | None = None
+async def revalidate_stored_sold_evidence(
+    session: Session, *, rates: dict[str, Decimal] | None = None, job=None
 ) -> dict[str, Any]:
     """Re-run identity/normalize on stored tickets. Uses zero CompSniper quota."""
     from app.sold.cameras import MARKETPLACE_SITES, camera_by_id
@@ -263,7 +264,7 @@ def revalidate_stored_sold_evidence(
     unchanged = 0
     skipped = 0
     changed_product_ids: set[str] = set()
-    for row in rows:
+    for index, row in enumerate(rows):
         body = camera_by_id(row.canonical_product_id)
         item = _item_from_sold_row(row)
         if body is None or item is None:
@@ -283,10 +284,10 @@ def revalidate_stored_sold_evidence(
             except Exception:
                 pass
         was = extras.get("accepted_for_valuation") is not False
-        now = rec.accepted_for_valuation
-        if was != now:
+        now_accepted = rec.accepted_for_valuation
+        if was != now_accepted:
             changed_product_ids.add(row.canonical_product_id)
-            if was and not now:
+            if was and not now_accepted:
                 flipped_to_reject += 1
             else:
                 flipped_to_accept += 1
@@ -294,6 +295,9 @@ def revalidate_stored_sold_evidence(
             unchanged += 1
         records.append(rec)
         touched.append(row)
+        await maybe_yield(index, every=25)
+        if job is not None and index > 0 and index % 80 == 0:
+            heartbeat(session, job)
     if records:
         persist_canonical_sold(session, records)
         stamp = _now().isoformat()
@@ -303,6 +307,7 @@ def revalidate_stored_sold_evidence(
             extras["matching_rules_version"] = VALUATION_ALGORITHM_VERSION
             row.extras = extras
         session.flush()
+        await yield_loop()
     return {
         "ok": True,
         "examined": len(rows),
@@ -328,7 +333,7 @@ async def refresh_sold_evidence(
     reval: dict[str, Any] = {"ok": True, "skipped": True, "quota_used": 0}
     revalue_ids: set[str] = set()
     if revalidate:
-        reval = revalidate_stored_sold_evidence(session, rates=rates)
+        reval = await revalidate_stored_sold_evidence(session, rates=rates)
         revalue_ids = set(reval.get("changed_product_ids") or [])
     health = compsniper_health()
     if health["status"] in {"DISABLED", "BLOCKED_CREDENTIALS"}:
@@ -390,15 +395,17 @@ async def refresh_sold_evidence(
     }
 
 
-async def revalue_matching(session: Session, canonical_ids: set[str]) -> int:
+async def revalue_matching(session: Session, canonical_ids: set[str], *, job=None) -> int:
     from app.pipeline.service import refresh_fx, evaluate_listing, _comps_for
     from app.identity.resolvers import identify_with_resolvers
     from app.condition.category import assess_category_condition
+    from app.sold.certify import live_camera_body_certification
 
     rates = await refresh_fx(session)
+    live_cert = live_camera_body_certification(session)
     listings = session.scalars(select(Listing).where(Listing.status == "active").limit(400)).all()
     written = 0
-    for listing in listings:
+    for index, listing in enumerate(listings):
         body = camera_from_identity(brand=listing.brand, model=listing.model, title=listing.title or "")
         if body is None or body.canonical_id not in canonical_ids:
             continue
@@ -420,8 +427,11 @@ async def revalue_matching(session: Session, canonical_ids: set[str]) -> int:
         listing._identity = identity  # type: ignore[attr-defined]
         listing._condition = condition  # type: ignore[attr-defined]
         comps = await _comps_for(listing, rates, session, refresh_sold=False)
-        evaluate_listing(session, listing, comps, rates)
+        evaluate_listing(session, listing, comps, rates, live_cert=live_cert)
         written += 1
+        await maybe_yield(index, every=4)
+        if job is not None and written > 0 and written % 10 == 0:
+            heartbeat(session, job)
     session.flush()
     return written
 
@@ -438,18 +448,25 @@ async def ensure_sold_for_listing(session: Session, listing: Listing, rates: dic
             "canonical_product_id": body.canonical_id,
             "quota_used": 0,
         }
-    return await refresh_sold_evidence(
-        session, bodies=[body], markets=("GB", "DE", "FR"), revalidate=False
-    )
+    # Listing evaluation never spends CompSniper quota. Scheduled /ops sold-refresh does.
+    return {
+        "ok": True,
+        "skipped": "no_paid_refresh_on_eval",
+        "canonical_product_id": body.canonical_id,
+        "quota_used": 0,
+    }
 
 
-def evidence_freshness(
-    session: Session, canonical_product_id: str, *, max_age_days: int | None = None
+def evidence_freshness_from_rows(
+    rows: list[SoldEvidence],
+    *,
+    cache_ok: bool,
+    max_age_days: int | None = None,
+    now: datetime | None = None,
+    stale_reason: str = "stale_cache",
 ) -> dict[str, Any]:
+    now = now or _now()
     max_age = max_age_days or int(getattr(settings, "compsniper_buy_ready_max_evidence_age_days", 21) or 21)
-    rows = session.scalars(
-        select(SoldEvidence).where(SoldEvidence.canonical_product_id == canonical_product_id)
-    ).all()
     accepted = [
         row
         for row in rows
@@ -461,7 +478,23 @@ def evidence_freshness(
     newest = max(row.sold_date for row in accepted if row.sold_date)
     if newest.tzinfo is None:
         newest = newest.replace(tzinfo=timezone.utc)
-    age = (_now() - newest).days
+    age = (now - newest).days
+    fresh = age <= max_age and cache_ok
+    return {
+        "fresh": fresh,
+        "reason": "" if fresh else (stale_reason if not cache_ok else "stale_sold_dates"),
+        "n": len(accepted),
+        "age_days": age,
+        "max_age_days": max_age,
+    }
+
+
+def evidence_freshness(
+    session: Session, canonical_product_id: str, *, max_age_days: int | None = None
+) -> dict[str, Any]:
+    rows = session.scalars(
+        select(SoldEvidence).where(SoldEvidence.canonical_product_id == canonical_product_id)
+    ).all()
     cache_rows = [
         get_cache(session, canonical_product_id=canonical_product_id, marketplace=m)
         for m in ("GB", "DE", "FR")
@@ -479,11 +512,6 @@ def evidence_freshness(
                 stale_reason = "provider_rate_limited"
             elif any(code >= 500 for code in codes):
                 stale_reason = "provider_outage"
-    fresh = age <= max_age and cache_fresh
-    return {
-        "fresh": fresh,
-        "reason": "" if fresh else (stale_reason or "stale_sold_dates"),
-        "n": len(accepted),
-        "age_days": age,
-        "max_age_days": max_age,
-    }
+    return evidence_freshness_from_rows(
+        rows, cache_ok=cache_fresh, max_age_days=max_age_days, stale_reason=stale_reason or "stale_cache"
+    )
