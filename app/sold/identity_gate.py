@@ -31,17 +31,24 @@ _BODY_TOKEN = re.compile(
     r"\b(body|body\s+only|boitier|boîtier|gehäuse|solo\s+cuerpo|solo\s+corpo)\b",
     re.I,
 )
-# "+ FE 50mm", "+ 35mm f/2", "+ FE 1.8/50mm", "(with XF 16-80mm ...)" even when "body" is present.
+# "+ FE 50mm", "+ SEL2870 28-70mm", "+ Sigma 18-50mm", "with TTArtisan AF 56mmF1.8"
+# even when "body" is present. Do not treat "+ extras" / "+ batteries" as kits.
 _LENS_ADDON = re.compile(
     r"("
     r"\+\s*(?:fe|ef|rf|xf|xc|e[\s-]?mount|lens|obiettivo|objectif|objektiv)\b"
+    r"|\+\s*(?:sel\d+)\b"
+    r"|\+\s*(?:sigma|tamron|tokina|samyang|viltrox|ttartisan|voigtlander)\b"
+    r"|\+\s*(?!extras?\b|extra\b|accessories\b|batter(?:y|ies)\b|cf\b|cards?\b|charger\b)"
+    r"[^,\n]{0,50}\d{2,3}(?:\s*-\s*\d{2,3})?\s*mm\b"
     r"|\+\s*\d{2,3}(?:\s*-\s*\d{2,3})?\s*mm\b"
     r"|\+\s*\d{2,3}\s*-\s*\d{2,3}\b"
     r"|\+\s*(?:fe|ef|rf|xf|xc)?\s*\d(?:\.\d)?\s*/\s*\d{2,3}"
     r"|\bwith\s+(?:(?:fe|ef|rf|xf|xc)\s+)?(?:lens|\d{2,3}(?:\s*-\s*\d{2,3})?\s*mm)\b"
-    r"|\bwith\s+(?:[a-z][\w-]*\s+){1,4}\d{2,3}(?:\s*-\s*\d{2,3})?\s*mm\b"
+    r"|\bwith\s+(?:[a-z][\w-]*\s+){0,4}\d{2,3}(?:\s*-\s*\d{2,3})?\s*mm"
     r"|\(\s*(?:with|w/)\s+[^)]*\d{2,3}(?:\s*-\s*\d{2,3})?\s*mm"
     r"|\b(?:xf|xc)\s*\d{2,3}(?:\s*-\s*\d{2,3})?(?:\s*mm)?\b"
+    r"|\bsel\d{3,}\b"
+    r"|\b\d+\s+(?:[a-z]+\s+){0,3}lenses\b"
     r")",
     re.I,
 )
@@ -338,6 +345,26 @@ def identity_precision_corpus() -> list[dict[str, str]]:
         (
             "sony|a7-iii|body",
             "Sony Alpha A7 III Camera Body with Tamron 28-75mm F2.8 Lens + More!",
+            "kit_or_bundle",
+        ),
+        (
+            "sony|a7-iii|body",
+            "Sony Alpha a7 III ILCE-7M3 24.2MP 4K Wi-Fi + SEL2870 28-70mm Black",
+            "kit_or_bundle",
+        ),
+        (
+            "fujifilm|x-t4|body",
+            "Black Fujifilm X-T4 26.1 MP Mirrorless Camera + Sigma  18-50mm f2.8",
+            "kit_or_bundle",
+        ),
+        (
+            "fujifilm|x-t5|body",
+            "Fujifilm X-T5 Silver with TTArtisan AF 56mmF1.8 - Very Good Condition",
+            "kit_or_bundle",
+        ),
+        (
+            "fujifilm|x-t5|body",
+            "Fujifilm X-T5 40.2 MP Mirrorless Digital Camera, 2 Fuji film lenses, Godox flash",
             "kit_or_bundle",
         ),
     ]

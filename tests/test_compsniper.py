@@ -210,6 +210,22 @@ def test_identity_rejects_live_kit_false_accepts() -> None:
             a7iii,
             "Sony Alpha A7 III Camera Body with Tamron 28-75mm F2.8 Lens + More!",
         ),
+        (
+            a7iii,
+            "Sony Alpha a7 III ILCE-7M3 24.2MP 4K Wi-Fi + SEL2870 28-70mm Black",
+        ),
+        (
+            camera_by_id("fujifilm|x-t4|body"),
+            "Black Fujifilm X-T4 26.1 MP Mirrorless Camera + Sigma  18-50mm f2.8",
+        ),
+        (
+            xt5,
+            "Fujifilm X-T5 Silver with TTArtisan AF 56mmF1.8 - Very Good Condition",
+        ),
+        (
+            xt5,
+            "Fujifilm X-T5 40.2 MP Mirrorless Digital Camera, 2 Fuji film lenses, Godox flash",
+        ),
     ]
     for body, title in kits:
         verdict = validate_camera_sold(target=body, sold_title=title)
@@ -219,6 +235,16 @@ def test_identity_rejects_live_kit_false_accepts() -> None:
         target=a7iii, sold_title="Sony A7 III ILCE-7M3 Body Only + extras"
     )
     assert extras.accepted is True
+    accessories = validate_camera_sold(
+        target=camera_by_id("canon|r5|body"),
+        sold_title="Canon EOS R5 Body  + Accessories - Mint Condition, Shutter Count 4000",
+    )
+    assert accessories.accepted is True
+    batteries = validate_camera_sold(
+        target=xt5,
+        sold_title="Fujifilm X-T5 40.2 MP Mirrorless Digital Camera - Black + 4 spare batteries",
+    )
+    assert batteries.accepted is True
     lens = validate_camera_sold(target=a7iii, sold_title="Sony FE 50mm f/1.8")
     assert lens.accepted is False
 
