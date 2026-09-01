@@ -223,6 +223,8 @@ def heartbeat(session: Session, job: PipelineJob) -> None:
     now = _now()
     job.heartbeat_at = now
     job.expires_at = now + timedelta(seconds=LEASE_SECONDS)
+    if job.claimed_by:
+        beat_worker(session, job.claimed_by)
     session.flush()
 
 

@@ -108,7 +108,27 @@ def test_two_workers_cannot_claim_the_same_job() -> None:
     session.close()
 
 
-def test_stale_lease_reclaim_and_crash_recovery() -> None:
+def test_job_heartbeat_keeps_worker_connected() -> None:
+    from datetime import datetime, timedelta, timezone
+
+    from app.jobs.queue import beat_worker, heartbeat, newest_worker
+    from app.jobs.queue import WORKER_STALE_SECONDS
+
+    factory = _factory()
+    session = factory()
+    beat_worker(session, "live-worker", pid=1)
+    job, _ = enqueue(session, "revalue", "test")
+    claimed = claim_next(session, "live-worker")
+    assert claimed is not None
+    worker = newest_worker(session)
+    assert worker is not None
+    worker.heartbeat_at = datetime.now(timezone.utc) - timedelta(seconds=WORKER_STALE_SECONDS + 5)
+    session.flush()
+    heartbeat(session, claimed)
+    worker = newest_worker(session)
+    age = (datetime.now(timezone.utc) - worker.heartbeat_at).total_seconds()
+    assert age < WORKER_STALE_SECONDS
+    session.close()
     factory = _factory()
     session = factory()
     job, _ = enqueue(session, "revalue", "test")

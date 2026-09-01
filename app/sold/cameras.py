@@ -231,6 +231,17 @@ CAMERA_BODIES: tuple[CameraBody, ...] = (
 _BY_ID = {body.canonical_id: body for body in CAMERA_BODIES}
 
 
+def token_in(blob: str, needle: str) -> bool:
+    """Alphanumeric-boundary match. Prevents GDDR6 matching Canon R6."""
+    needle = (needle or "").strip().lower()
+    blob = (blob or "").lower()
+    if not needle:
+        return False
+    if re.search(r"[^a-z0-9]+", needle):
+        return needle in blob
+    return re.search(rf"(?<![a-z0-9]){re.escape(needle)}(?![a-z0-9])", blob) is not None
+
+
 def camera_by_id(canonical_id: str) -> CameraBody | None:
     return _BY_ID.get(canonical_id)
 
@@ -249,7 +260,7 @@ def camera_from_identity(
     ranked = sorted(CAMERA_BODIES, key=lambda b: len(b.model), reverse=True)
     for body in ranked:
         needles = (body.canonical_id, body.model.lower(), body.mpn.lower(), *tuple(a.lower() for a in body.aliases))
-        if any(needle and needle in blob for needle in needles):
+        if any(token_in(blob, needle) for needle in needles):
             # Prefer more specific generation: A7 IV must not match A7 III first (sorted by model length).
             if body.generation == "III" and re.search(r"\b(iv|4)\b", blob) and "iii" not in blob and "7m3" not in blob:
                 continue

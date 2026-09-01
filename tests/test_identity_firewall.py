@@ -17,6 +17,16 @@ LIVE_FALSE_POSITIVES = (
     ("SmallRig cage for Canon EOS R6 Mark II", "cage"),
     ("Canon BG-R20 Battery Grip for EOS R5 Mark II", "battery_grip"),
     ("Sony ECM-B1M Shotgun Microphone for A7 IV", "microphone"),
+    ("Hersmay EOS R6 II / III Camera For Canon R6II, R6II/III", "cage"),
+    ("SmallRig R6 Mark II Camera Cage for Canon EOS R6 Mark II Mirrorless Camera 4161", "cage"),
+    ("Canon BG-R20 Battery Grip for EOS R5,6 Mark II/EOS R5,6 [Top Mint]", "battery_grip"),
+    ("Canon BG-R10 Battery Grip for EOS R5, R6 Mirrorless Camera [Top Mint]", "battery_grip"),
+    ("Sony A7 IV ILCE-7M4 LCD Screen Replacement Genuine Sony Spare", "parts"),
+    ("L Plate Bracket Sony Alpha A7R mark IV ILCE A7R4 - Made in USA", "cage"),
+    ("Canon RF 24-70mm F2.8L IS USM Lens with Box", "lens"),
+    ("NIKON Z7 II Z6 II Digital Camera Reference Manual - WIRE BOUND - TOUGH COVERS", "manual"),
+    ("Compatible NIKON Z6II Z7II Z5 Z6 Z7 Shutter Group Unit Assembly with Blade Part", "parts"),
+    ("HP NVIDIA GeForce RTX 4070 SUPER 12GB GDDR6X Graphics Card – Ada Lovelace | DLS", None),
 )
 
 GENUINE_BODIES = (
@@ -83,3 +93,14 @@ def test_compatibility_is_not_canonical_identity() -> None:
     assert ident.product_class == "cage"
     assert "canon|r6-ii|body" in ident.compatible_camera_ids
     assert ident.canonical_key != "canon|r6-ii|body"
+
+
+def test_gddr6_is_not_canon_r6() -> None:
+    from app.identity.product_class import compatible_cameras
+
+    title = "HP NVIDIA GeForce RTX 4070 SUPER 12GB GDDR6X Graphics Card – Ada Lovelace | DLS"
+    assert "canon|r6|body" not in compatible_cameras(title)
+    classified = classify_listing(title)
+    ident = identify_with_resolvers(title=title)
+    assert classified.product_class != CAMERA_BODY
+    assert ident.canonical_key not in BODY_IDS
