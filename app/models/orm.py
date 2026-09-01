@@ -426,6 +426,7 @@ class PipelineWorker(Base, TimestampMixin):
     pid: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    details: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
 
 
 class WatchlistItem(Base, TimestampMixin):

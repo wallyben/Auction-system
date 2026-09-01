@@ -73,7 +73,7 @@ _FAMILIES: tuple[tuple[str, tuple[re.Pattern[str], ...]], ...] = (
                 r"\b(motherboard|mainboard|pcb|shutter\s+unit|shutter\s+group|shutter\s+assembly|"
                 r"repair\s+part|replacement\s+door|lcd\s+screen\s+replacement|screen\s+replacement|"
                 r"replacement\s+lcd|genuine\s+sony\s+spare|image\s+sensor\s+parts|cmos\s+image\s+sensor|"
-                r"sensor\s+parts|for\s+parts|spares\s+or\s+repair|broken\s+shutter|cracked\s+sensor)\b",
+                r"cmos\s+sensor|sensor\s+parts|for\s+parts|spares\s+or\s+repair|broken\s+shutter|cracked\s+sensor)\b",
                 re.I,
             ),
             re.compile(r"\bcg2-\d", re.I),

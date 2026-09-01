@@ -1,5 +1,6 @@
 #!/bin/sh
-# Production entrypoint: migrate (best-effort) then serve.
+# Production web entrypoint: migrate (best-effort) then serve HTTP only.
+# APScheduler and pipeline execution live in scripts/start-worker.sh.
 # Alembic is idempotent. Failure does not take down the eBay GET challenge.
 set -eu
 export ARIE_PROCESS="${ARIE_PROCESS:-web}"

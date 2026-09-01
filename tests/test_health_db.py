@@ -44,6 +44,7 @@ def test_health_stays_lightweight(monkeypatch: pytest.MonkeyPatch) -> None:
     assert body["status"] == "ok"
     assert body["valuation_algorithm"].startswith("2.")
     assert "git_sha" in body
+    assert body.get("process_role") == "web"
 
 
 def test_health_db_missing_url(monkeypatch: pytest.MonkeyPatch) -> None:

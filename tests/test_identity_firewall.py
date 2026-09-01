@@ -28,6 +28,7 @@ LIVE_FALSE_POSITIVES = (
     ("NIKON Z7 II Z6 II Digital Camera Reference Manual - WIRE BOUND - TOUGH COVERS", "manual"),
     ("Compatible NIKON Z6II Z7II Z5 Z6 Z7 Shutter Group Unit Assembly with Blade Part", "parts"),
     ("Canon EOS R6 CMOS Image Sensor Parts CY3-1915-000_0.15_5", "parts"),
+    ("Sony Alpha A7 A7I/ II/ III A7M1/ A7M2/A7M3 Mirrorless Digital Camera CMOS Sensor", "parts"),
     ("HP NVIDIA GeForce RTX 4070 SUPER 12GB GDDR6X Graphics Card – Ada Lovelace | DLS", None),
     ("HP NVIDIA GeForce RTX 4070 Super 12GB GDDR6X - GPU non-LHR - PC Omen 40L Desktop", None),
     ("ASUS TUF Gaming GeForce RTX™ 4070 12GB GDDR6X OC Edition", None),

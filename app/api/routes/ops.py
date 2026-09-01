@@ -16,6 +16,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.process import process_role
+from app.core.runtime import process_runtime_snapshot
 from app.db.session import get_db_session, get_session_factory, probe_database
 from app.db.url import classify_db_error
 from app.jobs.lease import dispatch_http
@@ -77,6 +79,20 @@ async def health() -> dict[str, object]:
         "pid": os.getpid(),
         "started_at": _PROCESS_STARTED.isoformat(),
         "uptime_s": int(time.monotonic() - _PROCESS_STARTED_MONO),
+        "process_role": process_role(),
+    }
+
+
+@router.get("/health/runtime")
+async def health_runtime() -> dict[str, object]:
+    """Process RSS/CPU/threads. Separate from liveness so /health stays tiny."""
+    return {
+        "status": "ok",
+        "started_at": _PROCESS_STARTED.isoformat(),
+        "uptime_s": int(time.monotonic() - _PROCESS_STARTED_MONO),
+        "git_sha": _runtime_sha(),
+        "valuation_algorithm": VALUATION_ALGORITHM_VERSION,
+        **process_runtime_snapshot(),
     }
 
 
@@ -557,13 +573,16 @@ def health_jobs() -> dict[str, Any]:
         recent = []
     worker = (status.get("pipeline") or {}).get("worker") if isinstance(status.get("pipeline"), dict) else None
     worker_connected = bool(isinstance(worker, dict) and worker.get("connected"))
+    web_scheduler = bool(status.get("web_scheduler_running"))
     return {
         **status,
         "recent_pipeline_jobs": recent,
         "required_jobs": sorted(required),
         "missing_jobs": sorted(required - ids),
         "worker_connected": worker_connected,
-        "ok": required.issubset(ids) and bool(status.get("scheduler_running")),
+        "ok": required.issubset(ids)
+        and bool(status.get("scheduler_running"))
+        and not web_scheduler,
     }
 
 

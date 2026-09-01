@@ -1,21 +1,27 @@
-"""Background scheduler: enqueue only. Heavy work runs in the worker process."""
+"""Background scheduler: enqueue only. Lives in the WORKER process.
+
+The web process must never instantiate APScheduler. Scheduled functions only
+insert durable pipeline_jobs; the worker consumer executes them.
+"""
 
 from __future__ import annotations
 
-import asyncio
+import os
+import sys
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.core.process import is_web_process, process_role
 from app.db.session import get_session_factory
 from app.jobs.queue import enqueue, lease_status
 from app.valuation.version import VALUATION_ALGORITHM_VERSION
 
 logger = get_logger("arie.jobs")
-_scheduler: AsyncIOScheduler | None = None
+_scheduler: BackgroundScheduler | None = None
 
 REQUIRED_JOB_IDS = (
     "scan-live-sources",
@@ -24,9 +30,16 @@ REQUIRED_JOB_IDS = (
     "revalue-all-active",
 )
 
+SCHEDULER_PIPELINE_JOBS = (
+    "ebay-deletion-retry",
+    "daily-self-audit",
+    "owner-sold-ingest",
+)
 
-def scheduler_status() -> dict[str, object]:
-    jobs = []
+
+def local_scheduler_snapshot() -> dict[str, object]:
+    jobs: list[dict[str, object]] = []
+    running = bool(_scheduler is not None and _scheduler.running)
     if _scheduler is not None:
         jobs = [
             {
@@ -35,7 +48,23 @@ def scheduler_status() -> dict[str, object]:
             }
             for job in _scheduler.get_jobs()
         ]
-    payload: dict[str, object] = {"scheduler_running": bool(_scheduler and _scheduler.running), "jobs": jobs}
+    return {
+        "running": running,
+        "jobs": jobs,
+        "owner": "worker" if running and not is_web_process() else ("web" if running else "none"),
+    }
+
+
+def scheduler_status() -> dict[str, object]:
+    local = local_scheduler_snapshot()
+    role = process_role()
+    payload: dict[str, object] = {
+        "scheduler_running": bool(local["running"]),
+        "web_scheduler_running": bool(role == "web" and local["running"]),
+        "scheduler_owner": local["owner"],
+        "process_role": role,
+        "jobs": list(local["jobs"]),  # type: ignore[arg-type]
+    }
     try:
         session = get_session_factory()()
         try:
@@ -44,6 +73,13 @@ def scheduler_status() -> dict[str, object]:
             session.close()
     except Exception:
         payload["pipeline"] = lease_status(None)
+    pipeline = payload.get("pipeline") if isinstance(payload.get("pipeline"), dict) else {}
+    worker = (pipeline or {}).get("worker") if isinstance(pipeline, dict) else None
+    snap = (worker or {}).get("scheduler") if isinstance(worker, dict) else None
+    if not local["running"] and isinstance(snap, dict) and snap.get("running"):
+        payload["scheduler_running"] = True
+        payload["jobs"] = list(snap.get("jobs") or [])
+        payload["scheduler_owner"] = "worker"
     return payload
 
 
@@ -65,79 +101,47 @@ def _enqueue_or_skip(name: str, trigger: str, payload: dict | None = None) -> di
         session.close()
 
 
-async def _scheduled_scan() -> None:
-    await asyncio.to_thread(_enqueue_or_skip, "scan", "scheduler", {"limit": 8})
+def _scheduled_scan() -> None:
+    _enqueue_or_skip("scan", "scheduler", {"limit": 8})
 
 
-async def _scheduled_deletion_retry() -> None:
-    from app.privacy.ebay_processor import retry_failed_deletions
-
-    session = get_session_factory()()
-    try:
-        retry_failed_deletions(session)
-        session.commit()
-    except Exception:
-        session.rollback()
-        logger.exception("ebay_deletion_retry_failed")
-    finally:
-        session.close()
+def _scheduled_deletion_retry() -> None:
+    _enqueue_or_skip("deletion-retry", "scheduler", {})
 
 
-async def _scheduled_audit() -> None:
-    from app.audit.self_audit import run_self_audit
-
-    session = get_session_factory()()
-    try:
-        run_self_audit(session)
-        session.commit()
-    except Exception:
-        session.rollback()
-        logger.exception("self_audit_failed")
-    finally:
-        session.close()
+def _scheduled_audit() -> None:
+    _enqueue_or_skip("self-audit", "scheduler", {})
 
 
-async def _scheduled_sold_ingest() -> None:
-    from app.sold.ebay_owner_oauth import ingest_owner_orders
-
-    session = get_session_factory()()
-    try:
-        result = await ingest_owner_orders(session, limit=100)
-        session.commit()
-        logger.info(
-            "scheduled_sold_ingest",
-            ok=result.get("ok"),
-            imported=result.get("imported"),
-            error=result.get("error"),
-        )
-    except Exception:
-        session.rollback()
-        logger.exception("scheduled_sold_ingest_failed")
-    finally:
-        session.close()
+def _scheduled_sold_ingest() -> None:
+    _enqueue_or_skip("sold-ingest", "scheduler", {"limit": 100})
 
 
-async def _scheduled_sold_refresh() -> None:
-    await asyncio.to_thread(_enqueue_or_skip, "sold-refresh", "scheduler", {"limit": 12, "markets": "GB"})
+def _scheduled_sold_refresh() -> None:
+    _enqueue_or_skip("sold-refresh", "scheduler", {"limit": 12, "markets": "GB"})
 
 
-async def _scheduled_revalue() -> None:
-    await asyncio.to_thread(
-        _enqueue_or_skip, "revalue", "scheduler", {"reason": f"scheduled:{VALUATION_ALGORITHM_VERSION}"}
-    )
+def _scheduled_revalue() -> None:
+    _enqueue_or_skip("revalue", "scheduler", {"reason": f"scheduled:{VALUATION_ALGORITHM_VERSION}"})
 
 
 def start_scheduler() -> None:
+    """Start APScheduler in the worker process only."""
     global _scheduler
-    import sys
-
-    if "pytest" in sys.modules:
+    if is_web_process():
+        logger.warning("scheduler_refused_web_process")
+        return
+    if "pytest" in sys.modules and os.environ.get("ARIE_ALLOW_SCHEDULER") != "1":
         logger.info("scheduler_skipped_under_pytest")
         return
     if not settings.scan_enabled:
         logger.info("scheduler_disabled_by_config")
         return
-    _scheduler = AsyncIOScheduler()
+    if _scheduler is not None and _scheduler.running:
+        logger.info("scheduler_already_running")
+        return
+    stop_scheduler()
+    _scheduler = BackgroundScheduler(timezone="UTC")
     _scheduler.add_job(
         _scheduled_scan,
         IntervalTrigger(minutes=max(settings.fast_marketplace_minutes, 5), jitter=30),
@@ -193,4 +197,22 @@ def start_scheduler() -> None:
         max_instances=1,
     )
     _scheduler.start()
-    logger.info("scheduler_started", minutes=settings.fast_marketplace_minutes)
+    logger.info(
+        "scheduler_started",
+        minutes=settings.fast_marketplace_minutes,
+        process_role=process_role(),
+        job_count=len(_scheduler.get_jobs()),
+    )
+
+
+def stop_scheduler() -> None:
+    global _scheduler
+    if _scheduler is None:
+        return
+    try:
+        if _scheduler.running:
+            _scheduler.shutdown(wait=False)
+    except Exception:
+        logger.exception("scheduler_stop_failed")
+    _scheduler = None
+    logger.info("scheduler_stopped")

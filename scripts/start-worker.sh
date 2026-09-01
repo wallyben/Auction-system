@@ -1,5 +1,6 @@
 #!/bin/sh
 # Dedicated pipeline worker. Never run inside the web process.
+# Owns: process heartbeat, APScheduler (enqueue-only), durable job consumer.
 set -eu
 export ARIE_PROCESS="${ARIE_PROCESS:-worker}"
 if [ -n "${DATABASE_URL:-}" ]; then

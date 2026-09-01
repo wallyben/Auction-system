@@ -85,6 +85,20 @@ async def execute_job(session: Session, job: PipelineJob) -> dict[str, Any]:
             markets=tuple(markets),
             revalidate=bool(payload.get("revalidate", True)),
         )
+    if name == "deletion-retry":
+        from app.privacy.ebay_processor import retry_failed_deletions
+
+        retried = retry_failed_deletions(session)
+        return {"retried": retried}
+    if name == "self-audit":
+        from app.audit.self_audit import run_self_audit
+
+        audit = run_self_audit(session)
+        return {"warnings": len(audit.warnings or [])}
+    if name == "sold-ingest":
+        from app.sold.ebay_owner_oauth import ingest_owner_orders
+
+        return await ingest_owner_orders(session, limit=int(payload.get("limit") or 100))
     raise ValueError(f"unknown pipeline job {name}")
 
 
@@ -94,12 +108,20 @@ def beat_worker_process(worker_id: str, *, factory: sessionmaker[Session] | None
     Must not use the job session. A long revalue/scan transaction must not
     block or be interleaved with worker liveness writes.
     """
+    from app.core.runtime import process_runtime_snapshot
     from app.db.session import get_session_factory
+    from app.jobs.scheduler import local_scheduler_snapshot
 
     session_factory = factory or get_session_factory()
     session = session_factory()
     try:
-        beat_worker(session, worker_id, hostname=os.uname().nodename, pid=os.getpid())
+        beat_worker(
+            session,
+            worker_id,
+            hostname=os.uname().nodename,
+            pid=os.getpid(),
+            details={"scheduler": local_scheduler_snapshot(), "runtime": process_runtime_snapshot()},
+        )
         session.commit()
     except Exception:
         logger.exception("worker_process_heartbeat_failed", worker_id=worker_id)
@@ -165,6 +187,7 @@ async def process_once(session: Session, worker_id: str) -> PipelineJob | None:
 async def run_forever(*, poll_seconds: float = 1.0) -> None:
     from app.db.migrate import run_startup_migrations
     from app.db.session import get_session_factory
+    from app.jobs.scheduler import start_scheduler, stop_scheduler
 
     configure_logging()
     try:
@@ -174,6 +197,7 @@ async def run_forever(*, poll_seconds: float = 1.0) -> None:
     worker_id = os.environ.get("ARIE_WORKER_ID") or new_worker_id()
     logger.info("pipeline_worker_start", worker_id=worker_id)
     factory = get_session_factory()
+    start_scheduler()
     halt = start_process_heartbeat(worker_id, factory=factory)
     try:
         while not _STOP:
@@ -190,6 +214,7 @@ async def run_forever(*, poll_seconds: float = 1.0) -> None:
                 session.close()
             await asyncio.sleep(poll_seconds)
     finally:
+        stop_scheduler()
         halt.set()
         logger.info("pipeline_worker_stop", worker_id=worker_id)
 
