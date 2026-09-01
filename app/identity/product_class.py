@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from app.sold.cameras import CAMERA_BODIES, camera_from_identity
+from app.sold.cameras import CAMERA_BODIES, camera_from_identity, token_in
 
 CAMERA_BODY = "camera_body"
 LENS = "lens"
@@ -62,7 +62,7 @@ _FAMILIES: tuple[tuple[str, tuple[re.Pattern[str], ...]], ...] = (
     (
         MANUAL,
         (
-            re.compile(r"\b(instruction\s+manual|user\s+manual|manual\s+only|manuel\s+d.utilisation)\b", re.I),
+            re.compile(r"\b(instruction\s+manual|user\s+manual|reference\s+manual|manual\s+only|manuel\s+d.utilisation)\b", re.I),
             re.compile(r"\bmanual\s+for\b", re.I),
         ),
     ),
@@ -70,11 +70,14 @@ _FAMILIES: tuple[tuple[str, tuple[re.Pattern[str], ...]], ...] = (
         PARTS,
         (
             re.compile(
-                r"\b(motherboard|mainboard|pcb|shutter\s+unit|repair\s+part|replacement\s+door|"
-                r"for\s+parts|spares\s+or\s+repair|broken\s+shutter|cracked\s+sensor)\b",
+                r"\b(motherboard|mainboard|pcb|shutter\s+unit|shutter\s+group|shutter\s+assembly|"
+                r"repair\s+part|replacement\s+door|lcd\s+screen\s+replacement|screen\s+replacement|"
+                r"replacement\s+lcd|genuine\s+sony\s+spare|image\s+sensor\s+parts|cmos\s+image\s+sensor|"
+                r"sensor\s+parts|for\s+parts|spares\s+or\s+repair|broken\s+shutter|cracked\s+sensor)\b",
                 re.I,
             ),
             re.compile(r"\bcg2-\d", re.I),
+            re.compile(r"\bcy3-\d", re.I),
         ),
     ),
     (
@@ -82,7 +85,7 @@ _FAMILIES: tuple[tuple[str, tuple[re.Pattern[str], ...]], ...] = (
         (
             re.compile(r"\b(camera\s+cage|cage\s+kit|video\s+rig|cage\s+for)\b", re.I),
             re.compile(r"\b(smallrig|hersmay|uu-rig|uurig|nifty)\b", re.I),
-            re.compile(r"\b(l-?bracket|l\s+bracket|nato\s+rail|top\s+handle\s+side\s+grip)\b", re.I),
+            re.compile(r"\b(l-?bracket|l\s+bracket|l-?plate|l\s+plate|nato\s+rail|top\s+handle\s+side\s+grip)\b", re.I),
             re.compile(r"\bcage\b", re.I),
         ),
     ),
@@ -207,6 +210,10 @@ def _norm_compat_text(text: str) -> str:
     return _MARK.sub(lambda m: m.group(1).lower(), (text or "").lower())
 
 
+def _needle_in(blob: str, needle: str) -> bool:
+    return token_in(blob, needle)
+
+
 def compatible_cameras(text: str) -> tuple[str, ...]:
     """Camera models mentioned as compatibility, not identity."""
     found: list[str] = []
@@ -218,7 +225,7 @@ def compatible_cameras(text: str) -> tuple[str, ...]:
             _norm_compat_text(body.mpn),
             *tuple(_norm_compat_text(a) for a in body.aliases),
         )
-        if any(needle and needle in blob for needle in needles):
+        if any(_needle_in(blob, needle) for needle in needles):
             if body.canonical_id not in found:
                 found.append(body.canonical_id)
     hit = camera_from_identity(brand=None, model=None, title=text)
@@ -271,7 +278,9 @@ def classify_listing(title: str, description: str = "") -> ProductClassResult:
             return False
         if family[0] == KIT and re.search(r"\b(lens\s+kit|with\s+lens|\+\s*lens)\b", title, re.I):
             return False
-        return bool(_BODY_ONLY.search(title) or _INCIDENTAL.search(title))
+        if family[0] == LENS:
+            return False
+        return bool(_BODY_ONLY.search(title) or (_BODY_SUBJECT.search(title) and _INCIDENTAL.search(title)))
 
     # Spare batteries / original box on a body listing are not the product.
     if _incidental_body(title_family) or _incidental_body(blob_family):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -55,13 +56,27 @@ def _runtime_sha() -> str:
     return "unknown"
 
 
+# Process birth. Distinguishes a wedged origin (same pid/uptime) from a restart.
+_PROCESS_STARTED = datetime.now(timezone.utc)
+_PROCESS_STARTED_MONO = time.monotonic()
+
+
 @router.get("/health")
 @router.head("/health")
-def health() -> dict[str, str]:
+async def health() -> dict[str, object]:
+    """Liveness only. Must stay DB-free and async.
+
+    Async so this cannot queue behind sync SQLAlchemy handlers on the default
+    threadpool. Extra fields exist to tell restart vs hang on the next origin
+    black hole. They do not prove the 2026-09-01 11-minute outage is fixed.
+    """
     return {
         "status": "ok",
         "valuation_algorithm": VALUATION_ALGORITHM_VERSION,
         "git_sha": _runtime_sha(),
+        "pid": os.getpid(),
+        "started_at": _PROCESS_STARTED.isoformat(),
+        "uptime_s": int(time.monotonic() - _PROCESS_STARTED_MONO),
     }
 
 

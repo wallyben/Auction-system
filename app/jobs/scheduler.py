@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -64,7 +66,7 @@ def _enqueue_or_skip(name: str, trigger: str, payload: dict | None = None) -> di
 
 
 async def _scheduled_scan() -> None:
-    _enqueue_or_skip("scan", "scheduler", {"limit": 8})
+    await asyncio.to_thread(_enqueue_or_skip, "scan", "scheduler", {"limit": 8})
 
 
 async def _scheduled_deletion_retry() -> None:
@@ -116,11 +118,13 @@ async def _scheduled_sold_ingest() -> None:
 
 
 async def _scheduled_sold_refresh() -> None:
-    _enqueue_or_skip("sold-refresh", "scheduler", {"limit": 12, "markets": "GB"})
+    await asyncio.to_thread(_enqueue_or_skip, "sold-refresh", "scheduler", {"limit": 12, "markets": "GB"})
 
 
 async def _scheduled_revalue() -> None:
-    _enqueue_or_skip("revalue", "scheduler", {"reason": f"scheduled:{VALUATION_ALGORITHM_VERSION}"})
+    await asyncio.to_thread(
+        _enqueue_or_skip, "revalue", "scheduler", {"reason": f"scheduled:{VALUATION_ALGORITHM_VERSION}"}
+    )
 
 
 def start_scheduler() -> None:

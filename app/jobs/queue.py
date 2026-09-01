@@ -220,6 +220,12 @@ def claim_next(session: Session, worker_id: str) -> PipelineJob | None:
 
 
 def heartbeat(session: Session, job: PipelineJob) -> None:
+    """Refresh the pipeline-job lease only.
+
+    Worker process liveness is a separate row in ``pipeline_workers``, kept
+    alive by ``app.jobs.worker``'s process heartbeat thread. Do not piggy-back
+    worker connectivity on whether a runner happens to call this helper.
+    """
     now = _now()
     job.heartbeat_at = now
     job.expires_at = now + timedelta(seconds=LEASE_SECONDS)

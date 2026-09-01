@@ -16,15 +16,26 @@ def test_health_endpoint_returns_ok() -> None:
     assert body["status"] == "ok"
     assert body["valuation_algorithm"].startswith("2.")
     assert "git_sha" in body
+    assert "pid" in body
+    assert "started_at" in body
+    assert isinstance(body["uptime_s"], int)
+    assert body["uptime_s"] >= 0
 
 
-def test_health_and_evidence_handlers_are_sync() -> None:
-    """Sync SQLAlchemy in async def pins uvicorn and times out /health."""
+def test_health_is_async_and_db_handlers_are_sync() -> None:
+    """Async DB-free /health cannot queue behind sync SQLAlchemy threadpool work.
+
+    Evidence/jobs/opportunities stay sync so SQLAlchemy does not run on the
+    event loop (that pin was PR #18).
+    """
     import inspect
 
     from app.api.routes import ops
 
-    assert not inspect.iscoroutinefunction(ops.health)
+    assert inspect.iscoroutinefunction(ops.health)
+    source = inspect.getsource(ops.health)
+    assert "session" not in source
+    assert "get_db" not in source
     assert not inspect.iscoroutinefunction(ops.health_db)
     assert not inspect.iscoroutinefunction(ops.health_evidence)
     assert not inspect.iscoroutinefunction(ops.health_jobs)
