@@ -8,15 +8,20 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
+import threading
 from typing import Any
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.logging import configure_logging, get_logger
 from app.jobs.queue import beat_worker, claim_next, finish, heartbeat, new_worker_id
 from app.models.orm import PipelineJob
 
 logger = get_logger("arie.jobs.worker")
+
+# Process liveness is independent of pipeline-job lease heartbeats.
+# 10s beat / 30s stale: three missed beats mark the process dead.
+WORKER_HEARTBEAT_SECONDS = 10
 
 _STOP = False
 
@@ -83,9 +88,56 @@ async def execute_job(session: Session, job: PipelineJob) -> dict[str, Any]:
     raise ValueError(f"unknown pipeline job {name}")
 
 
+def beat_worker_process(worker_id: str, *, factory: sessionmaker[Session] | None = None) -> None:
+    """One process-liveness beat on its own short-lived session.
+
+    Must not use the job session. A long revalue/scan transaction must not
+    block or be interleaved with worker liveness writes.
+    """
+    from app.db.session import get_session_factory
+
+    session_factory = factory or get_session_factory()
+    session = session_factory()
+    try:
+        beat_worker(session, worker_id, hostname=os.uname().nodename, pid=os.getpid())
+        session.commit()
+    except Exception:
+        logger.exception("worker_process_heartbeat_failed", worker_id=worker_id)
+        try:
+            session.rollback()
+        except Exception:
+            pass
+    finally:
+        session.close()
+
+
+def start_process_heartbeat(
+    worker_id: str,
+    *,
+    interval_seconds: float = WORKER_HEARTBEAT_SECONDS,
+    factory: sessionmaker[Session] | None = None,
+    stop: threading.Event | None = None,
+) -> threading.Event:
+    """Beat pipeline_workers on a daemon thread for the life of this process.
+
+    A thread is required because scan/revalue still contain long synchronous
+    SQLAlchemy/CPU sections inside ``execute_job``. An asyncio task would stall
+    for the same reason the live scan lost worker_connected after 30s.
+    """
+    halt = stop or threading.Event()
+
+    def _loop() -> None:
+        beat_worker_process(worker_id, factory=factory)
+        while not halt.wait(interval_seconds):
+            beat_worker_process(worker_id, factory=factory)
+
+    thread = threading.Thread(target=_loop, name="arie-worker-heartbeat", daemon=True)
+    thread.start()
+    logger.info("worker_process_heartbeat_started", worker_id=worker_id, interval_seconds=interval_seconds)
+    return halt
+
+
 async def process_once(session: Session, worker_id: str) -> PipelineJob | None:
-    beat_worker(session, worker_id, pid=os.getpid())
-    session.commit()
     job = claim_next(session, worker_id)
     if job is None:
         session.commit()
@@ -122,20 +174,24 @@ async def run_forever(*, poll_seconds: float = 1.0) -> None:
     worker_id = os.environ.get("ARIE_WORKER_ID") or new_worker_id()
     logger.info("pipeline_worker_start", worker_id=worker_id)
     factory = get_session_factory()
-    while not _STOP:
-        session = factory()
-        try:
-            await process_once(session, worker_id)
-        except Exception:
-            logger.exception("pipeline_worker_loop_failed")
+    halt = start_process_heartbeat(worker_id, factory=factory)
+    try:
+        while not _STOP:
+            session = factory()
             try:
-                session.rollback()
+                await process_once(session, worker_id)
             except Exception:
-                pass
-        finally:
-            session.close()
-        await asyncio.sleep(poll_seconds)
-    logger.info("pipeline_worker_stop", worker_id=worker_id)
+                logger.exception("pipeline_worker_loop_failed")
+                try:
+                    session.rollback()
+                except Exception:
+                    pass
+            finally:
+                session.close()
+            await asyncio.sleep(poll_seconds)
+    finally:
+        halt.set()
+        logger.info("pipeline_worker_stop", worker_id=worker_id)
 
 
 def main() -> None:

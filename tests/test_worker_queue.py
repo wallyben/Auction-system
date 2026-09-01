@@ -65,6 +65,7 @@ def test_scheduler_enqueues_rather_than_executing_heavy_jobs() -> None:
     revalue_src = inspect.getsource(scheduler._scheduled_revalue)
     for src in (scan_src, refresh_src, revalue_src):
         assert "_enqueue_or_skip" in src
+        assert "to_thread" in src
         assert "run_scan" not in src
         assert "revalue_all_active" not in src
         assert "refresh_sold_evidence" not in src
@@ -108,27 +109,34 @@ def test_two_workers_cannot_claim_the_same_job() -> None:
     session.close()
 
 
-def test_job_heartbeat_keeps_worker_connected() -> None:
-    from datetime import datetime, timedelta, timezone
-
+def test_job_lease_heartbeat_does_not_refresh_worker() -> None:
+    """Pipeline job lease and worker process liveness are separate rows."""
     from app.jobs.queue import beat_worker, heartbeat, newest_worker
     from app.jobs.queue import WORKER_STALE_SECONDS
 
     factory = _factory()
     session = factory()
-    beat_worker(session, "live-worker", pid=1)
+    beat_worker(session, "lease-worker", pid=1)
     job, _ = enqueue(session, "revalue", "test")
-    claimed = claim_next(session, "live-worker")
+    claimed = claim_next(session, "lease-worker")
     assert claimed is not None
     worker = newest_worker(session)
     assert worker is not None
     worker.heartbeat_at = datetime.now(timezone.utc) - timedelta(seconds=WORKER_STALE_SECONDS + 5)
     session.flush()
+    before_job_expiry = claimed.expires_at
     heartbeat(session, claimed)
     worker = newest_worker(session)
     age = (datetime.now(timezone.utc) - worker.heartbeat_at).total_seconds()
-    assert age < WORKER_STALE_SECONDS
+    assert age > WORKER_STALE_SECONDS
+    status = queue.lease_status(session)
+    assert status["worker"]["connected"] is False
+    assert claimed.expires_at > before_job_expiry
+    assert status["lease"] == "held"
     session.close()
+
+
+def test_stale_job_lease_can_still_be_stolen() -> None:
     factory = _factory()
     session = factory()
     job, _ = enqueue(session, "revalue", "test")
@@ -144,6 +152,91 @@ def test_job_heartbeat_keeps_worker_connected() -> None:
     assert stolen.claimed_by == "recovered-worker"
     finish(session, stolen, ok=True)
     session.close()
+
+
+def test_worker_death_becomes_stale_while_job_lease_held() -> None:
+    from app.jobs.queue import beat_worker, newest_worker
+    from app.jobs.queue import WORKER_STALE_SECONDS
+
+    factory = _factory()
+    session = factory()
+    beat_worker(session, "dead-worker", pid=9)
+    job, _ = enqueue(session, "scan", "test")
+    claimed = claim_next(session, "dead-worker")
+    assert claimed is not None
+    worker = newest_worker(session)
+    worker.heartbeat_at = datetime.now(timezone.utc) - timedelta(seconds=WORKER_STALE_SECONDS + 1)
+    session.flush()
+    status = queue.lease_status(session)
+    assert status["lease"] == "held"
+    assert status["claimed_by"] == "dead-worker"
+    assert status["worker"]["connected"] is False
+    session.close()
+
+
+def test_process_heartbeat_survives_45s_blocking_job() -> None:
+    """Worker liveness must not depend on execute_job calling job heartbeat.
+
+    Live scan 2026-09-01 ran >30s with lease held and worker_connected flipped
+    false. A 45s blocking execute_job plus the process heartbeat thread must
+    keep connected=true the whole time.
+    """
+    from app.jobs.queue import newest_worker
+    from app.jobs.queue import WORKER_STALE_SECONDS
+    from app.jobs.worker import start_process_heartbeat
+
+    factory = _factory()
+    session = factory()
+    enqueue(session, "scan", "test")
+    session.commit()
+    halt = start_process_heartbeat("hb-worker", interval_seconds=10, factory=factory)
+    time.sleep(0.2)
+    connected_samples: list[bool] = []
+    errors: list[str] = []
+
+    async def blocking_execute(sess, job):
+        deadline = time.time() + 45
+        while time.time() < deadline:
+            time.sleep(5)
+            probe = factory()
+            try:
+                status = queue.lease_status(probe)
+                connected_samples.append(bool((status.get("worker") or {}).get("connected")))
+            finally:
+                probe.close()
+        return {"ok": True}
+
+    import app.jobs.worker as worker_mod
+
+    original = worker_mod.execute_job
+    worker_mod.execute_job = blocking_execute
+
+    def run_worker() -> None:
+        try:
+            asyncio.run(worker.process_once(factory(), "hb-worker"))
+        except Exception as exc:  # noqa: BLE001
+            errors.append(str(exc))
+
+    try:
+        thread = threading.Thread(target=run_worker)
+        thread.start()
+        thread.join(timeout=60)
+        assert not thread.is_alive()
+        assert errors == []
+        assert connected_samples
+        assert all(connected_samples), connected_samples
+        assert len(connected_samples) >= 8
+        live = newest_worker(session)
+        assert live is not None
+        hb = live.heartbeat_at
+        if hb.tzinfo is None:
+            hb = hb.replace(tzinfo=timezone.utc)
+        age = (datetime.now(timezone.utc) - hb).total_seconds()
+        assert age < WORKER_STALE_SECONDS
+    finally:
+        halt.set()
+        worker_mod.execute_job = original
+        session.close()
 
 
 def test_health_stays_responsive_while_worker_revalues(monkeypatch) -> None:
