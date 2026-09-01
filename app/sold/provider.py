@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -260,6 +261,15 @@ async def sold_provider_health(session: Session) -> list[dict[str, object]]:
         rows.append(await provider.healthcheck())
     rows.append(compsniper_health())
     return rows
+
+
+def sold_provider_health_sync(session: Session) -> list[dict[str, object]]:
+    """For sync HTTP handlers. Must not run on the asyncio event loop."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(sold_provider_health(session))
+    raise RuntimeError("sold_provider_health_sync must not run on the asyncio event loop")
 
 
 def empty_freshness() -> datetime:

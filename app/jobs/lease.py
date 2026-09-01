@@ -54,5 +54,9 @@ async def dispatch_http(
     payload: dict[str, Any] | None = None,
     **_ignored: Any,
 ) -> dict[str, Any]:
-    """Enqueue only. The optional runner kwarg is ignored on purpose."""
-    return enqueue_http(name, trigger, payload)
+    """Enqueue only. The optional runner kwarg is ignored on purpose.
+
+    enqueue_http is sync SQLAlchemy. Never run it on the asyncio event loop or
+    a slow Postgres round-trip will pin /health.
+    """
+    return await asyncio.to_thread(enqueue_http, name, trigger, payload)

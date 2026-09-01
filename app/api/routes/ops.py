@@ -107,14 +107,18 @@ def health_sources(session: Session = Depends(get_db)) -> dict[str, Any]:
 
 
 @router.get("/health/evidence")
-async def health_evidence(session: Session = Depends(get_db)) -> dict[str, Any]:
-    """Source/evidence counters. A sold provider returning zero unexpectedly is a warning."""
+def health_evidence(session: Session = Depends(get_db)) -> dict[str, Any]:
+    """Source/evidence counters. A sold provider returning zero unexpectedly is a warning.
+
+    Sync handler on purpose: this path is SQLAlchemy + COUNT queries. An async
+    def would run those queries on the event loop and pin /health.
+    """
     from sqlalchemy import func
 
     from app.evidence.providers.compsniper import compsniper_health
     from app.models.orm import MetricEvent, SoldEvidence, SoldQueryCache
     from app.sold.cache import cache_stats
-    from app.sold.provider import sold_provider_health
+    from app.sold.provider import sold_provider_health_sync
 
     names = [
         "listings_scanned",
@@ -170,7 +174,7 @@ async def health_evidence(session: Session = Depends(get_db)) -> dict[str, Any]:
     hits = counts.get("sold_cache_hit", 0)
     misses = counts.get("compsniper_requests", 0)
     hit_pct = round(100.0 * hits / (hits + misses), 1) if (hits + misses) else None
-    providers = await sold_provider_health(session)
+    providers = sold_provider_health_sync(session)
     return {
         "status": "ok",
         "metrics": counts,
@@ -316,17 +320,16 @@ def list_listings(limit: int = 500, session: Session = Depends(get_db)) -> dict[
 
 @router.get("/opportunities")
 def list_opportunities(decision: str | None = None, session: Session = Depends(get_db)) -> dict[str, Any]:
-    stmt = select(Opportunity)
-    if decision:
-        stmt = stmt.where(Opportunity.decision == decision.upper())
-    rows = list(session.scalars(stmt.limit(2000)).all())
-    from app.opportunity.book import current_generation, is_current_opportunity
+    from app.opportunity.book import current_generation
     from app.opportunity.ranking import GROUP_ORDER
 
     generation = current_generation(session)
-    rows = [row for row in rows if is_current_opportunity(row, generation)]
+    stmt = select(Opportunity).where(Opportunity.algorithm_version == VALUATION_ALGORITHM_VERSION)
+    if generation is not None:
+        stmt = stmt.where(Opportunity.valuation_run_id == generation.id)
     if decision:
-        rows = [row for row in rows if row.decision == decision.upper()]
+        stmt = stmt.where(Opportunity.decision == decision.upper())
+    rows = list(session.scalars(stmt.limit(2000)).all())
     rows = sorted(
         rows,
         key=lambda o: (
@@ -334,8 +337,13 @@ def list_opportunities(decision: str | None = None, session: Session = Depends(g
             -(float(getattr(o, "ranking_score", 0) or 0)),
         ),
     )[:250]
+    listings_by_id: dict[Any, Listing] = {}
+    listing_ids = [row.listing_id for row in rows]
+    if listing_ids:
+        for listing in session.scalars(select(Listing).where(Listing.id.in_(listing_ids))).all():
+            listings_by_id[listing.id] = listing
     return {
-        "opportunities": [_summary(session, row) for row in rows],
+        "opportunities": [_summary(session, row, listings_by_id.get(row.listing_id)) for row in rows],
         "book": {
             "algorithm_version": VALUATION_ALGORITHM_VERSION,
             "generation_id": str(generation.id) if generation else None,
@@ -453,8 +461,8 @@ def read_config() -> dict[str, Any]:
     }
 
 
-def _summary(session: Session, row: Opportunity) -> dict[str, Any]:
-    listing = session.get(Listing, row.listing_id)
+def _summary(session: Session, row: Opportunity, listing: Listing | None = None) -> dict[str, Any]:
+    listing = listing if listing is not None else session.get(Listing, row.listing_id)
     return {
         "id": str(row.id),
         "decision": row.decision,
