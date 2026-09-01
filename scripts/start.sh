@@ -2,6 +2,7 @@
 # Production entrypoint: migrate (best-effort) then serve.
 # Alembic is idempotent. Failure does not take down the eBay GET challenge.
 set -eu
+export ARIE_PROCESS="${ARIE_PROCESS:-web}"
 PORT="${PORT:-8000}"
 if [ -n "${DATABASE_URL:-}" ]; then
   i=0

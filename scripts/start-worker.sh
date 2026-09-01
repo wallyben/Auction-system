@@ -1,6 +1,7 @@
 #!/bin/sh
 # Dedicated pipeline worker. Never run inside the web process.
 set -eu
+export ARIE_PROCESS="${ARIE_PROCESS:-worker}"
 if [ -n "${DATABASE_URL:-}" ]; then
   i=0
   while [ "$i" -lt 8 ]; do

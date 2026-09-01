@@ -39,9 +39,22 @@ def _factory():
     return sessionmaker(bind=eng, autoflush=False, expire_on_commit=False)
 
 
+def test_start_scripts_label_web_vs_worker() -> None:
+    from pathlib import Path
+
+    web = Path("scripts/start.sh").read_text()
+    worker = Path("scripts/start-worker.sh").read_text()
+    assert 'ARIE_PROCESS="${ARIE_PROCESS:-web}"' in web
+    assert "uvicorn" in web
+    assert 'ARIE_PROCESS="${ARIE_PROCESS:-worker}"' in worker
+    assert "python -m app.jobs.worker" in worker
+    assert "uvicorn" not in worker
+
+
 def test_dispatch_http_enqueues_and_ignores_runners() -> None:
     source = inspect.getsource(lease.dispatch_http)
     assert "enqueue_http" in source
+    assert "to_thread" in source
     assert "runner" not in source.split("return", 1)[-1] or "ignored" in source.lower()
     assert "await runner" not in source
 

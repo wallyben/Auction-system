@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Generator
 from typing import Any
 
@@ -34,11 +35,29 @@ def reset_engine() -> None:
 
 
 def _raw_database_url() -> str | None:
-    import os
-
     return clean_database_url(os.environ.get("DATABASE_URL")) or clean_database_url(
         get_settings().database_url
     )
+
+
+def engine_kwargs(url: str, process: str | None = None) -> dict[str, Any]:
+    """Web SQL must fail closed. Worker jobs may run for minutes."""
+    process = (process or os.environ.get("ARIE_PROCESS") or "web").strip().lower()
+    kwargs: dict[str, Any] = {"pool_pre_ping": True, "pool_recycle": 280}
+    if not url.startswith("postgresql"):
+        return kwargs
+    if process == "worker":
+        kwargs["pool_size"] = 4
+        kwargs["max_overflow"] = 2
+        kwargs["connect_args"] = {"connect_timeout": 10}
+        return kwargs
+    kwargs["pool_size"] = 3
+    kwargs["max_overflow"] = 2
+    kwargs["connect_args"] = {
+        "connect_timeout": 10,
+        "options": "-c statement_timeout=20000",
+    }
+    return kwargs
 
 
 def get_engine() -> Engine:
@@ -60,11 +79,7 @@ def get_engine() -> Engine:
                 "DATABASE_URL environment variable is required for database operations."
             )
         url = normalize_database_url(raw)
-        kwargs: dict[str, Any] = {"pool_pre_ping": True, "pool_recycle": 280}
-        if url.startswith("postgresql"):
-            kwargs["pool_size"] = 8
-            kwargs["max_overflow"] = 8
-            kwargs["connect_args"] = {"connect_timeout": 10}
+        kwargs = engine_kwargs(url)
         _engine = create_engine(url, **kwargs)
     return _engine
 

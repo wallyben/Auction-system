@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine.url import make_url
 
 from app.core.config import get_settings
-from app.db.session import get_db_session, get_engine, get_session_factory, probe_database, reset_engine
+from app.db.session import engine_kwargs, get_db_session, get_engine, get_session_factory, probe_database, reset_engine
 from app.db.url import classify_db_error, describe_database_url, normalize_database_url
 
 
@@ -84,6 +84,17 @@ def test_describe_never_includes_password() -> None:
     dumped = str(diag)
     assert "super-secret-pass" not in dumped
     assert "owner" not in dumped
+
+
+def test_web_engine_has_statement_timeout_worker_does_not() -> None:
+    web = engine_kwargs("postgresql+psycopg://arie:arie@localhost/arie", process="web")
+    worker = engine_kwargs("postgresql+psycopg://arie:arie@localhost/arie", process="worker")
+    sqlite = engine_kwargs("sqlite://", process="web")
+    assert "statement_timeout=20000" in web["connect_args"]["options"]
+    assert web["pool_size"] <= 3
+    assert "options" not in worker["connect_args"]
+    assert worker["connect_args"]["connect_timeout"] == 10
+    assert "pool_size" not in sqlite
 
 
 def test_unnormalized_postgresql_scheme_loads_psycopg2(monkeypatch: pytest.MonkeyPatch) -> None:
