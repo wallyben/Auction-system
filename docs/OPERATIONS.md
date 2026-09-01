@@ -10,7 +10,7 @@
 
 ## Continuous scanning
 
-APScheduler starts with the API if `SCAN_ENABLED=true`. Cadence: `FAST_MARKETPLACE_MINUTES` (default 15) with jitter. Overlapping scans are skipped. Source 403/404 cannot kill the job.
+APScheduler starts in the **worker** process if `SCAN_ENABLED=true`. The web API does not own the scheduler. Cadence: `FAST_MARKETPLACE_MINUTES` (default 15) with jitter. Overlapping pipeline jobs are skipped via the durable lease. Source 403/404 cannot kill the job.
 
 Disable: `SCAN_ENABLED=false`.
 

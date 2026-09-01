@@ -17,6 +17,6 @@ ingest (API / CSV / manual / URL)
   → owner purchase → inventory → sold outcome → calibration
 ```
 
-Persistence is PostgreSQL. Workers are APScheduler (`scan-live-sources`, `daily-self-audit`). The dashboard is the owner floor.
+Persistence is PostgreSQL. A dedicated Render worker owns APScheduler (`scan-live-sources`, `daily-self-audit`, …) and the durable pipeline consumer. The web process is HTTP only. The dashboard is the owner floor.
 
 `ENGINE_DECISION` is a model conclusion. `MONEY_READY_DECISION` is whether the owner should act. A large modelled margin cannot override failed gates.

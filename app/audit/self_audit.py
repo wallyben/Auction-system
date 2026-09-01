@@ -31,7 +31,9 @@ def run_self_audit(session: Session) -> SelfAudit:
             warnings.append(stale[-1])
     sched = scheduler_status()
     if not sched.get("scheduler_running"):
-        warnings.append("Scheduler is not running in this process (expected under pytest or SCAN_ENABLED=false).")
+        warnings.append("Worker scheduler is not running.")
+    if sched.get("web_scheduler_running"):
+        warnings.append("Web process is running APScheduler; background work must not live in web.")
     audit = SelfAudit(ran_at=now, warnings=warnings, source_health=health, stale_rules=stale)
     session.add(audit)
     session.flush()

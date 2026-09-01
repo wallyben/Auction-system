@@ -20,6 +20,8 @@ from app.models.orm import PipelineJob, PipelineWorker
 logger = get_logger("arie.jobs.queue")
 
 HEAVY_JOBS = frozenset({"scan", "revalue", "sold-revalidate", "sold-refresh"})
+SCHEDULER_JOBS = frozenset({"deletion-retry", "self-audit", "sold-ingest"})
+PIPELINE_JOBS = HEAVY_JOBS | SCHEDULER_JOBS
 LEASE_SECONDS = 12 * 60
 WORKER_STALE_SECONDS = 30
 PIPELINE_LEASE_NAME = "pipeline"
@@ -51,11 +53,14 @@ def lease_status(session: Session | None = None) -> dict[str, object]:
     worker = newest_worker(session)
     if worker is not None:
         age = (_now() - _aware(worker.heartbeat_at)).total_seconds()
+        details = dict(getattr(worker, "details", None) or {})
         payload["worker"] = {
             "worker_id": worker.worker_id,
             "heartbeat_at": worker.heartbeat_at.isoformat() if worker.heartbeat_at else None,
             "connected": age <= WORKER_STALE_SECONDS,
             "age_seconds": int(age),
+            "scheduler": details.get("scheduler"),
+            "rss_mb": (details.get("runtime") or {}).get("rss_mb") if isinstance(details.get("runtime"), dict) else None,
         }
     if running is not None:
         expired = bool(running.expires_at and _aware(running.expires_at) <= _now())
@@ -147,7 +152,7 @@ def enqueue(
     payload: dict[str, Any] | None = None,
 ) -> tuple[PipelineJob | None, dict[str, Any]]:
     """Insert a queued job. Does not execute work. One open pipeline job at a time."""
-    if name not in HEAVY_JOBS:
+    if name not in PIPELINE_JOBS:
         return None, {"ok": False, "reason": "unknown_job", "name": name}
     open_job = _open_pipeline_job(session)
     if open_job is not None:
@@ -253,9 +258,17 @@ def finish(
     session.flush()
 
 
-def beat_worker(session: Session, worker_id: str, *, hostname: str = "", pid: int = 0) -> None:
+def beat_worker(
+    session: Session,
+    worker_id: str,
+    *,
+    hostname: str = "",
+    pid: int = 0,
+    details: dict[str, Any] | None = None,
+) -> None:
     now = _now()
     row = session.scalars(select(PipelineWorker).where(PipelineWorker.worker_id == worker_id)).first()
+    merged = dict(details or {})
     if row is None:
         row = PipelineWorker(
             worker_id=worker_id,
@@ -263,12 +276,15 @@ def beat_worker(session: Session, worker_id: str, *, hostname: str = "", pid: in
             pid=pid or os.getpid(),
             heartbeat_at=now,
             started_at=now,
+            details=merged,
         )
         session.add(row)
     else:
         row.heartbeat_at = now
         row.hostname = hostname or row.hostname
         row.pid = pid or row.pid
+        if merged:
+            row.details = {**(row.details or {}), **merged}
     session.flush()
 
 

@@ -60,15 +60,24 @@ def test_dispatch_http_enqueues_and_ignores_runners() -> None:
 
 
 def test_scheduler_enqueues_rather_than_executing_heavy_jobs() -> None:
-    scan_src = inspect.getsource(scheduler._scheduled_scan)
-    refresh_src = inspect.getsource(scheduler._scheduled_sold_refresh)
-    revalue_src = inspect.getsource(scheduler._scheduled_revalue)
-    for src in (scan_src, refresh_src, revalue_src):
+    fns = (
+        scheduler._scheduled_scan,
+        scheduler._scheduled_sold_refresh,
+        scheduler._scheduled_revalue,
+        scheduler._scheduled_deletion_retry,
+        scheduler._scheduled_audit,
+        scheduler._scheduled_sold_ingest,
+    )
+    for fn in fns:
+        src = inspect.getsource(fn)
         assert "_enqueue_or_skip" in src
-        assert "to_thread" in src
         assert "run_scan" not in src
         assert "revalue_all_active" not in src
         assert "refresh_sold_evidence" not in src
+        assert "retry_failed_deletions" not in src
+        assert "run_self_audit" not in src
+        assert "ingest_owner_orders" not in src
+        assert "to_thread" not in src
 
 
 def test_queue_exclusivity_and_no_duplicate_execution() -> None:

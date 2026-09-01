@@ -27,7 +27,7 @@ Example: Sol Ring print €1.53 → expected Irish resale €1.38, confidence 0.
 
 `python -m app.cli scan-source scryfall --query "sol ring" --limit 6` → `status=success`, `listings_seen=6`, `opportunities_written=6`.
 
-Continuous scan: APScheduler job `scan-live-sources` when `SCAN_ENABLED=true`.
+Continuous scan: worker APScheduler job `scan-live-sources` when `SCAN_ENABLED=true`. Web does not run the scheduler.
 
 ## Tests
 

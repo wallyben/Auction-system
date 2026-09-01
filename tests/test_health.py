@@ -20,6 +20,7 @@ def test_health_endpoint_returns_ok() -> None:
     assert "started_at" in body
     assert isinstance(body["uptime_s"], int)
     assert body["uptime_s"] >= 0
+    assert body["process_role"] == "web"
 
 
 def test_health_is_async_and_db_handlers_are_sync() -> None:
@@ -36,6 +37,10 @@ def test_health_is_async_and_db_handlers_are_sync() -> None:
     source = inspect.getsource(ops.health)
     assert "session" not in source
     assert "get_db" not in source
+    assert inspect.iscoroutinefunction(ops.health_runtime)
+    runtime_src = inspect.getsource(ops.health_runtime)
+    assert "session" not in runtime_src
+    assert "get_db" not in runtime_src
     assert not inspect.iscoroutinefunction(ops.health_db)
     assert not inspect.iscoroutinefunction(ops.health_evidence)
     assert not inspect.iscoroutinefunction(ops.health_jobs)
