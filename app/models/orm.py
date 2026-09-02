@@ -217,7 +217,7 @@ class Comparable(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     subject_listing_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("listings.id"))
     product_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("products.id"))
-    source_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     url: Mapped[str | None] = mapped_column(Text)
     evidence_type: Mapped[str] = mapped_column(String(32), nullable=False)
     title: Mapped[str] = mapped_column(String(1024), nullable=False)
@@ -431,11 +431,12 @@ class PipelineWorker(Base, TimestampMixin):
 
 class WatchlistItem(Base, TimestampMixin):
     __tablename__ = "watchlist_items"
+    __table_args__ = (Index("ix_watchlist_items_kind_value", "kind", "value"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     value: Mapped[str] = mapped_column(String(512), nullable=False)
-    listing_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("listings.id"))
+    listing_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("listings.id"), index=True)
     product_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("products.id"))
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -445,7 +446,7 @@ class Alert(Base, TimestampMixin):
     __tablename__ = "alerts"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
-    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("opportunities.id"))
+    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("opportunities.id"), index=True)
     channel: Mapped[str] = mapped_column(String(32), nullable=False)
     title: Mapped[str] = mapped_column(String(256), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
@@ -460,7 +461,7 @@ class Purchase(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     opportunity_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("opportunities.id"))
-    listing_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("listings.id"))
+    listing_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("listings.id"), index=True)
     purchased_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     purchase_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="EUR")
@@ -596,7 +597,7 @@ class InventoryItem(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     opportunity_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("opportunities.id"))
-    listing_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("listings.id"))
+    listing_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("listings.id"), index=True)
     purchase_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("purchases.id"))
     title: Mapped[str] = mapped_column(String(1024), nullable=False)
     category: Mapped[str | None] = mapped_column(String(128))
@@ -621,7 +622,7 @@ class PaperTrade(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     opportunity_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("opportunities.id"))
-    listing_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("listings.id"))
+    listing_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("listings.id"), index=True)
     title: Mapped[str] = mapped_column(String(1024), nullable=False)
     paper_purchase_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     paper_purchase_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
