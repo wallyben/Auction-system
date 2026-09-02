@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 import uuid
@@ -19,6 +20,7 @@ from app.core.config import settings
 from app.core.process import process_role
 from app.core.runtime import process_runtime_snapshot
 from app.db.session import get_db_session, get_session_factory, probe_database
+from app.web.observability import in_flight_count, loop_lag_s
 from app.db.url import classify_db_error
 from app.jobs.lease import dispatch_http
 from app.jobs.queue import lease_status, recent_jobs
@@ -92,8 +94,18 @@ async def health_runtime() -> dict[str, object]:
         "uptime_s": int(time.monotonic() - _PROCESS_STARTED_MONO),
         "git_sha": _runtime_sha(),
         "valuation_algorithm": VALUATION_ALGORITHM_VERSION,
+        "loop_lag_s": loop_lag_s(),
+        "in_flight": in_flight_count(),
         **process_runtime_snapshot(),
     }
+
+
+@router.get("/ops/web-diag")
+def ops_web_diag() -> dict[str, Any]:
+    """Bounded request/stall/memory ring. No query strings, tokens, or stacks."""
+    from app.web.observability import diagnostic_snapshot
+
+    return diagnostic_snapshot()
 
 
 @router.get("/health/db")
@@ -438,23 +450,38 @@ def record_purchase(payload: OutcomeRequest, session: Session = Depends(get_db))
     return {"status": "recorded"}
 
 
-@router.post("/import/csv")
-async def import_csv(file: UploadFile = File(...), session: Session = Depends(get_db)) -> dict[str, Any]:
-    text = (await file.read()).decode("utf-8", errors="replace")
+async def _import_csv_with_session(session: Session, text: str) -> dict[str, Any]:
+    """FX + persist + comps + evaluate. Must not run on the uvicorn event loop."""
+    from app.jobs.lease import maybe_yield
+    from app.opportunity.book import current_generation
+    from app.sold.certify import live_camera_body_certification
+
     items = CsvImportAdapter().parse(text)
     rates = await refresh_fx(session)
-    from app.sold.certify import live_camera_body_certification
-    from app.jobs.lease import maybe_yield
-
     live_cert = live_camera_body_certification(session)
     written = 0
     for item in items:
         listing = persist_listing(session, item)
         comps = await _comps_for(listing, rates, session)
-        evaluate_listing(session, listing, comps, rates, live_cert=live_cert, generation=current_generation(session))
+        evaluate_listing(
+            session,
+            listing,
+            comps,
+            rates,
+            live_cert=live_cert,
+            generation=current_generation(session),
+        )
         written += 1
         await maybe_yield(written, every=4)
     return {"imported": written}
+
+
+@router.post("/import/csv")
+async def import_csv(file: UploadFile = File(...)) -> dict[str, Any]:
+    text = (await file.read()).decode("utf-8", errors="replace")
+    from app.web.offload import isolated_session_async
+
+    return await asyncio.to_thread(isolated_session_async, lambda session: _import_csv_with_session(session, text))
 
 
 @router.get("/config")

@@ -88,6 +88,11 @@ def client(engine, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
 
     factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
+    def _open_deletion_session():
+        return factory()
+
+    monkeypatch.setattr("app.api.routes.ebay_webhooks._open_deletion_session", _open_deletion_session)
+
     def _override() -> Iterator[Session]:
         sess = factory()
         try:

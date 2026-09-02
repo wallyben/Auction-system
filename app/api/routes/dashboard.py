@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
@@ -38,6 +39,21 @@ from app.strategies.defaults import seed_strategies
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/web/templates")
+
+
+def _import_sales_isolated(text: str) -> None:
+    """CSV import uses its own session so the event loop never waits on SQLAlchemy."""
+    from app.db.session import get_session_factory
+
+    session = get_session_factory()()
+    try:
+        import_marketplace_export(session, text)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
 
 def _attach_listing(session: Session, opp: Opportunity) -> Opportunity:
@@ -172,8 +188,10 @@ async def scan_category(category: str = Form(...)) -> RedirectResponse:
 
 
 @router.post("/value-url")
-async def value_this_url(url: str = Form(...), session: Session = Depends(get_db)) -> RedirectResponse:
-    opp = await value_url(session, url)
+async def value_this_url(url: str = Form(...)) -> RedirectResponse:
+    from app.web.offload import isolated_session_async
+
+    opp = await asyncio.to_thread(isolated_session_async, lambda session: value_url(session, url))
     return RedirectResponse(f"/opportunities/{opp.id}/view", status_code=303)
 
 
@@ -184,17 +202,22 @@ async def value_this_item(
     country: str = Form("IE"),
     description: str = Form(""),
     condition: str = Form(""),
-    session: Session = Depends(get_db),
 ) -> RedirectResponse:
+    from app.web.offload import isolated_session_async
+
     price = Decimal(asking) if asking else None
-    opp = await value_manual(
-        session,
-        title=title,
-        description=description,
-        asking=price,
-        country=country,
-        condition=condition,
-    )
+
+    async def _run(session: Session):
+        return await value_manual(
+            session,
+            title=title,
+            description=description,
+            asking=price,
+            country=country,
+            condition=condition,
+        )
+
+    opp = await asyncio.to_thread(isolated_session_async, _run)
     return RedirectResponse(f"/opportunities/{opp.id}/view", status_code=303)
 
 
@@ -233,16 +256,16 @@ def data_quality(request: Request, session: Session = Depends(get_db)) -> HTMLRe
 
 
 @router.post("/import/owner-sales")
-async def upload_owner_sales(file: UploadFile, session: Session = Depends(get_db)) -> RedirectResponse:
+async def upload_owner_sales(file: UploadFile) -> RedirectResponse:
     text = (await file.read()).decode("utf-8", errors="replace")
-    import_marketplace_export(session, text)
+    await asyncio.to_thread(_import_sales_isolated, text)
     return RedirectResponse("/performance", status_code=303)
 
 
 @router.post("/import/marketplace-sales")
-async def upload_marketplace_sales(file: UploadFile, session: Session = Depends(get_db)) -> RedirectResponse:
+async def upload_marketplace_sales(file: UploadFile) -> RedirectResponse:
     text = (await file.read()).decode("utf-8", errors="replace")
-    import_marketplace_export(session, text)
+    await asyncio.to_thread(_import_sales_isolated, text)
     return RedirectResponse("/performance", status_code=303)
 
 
