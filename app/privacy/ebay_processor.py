@@ -1,4 +1,19 @@
-"""Persist and process verified eBay account-deletion notifications."""
+"""Persist and process verified eBay account-deletion notifications.
+
+Status machine (durable, no plaintext PII):
+
+    received     — notice stored, work not started
+    processing   — in-flight (visible only if a crash left it after a partial commit)
+    processed / processed_unknown_user / processed_duplicate / received_unparseable
+                 — terminal success (HTTP 204; eBay must stop retrying)
+    failed       — retryable (HTTP 500; eBay retries; next POST re-runs deletion)
+
+Same notification_id:
+    terminal success → immediate 204, no table scans
+    failed           → retry process() without duplicating successful work
+                       (anonymise is idempotent)
+    processing       → HTTP 500 so eBay backs off; do not start a second scan
+"""
 
 from __future__ import annotations
 
@@ -14,11 +29,8 @@ from app.privacy.identifiers import DeletionIdentities, identifier_hash, payload
 
 logger = get_logger("arie.privacy.ebay_processor")
 
-_TERMINAL = {"processed", "processed_unknown_user", "processed_duplicate"}
-_ACCEPTED_TOPICS = {
-    "MARKETPLACE_ACCOUNT_DELETION",
-    "MARKETPLACE_ACCOUNT_DELETION".replace("PLACE", "PLACE"),
-}
+_TERMINAL = {"processed", "processed_unknown_user", "processed_duplicate", "received_unparseable"}
+_COMPLETED = _TERMINAL
 
 
 def process_verified_notification(
@@ -34,45 +46,48 @@ def process_verified_notification(
     http_status 500 means a temporary failure — eBay should retry.
     """
     notification_id = identities.notification_id or payload_sha256(body)
-    existing = session.scalar(
-        select(EbayDeletionNotification).where(
-            EbayDeletionNotification.notification_id == notification_id
-        )
-    )
-    if existing and existing.status in _TERMINAL:
-        logger.info("ebay_deletion_duplicate", notification_id=notification_id, status=existing.status)
-        return DeletionResult(
-            status="processed_duplicate",
-            http_status=204,
-            notification_id=notification_id,
-            records_deleted=dict(existing.records_deleted or {}),
-            records_anonymised=dict(existing.records_anonymised or {}),
-            accountant_or_legal_review_required=bool(existing.accountant_or_legal_review_required),
-            duplicate=True,
-            unknown_user=existing.status == "processed_unknown_user",
-        )
-
-    row = existing or EbayDeletionNotification(
-        notification_id=notification_id,
-        topic=identities.topic or "MARKETPLACE_ACCOUNT_DELETION",
-        received_at=datetime.now(timezone.utc),
-        status="received",
-        attempts=0,
-        username_hash=identifier_hash(identities.username),
-        user_id_hash=identifier_hash(identities.user_id),
-        eias_hash=identifier_hash(identities.eias_token),
-        payload_sha256=payload_sha256(body),
-        signature_kid=signature_kid,
-        schema_version=identities.schema_version,
-    )
-    if existing is None:
-        session.add(row)
-        session.flush()
-    row.attempts = int(row.attempts or 0) + 1
-    row.status = "processing"
     try:
-        with session.begin_nested():
-            result = EbayUserDeletionService().process(session, identities)
+        existing = _lock_notification(session, notification_id)
+        if existing and existing.status in _COMPLETED:
+            logger.info("ebay_deletion_duplicate", notification_id=notification_id, status=existing.status)
+            return DeletionResult(
+                status="processed_duplicate",
+                http_status=204,
+                notification_id=notification_id,
+                records_deleted=dict(existing.records_deleted or {}),
+                records_anonymised=dict(existing.records_anonymised or {}),
+                accountant_or_legal_review_required=bool(existing.accountant_or_legal_review_required),
+                duplicate=True,
+                unknown_user=existing.status == "processed_unknown_user",
+            )
+        if existing and existing.status == "processing":
+            logger.warning("ebay_deletion_already_processing", notification_id=notification_id)
+            return DeletionResult(
+                status="failed",
+                http_status=500,
+                notification_id=notification_id,
+                error="AlreadyProcessing",
+            )
+
+        row = existing or EbayDeletionNotification(
+            notification_id=notification_id,
+            topic=identities.topic or "MARKETPLACE_ACCOUNT_DELETION",
+            received_at=datetime.now(timezone.utc),
+            status="received",
+            attempts=0,
+            username_hash=identifier_hash(identities.username),
+            user_id_hash=identifier_hash(identities.user_id),
+            eias_hash=identifier_hash(identities.eias_token),
+            payload_sha256=payload_sha256(body),
+            signature_kid=signature_kid,
+            schema_version=identities.schema_version,
+        )
+        if existing is None:
+            session.add(row)
+            session.flush()
+        row.attempts = int(row.attempts or 0) + 1
+        row.status = "processing"
+        result = EbayUserDeletionService().process(session, identities)
         row.status = result.status
         row.processed_at = datetime.now(timezone.utc)
         row.records_deleted = result.records_deleted
@@ -83,15 +98,65 @@ def process_verified_notification(
         return result
     except Exception as exc:  # noqa: BLE001 — record failure class, not PII
         logger.exception("ebay_deletion_processing_failed", notification_id=notification_id)
-        row.status = "failed"
-        row.last_error_class = type(exc).__name__
-        _upsert_dead_letter(session, notification_id, type(exc).__name__, payload_sha256(body))
+        try:
+            session.rollback()
+        except Exception:
+            logger.exception("ebay_deletion_rollback_failed", notification_id=notification_id)
+        _mark_failed(session, notification_id, type(exc).__name__, payload_sha256(body), identities, signature_kid)
         return DeletionResult(
             status="failed",
             http_status=500,
             notification_id=notification_id,
             error=type(exc).__name__,
         )
+
+
+def _lock_notification(session: Session, notification_id: str) -> EbayDeletionNotification | None:
+    stmt = select(EbayDeletionNotification).where(
+        EbayDeletionNotification.notification_id == notification_id
+    )
+    try:
+        stmt = stmt.with_for_update()
+    except Exception:
+        pass
+    return session.scalar(stmt)
+
+
+def _mark_failed(
+    session: Session,
+    notification_id: str,
+    error_class: str,
+    payload_hash: str,
+    identities: DeletionIdentities,
+    signature_kid: str | None,
+) -> None:
+    row = session.scalar(
+        select(EbayDeletionNotification).where(
+            EbayDeletionNotification.notification_id == notification_id
+        )
+    )
+    if row is None:
+        session.add(
+            EbayDeletionNotification(
+                notification_id=notification_id,
+                topic=identities.topic or "MARKETPLACE_ACCOUNT_DELETION",
+                received_at=datetime.now(timezone.utc),
+                status="failed",
+                attempts=1,
+                username_hash=identifier_hash(identities.username),
+                user_id_hash=identifier_hash(identities.user_id),
+                eias_hash=identifier_hash(identities.eias_token),
+                payload_sha256=payload_hash,
+                signature_kid=signature_kid,
+                schema_version=identities.schema_version,
+                last_error_class=error_class,
+            )
+        )
+    else:
+        row.status = "failed"
+        row.last_error_class = error_class
+        row.attempts = int(row.attempts or 0) + 1
+    _upsert_dead_letter(session, notification_id, error_class, payload_hash)
 
 
 def record_unparseable_notice(
