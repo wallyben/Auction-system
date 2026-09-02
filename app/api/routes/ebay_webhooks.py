@@ -1,24 +1,27 @@
 """Public eBay Marketplace Account Deletion webhook.
 
 No dashboard authentication. HTTPS is required in production (eBay rejects HTTP).
+GET challenge is synchronous (SHA-256 only). POST does async key fetch, then
+offloads signature verify + SQLAlchemy to a worker thread with its own session.
 """
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections import defaultdict, deque
 
-from fastapi import APIRouter, Depends, Header, Request, Response
+from fastapi import APIRouter, Header, Request, Response
 from fastapi.responses import JSONResponse
-from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.db.session import get_db_session
+from app.db.session import get_session_factory
 from app.privacy.ebay_challenge import challenge_response
 from app.privacy.ebay_processor import process_verified_notification, record_unparseable_notice
 from app.privacy.ebay_watch import record_watch_event
 from app.privacy.ebay_signature import (
+    EbayPublicKey,
     SignatureError,
     decode_signature_header,
     fetch_public_key,
@@ -32,17 +35,14 @@ router = APIRouter(tags=["ebay-webhooks"])
 
 _RATE_LIMIT = 180
 _RATE_WINDOW = 60.0
+_MAX_RATE_KEYS = 512
 _hits: dict[str, deque[float]] = defaultdict(deque)
-_ACCEPTED_TOPICS = {"MARKETPLACE_ACCOUNT_DELETION"}
 
 
 def get_db():
-    """Yield a session, or None if the database is not configured.
+    """Kept for tests that override webhook DB access. POST no longer uses it on the loop."""
+    from app.db.session import get_db_session
 
-    Signature rejection (412) must not depend on Postgres being up. eBay Save
-    only needs GET. POST processing still returns 500 when the DB is down so
-    eBay retries after a valid signature.
-    """
     try:
         yield from get_db_session()
     except Exception:
@@ -52,6 +52,8 @@ def get_db():
 
 def _rate_limit(key: str) -> bool:
     now = time.monotonic()
+    if len(_hits) >= _MAX_RATE_KEYS and key not in _hits:
+        _hits.pop(next(iter(_hits)))
     bucket = _hits[key]
     while bucket and now - bucket[0] > _RATE_WINDOW:
         bucket.popleft()
@@ -83,13 +85,17 @@ def _token() -> str:
     )
 
 
+def _open_deletion_session():
+    """Hook tests patch this to bind the in-memory engine."""
+    return get_session_factory()()
+
+
 @router.get("/webhooks/ebay/account-deletion")
-async def ebay_account_deletion_challenge(request: Request) -> JSONResponse:
+def ebay_account_deletion_challenge(request: Request) -> JSONResponse:
     """eBay endpoint challenge (official SHA-256 algorithm).
 
-    Official query parameter is `challenge_code`. `challengeCode` is accepted as an alias.
-    Response body: {"challengeResponse": "<hex>"} with HTTP 200.
-    Docs: https://developer.ebay.com/marketplace-account-deletion
+    Sync handler: no await, no SQLAlchemy. Starlette runs this in the threadpool
+    so filesystem watch-log writes cannot pin /health.
     """
     client = request.client.host if request.client else "unknown"
     if not _rate_limit(f"get:{client}"):
@@ -111,10 +117,59 @@ async def ebay_account_deletion_challenge(request: Request) -> JSONResponse:
     return JSONResponse({"challengeResponse": response_hash}, status_code=200)
 
 
+def persist_verified_deletion(
+    body: bytes,
+    signature_header: str,
+    public_key: EbayPublicKey,
+    kid: str,
+) -> int:
+    """CPU verify + SQLAlchemy. Must not run on the uvicorn event loop."""
+    if not verify_payload(body, signature_header, public_key):
+        logger.warning("ebay_deletion_invalid_signature", kid=kid)
+        return 412
+    try:
+        session = _open_deletion_session()
+    except Exception:
+        logger.warning("ebay_deletion_db_unavailable")
+        return 500
+    try:
+        try:
+            payload = _parse_json(body)
+        except ValueError:
+            result = record_unparseable_notice(session, body=body, signature_kid=kid, reason="malformed_json")
+            session.commit()
+            return int(result.http_status)
+        identities = parse_deletion_payload(payload)
+        if identities is None:
+            result = record_unparseable_notice(
+                session, body=body, signature_kid=kid, reason="unparseable_payload"
+            )
+            session.commit()
+            return int(result.http_status)
+        topic = (identities.topic or "").upper()
+        if topic and "ACCOUNT_DELETION" not in topic:
+            logger.info("ebay_deletion_ignored_topic")
+            session.commit()
+            return 204
+        result = process_verified_notification(
+            session,
+            identities=identities,
+            body=body,
+            signature_kid=kid,
+        )
+        session.commit()
+        return int(result.http_status)
+    except Exception:
+        session.rollback()
+        logger.exception("ebay_deletion_handler_failed")
+        return 500
+    finally:
+        session.close()
+
+
 @router.post("/webhooks/ebay/account-deletion")
 async def ebay_account_deletion_notice(
     request: Request,
-    session: Session | None = Depends(get_db),
     x_ebay_signature: str | None = Header(default=None, alias="X-EBAY-SIGNATURE"),
 ) -> Response:
     """Verify signature then persist+process. 2xx only after durable processing.
@@ -129,7 +184,7 @@ async def ebay_account_deletion_notice(
     body = await request.body()
     if not x_ebay_signature:
         logger.warning("ebay_deletion_missing_signature")
-        record_watch_event("EBAY_POST_REJECTED_412", reason="missing_signature")
+        await asyncio.to_thread(record_watch_event, "EBAY_POST_REJECTED_412", reason="missing_signature")
         return Response(status_code=412)
     try:
         header = decode_signature_header(x_ebay_signature)
@@ -142,43 +197,8 @@ async def ebay_account_deletion_notice(
     except SignatureError:
         logger.warning("ebay_deletion_public_key_unavailable")
         return Response(status_code=500)
-    if not verify_payload(body, x_ebay_signature, public_key):
-        logger.warning("ebay_deletion_invalid_signature", kid=kid)
-        return Response(status_code=412)
-    if session is None:
-        logger.warning("ebay_deletion_db_unavailable")
-        return Response(status_code=500)
-    try:
-        try:
-            payload = _parse_json(body)
-        except ValueError:
-            result = record_unparseable_notice(session, body=body, signature_kid=kid, reason="malformed_json")
-            session.commit()
-            return Response(status_code=result.http_status)
-        identities = parse_deletion_payload(payload)
-        if identities is None:
-            result = record_unparseable_notice(
-                session, body=body, signature_kid=kid, reason="unparseable_payload"
-            )
-            session.commit()
-            return Response(status_code=result.http_status)
-        topic = (identities.topic or "").upper()
-        if topic and "ACCOUNT_DELETION" not in topic:
-            logger.info("ebay_deletion_ignored_topic")
-            session.commit()
-            return Response(status_code=204)
-        result = process_verified_notification(
-            session,
-            identities=identities,
-            body=body,
-            signature_kid=kid,
-        )
-        session.commit()
-        return Response(status_code=result.http_status)
-    except Exception:
-        session.rollback()
-        logger.exception("ebay_deletion_handler_failed")
-        return Response(status_code=500)
+    status = await asyncio.to_thread(persist_verified_deletion, body, x_ebay_signature, public_key, kid)
+    return Response(status_code=status)
 
 
 def _parse_json(body: bytes) -> dict:
