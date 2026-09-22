@@ -1,5 +1,6 @@
 """Model package exports."""
 
+import app.domains.vehicles.orm as _cv_orm  # noqa: F401
 from app.models.auction_lot import AuctionLot
 from app.models.enums import (
     AssumptionClass,

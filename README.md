@@ -52,6 +52,10 @@ Dashboard: open `/`. Scan, value a URL/item, inspect gates, mark purchased. `BUY
 
 All ordinary configuration is in `.env`. You do not edit Python to change thresholds, sources, or queries.
 
+## Commercial vans (ARIE-CV)
+
+`/cv` is a separate shadow engine for Irish and Northern Irish commercial vans. It does not replace the camera floor at `/`. It does not bid or buy. Source status, tax version, and certification limits are in `programme/arie-cv/`. A vehicle with missing evidence is not a buy candidate.
+
 ## Honest limits
 
 - Irish *realised* sold comps are not available from a public API in this programme.

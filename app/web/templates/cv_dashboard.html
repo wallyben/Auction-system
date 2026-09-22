@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Commercial vans · ARIE-CV{% endblock %}
+{% block body %}
+<section class="hero">
+  <h1>Commercial van candidates</h1>
+  <p>Shadow mode. ARIE-CV does not bid, buy, or pay. A result is not a certified purchasing instruction.</p>
+  <p class="meta">Tax rules {{ tax_rule_version }}, retrieved {{ tax_retrieved }}. Live auction fetchers: {{ live_fetchers|length }}.</p>
+</section>
+
+<nav class="controls wrap">
+  <a href="/cv?view_name=candidates">Buy candidates</a>
+  <a href="/cv?view_name=manual">Needs manual evidence</a>
+  <a href="/cv?view_name=price">Price too high</a>
+  <a href="/cv?view_name=rejected">Rejected</a>
+  <a href="/cv?view_name=insufficient">Insufficient data</a>
+  <a href="/cv?view_name=all">All evaluations</a>
+</nav>
+
+<section>
+  <h2>This view</h2>
+  <p class="meta">The board is this web process only. It is empty until an evaluation is submitted here. Zero candidates is a valid result. Market evidence is whatever was supplied with the case, not a live Irish crawl.</p>
+  {% if candidates %}
+  <table>
+    <thead>
+      <tr>
+        <th>Vehicle</th>
+        <th>State</th>
+        <th>Current bid</th>
+        <th>Max safe bid</th>
+        <th>Headroom</th>
+        <th>Expected profit</th>
+        <th>Confidence</th>
+        <th>Liquidity</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in candidates %}
+      <tr>
+        <td>{{ row.summary_vehicle }}<br><span class="muted">{{ row.title }}</span></td>
+        <td><span class="pill">{{ row.state.value }}</span><br><span class="muted">{{ row.certification.value }}</span></td>
+        <td>{{ row.current_bid_eur if row.current_bid_eur is not none else "—" }}</td>
+        <td>{{ row.bid.max_safe_hammer_eur if row.bid.max_safe_hammer_eur is not none else "—" }}</td>
+        <td>{{ row.headroom_eur if row.headroom_eur is not none else "—" }}</td>
+        <td>{{ row.expected_profit_at_current_eur if row.expected_profit_at_current_eur is not none else "—" }}</td>
+        <td>{{ row.valuation.confidence }}</td>
+        <td>{{ row.valuation.liquidity.classification.value }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="warn">No vehicles in this view.</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Evaluate a captured lot</h2>
+  <p class="meta">Paste a structured case. Incomplete evidence fails closed. This does not contact an auction.</p>
+  {% if error %}<p class="warn">{{ error }}</p>{% endif %}
+  <form method="post" action="/cv/evaluate">
+    <textarea name="payload" rows="14" style="width:100%; font: 13px/1.4 ui-monospace, monospace;">{{ example }}</textarea>
+    <p><button class="primary" type="submit">Evaluate</button></p>
+  </form>
+</section>
+
+{% if evaluation %}
+<section>
+  <h2>Latest report</h2>
+  <p><strong>{{ evaluation.vehicle }}</strong> · {{ evaluation.state }} · {{ evaluation.certification }} · purchasing recommendation: {{ evaluation.purchasing_recommendation }}</p>
+  <div class="numbers">
+    <div><span>Current bid</span><strong>{{ evaluation.current_bid_eur or "—" }}</strong></div>
+    <div class="emphasis"><span>Maximum safe bid</span><strong>{{ evaluation.maximum_safe_bid_eur or "—" }}</strong></div>
+    <div><span>Headroom</span><strong>{{ evaluation.headroom_eur or "—" }}</strong></div>
+    <div><span>Expected all-in</span><strong>{{ evaluation.expected_all_in_eur or "—" }}</strong></div>
+    <div><span>Downside all-in</span><strong>{{ evaluation.downside_all_in_eur or "—" }}</strong></div>
+    <div><span>Expected resale</span><strong>{{ evaluation.valuation.expected_achievable_eur or "—" }}</strong></div>
+    <div><span>Quick sale</span><strong>{{ evaluation.valuation.quick_sale_eur or "—" }}</strong></div>
+    <div><span>Expected profit</span><strong>{{ evaluation.expected_profit_at_current_eur or "—" }}</strong></div>
+    <div><span>Downside profit</span><strong>{{ evaluation.downside_profit_at_current_eur or "—" }}</strong></div>
+    <div><span>Confidence</span><strong>{{ evaluation.valuation.confidence }}</strong></div>
+  </div>
+  <h3>Provenance</h3>
+  <p>{{ evaluation.provenance.state }} — {{ evaluation.provenance.interpretation }}</p>
+  <h3>Tax</h3>
+  <p>VRT {{ evaluation.tax.vrt_state }} {{ evaluation.tax.vrt_eur or "unknown" }}. NOx {{ evaluation.tax.nox_eur or "unknown" }}. Customs {{ evaluation.tax.customs_duty_eur or "unknown" }}. Import VAT {{ evaluation.tax.import_vat_eur or "unknown" }}.</p>
+  <h3>Why</h3>
+  <p>{{ evaluation.why }}</p>
+  <h3>Owner actions</h3>
+  <ul>
+    {% for action in evaluation.owner_actions %}<li>{{ action }}</li>{% endfor %}
+  </ul>
+  <h3>Risks</h3>
+  <ul>
+    {% for risk in evaluation.risks %}<li><strong>{{ risk.name }}</strong> {{ risk.level }} — {{ risk.detail }}</li>{% endfor %}
+  </ul>
+  <h3>Comparables used</h3>
+  {% if evaluation.valuation.comps %}
+  <table>
+    <thead><tr><th>Listing</th><th>Score</th><th>Price</th><th>Why</th></tr></thead>
+    <tbody>
+      {% for comp in evaluation.valuation.comps %}
+      <tr>
+        <td>{{ comp.model_family }} {{ comp.year or "" }}</td>
+        <td>{{ comp.score }}{% if comp.close %} close{% endif %}</td>
+        <td>{{ comp.price_eur }}</td>
+        <td class="muted">{{ comp.reasons|join(" ") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No comparables were accepted.</p>
+  {% endif %}
+  <h3>Failed gates</h3>
+  <p>{{ evaluation.gates.failures|join(", ") or "None" }}</p>
+</section>
+{% endif %}
+
+<section>
+  <h2>Sources</h2>
+  <table>
+    <thead><tr><th>Source</th><th>Status</th><th>Why</th></tr></thead>
+    <tbody>
+      {% for source in sources %}
+      <tr>
+        <td>{{ source.name }}<br><span class="muted">{{ source.geography }} · {{ source.role }}</span></td>
+        <td><span class="pill {{ source.status }}">{{ source.status }}</span></td>
+        <td>{{ source.reason }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
