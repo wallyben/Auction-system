@@ -11,6 +11,15 @@ from sqlalchemy.orm import Session
 from app.domains.vehicles.board import shadow_count
 from app.domains.vehicles.certification_metrics import score_certification
 from app.domains.vehicles.history_dvsa import dvsa_status
+from app.domains.vehicles.ingest.autoza import (
+    PARSER_VERSION as AUTOZA_PARSER,
+    SOURCE_ID as AUTOZA_SOURCE,
+    apply_history,
+    autoza_enabled,
+    autoza_health,
+    fetch_autoza,
+)
+from app.domains.vehicles.query_plan import plan_queries
 from app.domains.vehicles.ingest.dealer_feed import PARSER_VERSION as DEALER_PARSER
 from app.domains.vehicles.ingest.dealer_feed import parse_dealer_feed
 from app.domains.vehicles.ingest.ebay_vans import PARSER_VERSION as EBAY_PARSER
@@ -28,6 +37,8 @@ CV_JOBS = (
     "cv-revalue",
     "cv-shadow-refresh",
 )
+
+_AUTOZA_CURSOR = 0
 
 
 async def run_cv_job(session: Session, name: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -106,14 +117,81 @@ async def _market_refresh(session: Session, payload: dict[str, Any]) -> dict[str
             last_error="EBAY_CLIENT_ID / EBAY_CLIENT_SECRET not set, or CV_EBAY_VANS=0.",
             payload={},
         )
+    autoza_inserted = 0
+    autoza_error = ""
+    if autoza_enabled():
+        autoza_inserted, autoza_error = await _autoza_refresh(session, now)
+    else:
+        record_source_state(
+            session,
+            source_id=AUTOZA_SOURCE,
+            status="DISABLED",
+            parser_version=AUTOZA_PARSER,
+            last_success_at=None,
+            last_error="CV_AUTOZA=0",
+            payload=autoza_health(),
+        )
     return {
-        "status": "ok",
+        "status": "ok" if not autoza_error else "partial",
         "dealer_inserted": inserted,
         "ebay_inserted": ebay_count,
+        "autoza_inserted": autoza_inserted,
+        "autoza_error": autoza_error,
         "configured_feed_urls": len(urls),
         "book_size": len(current_book().observations),
-        "fetched_remote_feeds": False,
+        "fetched_remote_feeds": autoza_inserted > 0 or bool(autoza_error),
     }
+
+
+async def _autoza_refresh(session: Session, now: datetime) -> tuple[int, str]:
+    """Query a small Autoza plan. A failed fetch does not mark listings disappeared."""
+
+    from app.core.http import build_client
+    from app.domains.vehicles.board import tracked_titles
+    from app.domains.vehicles.identity import parse_listing_text
+
+    pairs: list[tuple[str, str]] = []
+    for title in tracked_titles():
+        identity = parse_listing_text(title)
+        if identity.manufacturer and identity.model_family:
+            pairs.append(
+                (
+                    identity.manufacturer.replace("_", " ").title(),
+                    identity.model_family.replace("_", " ").title(),
+                )
+            )
+    global _AUTOZA_CURSOR
+    queries, _AUTOZA_CURSOR = plan_queries(pairs, cursor=_AUTOZA_CURSOR, budget=4)
+    try:
+        async with build_client() as client:
+            fetched = await fetch_autoza(client, queries, observed_at=now)
+    except Exception as exc:  # noqa: BLE001 — provider outage must not invent sales
+        record_source_state(
+            session,
+            source_id=AUTOZA_SOURCE,
+            status="FAILED",
+            parser_version=AUTOZA_PARSER,
+            last_success_at=None,
+            last_error=str(exc),
+            payload={**autoza_health(), "cursor": _AUTOZA_CURSOR, "disappearance": "not_marked"},
+        )
+        return 0, str(exc)
+    annotated = apply_history(current_book(), list(fetched.observations))
+    inserted, duplicates = add_observations(annotated)
+    health = autoza_health()
+    health["cursor"] = _AUTOZA_CURSOR
+    health["complete_snapshot"] = fetched.complete
+    health["disappearance"] = "not_marked" if not fetched.complete else "not_inferred_as_sold"
+    record_source_state(
+        session,
+        source_id=AUTOZA_SOURCE,
+        status="FAILED" if fetched.error else "LIVE_PUBLIC",
+        parser_version=AUTOZA_PARSER,
+        last_success_at=None if fetched.error else now,
+        last_error=fetched.error,
+        payload=health | {"inserted": inserted, "duplicates": duplicates, "queries": fetched.queries},
+    )
+    return inserted, fetched.error
 
 
 def _history_enrich(session: Session) -> dict[str, Any]:

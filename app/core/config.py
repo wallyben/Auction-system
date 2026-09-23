@@ -142,6 +142,7 @@ class Settings(BaseSettings):
     # ARIE-CV. Empty values stay fail-closed. They do not enable a crawl.
     cv_dealer_feed_urls: str = ""
     cv_ebay_vans: str = "1"
+    cv_autoza: str = "1"
     dvsa_client_id: str = ""
     dvsa_client_secret: str = ""
     dvsa_api_key: str = ""

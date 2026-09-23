@@ -484,12 +484,17 @@ def test_duplicate_observation_is_rejected_and_history_is_kept() -> None:
         assert [row.observation_id for row in rows] == ["obs-1", "obs-1b"]
 
 
-def test_sources_do_not_fetch_and_are_independently_described() -> None:
-    assert enabled_live_fetchers() == ()
+def test_sources_do_not_fetch_and_are_independently_described(monkeypatch) -> None:
+    monkeypatch.delenv("CV_AUTOZA", raising=False)
+    monkeypatch.delenv("EBAY_CLIENT_ID", raising=False)
+    monkeypatch.delenv("EBAY_CLIENT_SECRET", raising=False)
+    monkeypatch.delenv("CV_DEALER_FEED_URLS", raising=False)
+    assert enabled_live_fetchers() == ("autoza",)
     statuses = {source.source_id: source.status for source in vehicle_sources()}
     assert statuses["wilsons"] == "BLOCKED_POLICY"
     assert statuses["dvsa_mot"] == "BLOCKED_CREDENTIALS"
     assert statuses["donedeal"] == "BLOCKED_POLICY"
+    assert statuses["autoza"] == "LIVE_PUBLIC"
     assert "LIVE" not in statuses.values()
 
 

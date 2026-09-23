@@ -23,7 +23,7 @@ Camera coupling is isolated, not retired. The worker was not given a van job. Th
 | CV-005 provenance | IMPLEMENTED, TESTED | Seven states. Plate shape is not customs status | Revenue still verifies documents. ARIE does not |
 | CV-006 tax | IMPLEMENTED, TESTED | Version `ie-cv-tax-2026-09-22`. Separate VRT, NOx, duty, import VAT, auction VAT | Not tax advice. No assumed 10% van duty. No live OMSP lookup |
 | CV-007 auction costs | IMPLEMENTED, TESTED | Versioned schedules, whole-hammer premium bands, VAT on premium and lot | No production van fee schedule is loaded |
-| CV-008 market book | PARTIAL, TESTED | Append-only observations, listing lifecycle, dealer-feed parser, eBay van mapper behind credentials | No consented Irish feed is configured |
+| CV-008 market book | PARTIAL, TESTED | Append-only Autoza asking observations and dealer feeds. Unknown VAT caps confidence | No realised Irish sale feed. Autoza does not publish VAT or registration |
 | CV-009 comps | IMPLEMENTED, TESTED | Scored comps. Generation, wheelbase, fuel, salvage, and duplicate-registration mismatches are rejected | Not an LLM selector |
 | CV-010 valuation | IMPLEMENTED, TESTED | Asking, achievable, conservative, quick-sale, confidence cap when sales are thin | No calibration against realised Irish van sales |
 | CV-011 reconditioning | PARTIAL, TESTED | Declared-fault reserves plus a non-zero unknown-mechanical reserve | No image model. Photographs are not read |
@@ -34,7 +34,7 @@ Camera coupling is isolated, not retired. The worker was not given a van job. Th
 | CV-016 report | IMPLEMENTED, TESTED | Structured report and `/cv` HTML | — |
 | CV-017 dashboard | PARTIAL, TESTED | `/cv` defaults to shadow candidates and can reload stored evaluations | Empty until a case is evaluated. Not a live auction floor |
 | CV-018 backtest | PARTIAL, TESTED harness | `evaluate_as_of` hides later observations | No historical auction corpus. Not validated |
-| CV-019 shadow live | NOT STARTED | Snapshot hook exists. A stale buy is downgraded on the board | No live auction inventory and no live Irish book |
+| CV-019 shadow live | NOT STARTED | A catalogue paste freezes a snapshot. Native valuation withholds a weak book | No owner-supplied auction catalogue has been run against a stored Autoza book |
 | CV-020 certification | NOT CERTIFIED | Thresholds are defined. An empty sample is `NOT_STARTED`, not a pass | None of the thresholds have been measured |
 
 ## Why this order

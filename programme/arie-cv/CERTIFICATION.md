@@ -14,6 +14,7 @@ Current posture: **NOT CERTIFIED**. Shadow only.
 - Identity accuracy on real vans
 - Commercial classification precision against confirmed homologation
 - Tax and provenance correctness against later NCTS or Revenue outcomes
+- A live Autoza search on 2026-09-23 returned commercial-van asking prices. That probe was not stored as a market book and it is not a certification sample.
 - Valuation error against realised Irish resales
 - Quick-sale calibration
 - Candidate precision and false-positive rate

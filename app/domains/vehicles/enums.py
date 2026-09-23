@@ -67,6 +67,7 @@ class LiquidityClass(str, enum.Enum):
 class ObservationStatus(str, enum.Enum):
     ACTIVE = "ACTIVE"
     PRICE_REDUCED = "PRICE_REDUCED"
+    PRICE_INCREASED = "PRICE_INCREASED"
     DISAPPEARED = "DISAPPEARED"
     RELISTED = "RELISTED"
     RETURNED = "RETURNED"

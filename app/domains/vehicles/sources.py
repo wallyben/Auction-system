@@ -1,7 +1,8 @@
-"""Irish and NI commercial-vehicle sources. Each adapter is independently off.
+"""Irish and NI commercial-vehicle sources.
 
-No source here is LIVE. Manual capture is the only ingest that does not need
-an external credential or a terms decision. Nothing in this module fetches HTML.
+Autoza search is the free Irish asking-price feed. It is called only from the
+worker refresh. Manual capture remains the auction path. Nothing in this
+module fetches HTML.
 """
 
 from __future__ import annotations
@@ -132,9 +133,9 @@ def vehicle_sources() -> tuple[VehicleSource, ...]:
             name="Cartell / Motorcheck",
             geography="IE",
             role="history",
-            status="BLOCKED_CREDENTIALS",
-            access="Paid Irish vehicle-history reports.",
-            reason="Paid Irish vehicle-history reports. The owner can buy a trade subscription. No key is configured, so finance, write-off, and stolen results are not inferred.",
+            status="OPTIONAL_CALIBRATION",
+            access="Paid Irish vehicle-history reports. Not required for native valuation.",
+            reason="Optional later calibration and history. No subscription is used. Finance, write-off, and stolen results are not inferred.",
             buyer_premium="n/a",
             vat="n/a",
             registration_visible="Report-specific.",
@@ -202,6 +203,24 @@ def vehicle_sources() -> tuple[VehicleSource, ...]:
             results_available="Not inferred from a closed catalogue. A realised price must be entered as a realised observation.",
         ),
         VehicleSource(
+            source_id="autoza",
+            name="Autoza Ireland",
+            geography="IE",
+            role="market",
+            status="LIVE_PUBLIC",
+            access="Documented GET https://autoza.ie/api/v1/vehicles. No API key for basic search. HTML is not fetched.",
+            reason=(
+                "OpenAPI 1.0.0, retrieved 2026-09-23, says basic search needs no authentication. "
+                "body_type=van is available. Registration and VAT are not in the summary schema, so they stay unknown. "
+                "Set CV_AUTOZA=0 to disable the worker refresh."
+            ),
+            buyer_premium="n/a",
+            vat="Not in the public summary. Unknown VAT is not treated as inclusive.",
+            registration_visible="Not in the search schema. Not invented.",
+            vin_visible="Not in the search schema.",
+            results_available="Asking prices only. Disappearance is not a sale.",
+        ),
+        VehicleSource(
             source_id="dealer_stock_feed",
             name="Owner-consented dealer stock feed",
             geography="IE",
@@ -238,6 +257,8 @@ def enabled_live_fetchers() -> tuple[str, ...]:
     import os
 
     live: list[str] = []
+    if os.environ.get("CV_AUTOZA", "1") != "0":
+        live.append("autoza")
     if os.environ.get("EBAY_CLIENT_ID", "").strip() and os.environ.get("EBAY_CLIENT_SECRET", "").strip():
         if os.environ.get("CV_EBAY_VANS", "1") != "0":
             live.append("ebay_vans")

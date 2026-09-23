@@ -32,7 +32,9 @@
         <th>Current bid</th>
         <th>Max safe bid</th>
         <th>Expected all-in</th>
+        <th>Expected achievable</th>
         <th>Quick sale</th>
+        <th>Trade downside</th>
         <th>Expected profit</th>
         <th>Downside</th>
         <th>Confidence</th>
@@ -51,7 +53,9 @@
         <td>{{ row.current_bid_eur or "—" }}</td>
         <td>{{ row.maximum_safe_bid_eur or "—" }}</td>
         <td>{{ row.expected_all_in_eur or "—" }}</td>
+        <td>{{ row.valuation.expected_achievable_eur or "—" }}</td>
         <td>{{ row.valuation.quick_sale_eur or "—" }}</td>
+        <td>{{ row.valuation.trade_downside_eur or "—" }}</td>
         <td>{{ row.expected_profit_at_current_eur or "—" }}</td>
         <td>{{ row.downside_profit_at_current_eur or "—" }}</td>
         <td>{{ row.valuation.confidence }}</td>
@@ -61,7 +65,7 @@
         <td>{{ row.history_status }}</td>
       </tr>
       <tr>
-        <td colspan="14">
+        <td colspan="16">
           <details>
             <summary>Due diligence, comps, costs, missing evidence</summary>
             <p>{{ row.why }}</p>
@@ -73,7 +77,7 @@
             </ul>
             <p>Failed gates: {{ row.gates.failures|join(", ") or "none" }}</p>
             {% for comp in row.valuation.comps %}
-            <p class="muted">{{ comp.model_family }} {{ comp.year or "" }} score {{ comp.score }} €{{ comp.price_eur }} — {{ comp.reasons|join(" ") }}</p>
+            <p class="muted">{{ comp.model_family }} {{ comp.year or "" }} {{ comp.mileage_km or "" }} km score {{ comp.score }} €{{ comp.price_eur }} VAT {{ comp.vat_presentation or "unknown" }} {{ comp.source }} — {{ comp.reasons|join(" ") }} {% if comp.differences %}Differs: {{ comp.differences|join(", ") }}.{% endif %}</p>
             {% endfor %}
           </details>
         </td>

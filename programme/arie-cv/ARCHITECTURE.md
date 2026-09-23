@@ -7,7 +7,8 @@ ARIE on `main` is a FastAPI application and a separate worker.
 - Web process: HTTP only. `/health` does not run the pipeline.
 - Worker: APScheduler plus a Postgres job queue (`scan`, `revalue`, `sold-revalidate`, `sold-refresh`). One heavy job at a time.
 - Decision path for cameras: ingest, camera identity firewall, sold comps, valuation, landed cost, `BUY` / `WATCH` / `IGNORE` / `REVIEW`, then stricter `BUY_READY` gates.
-- Persistence: PostgreSQL, Alembic through `20260922_0011` on this branch (`20260901_0010` was the previous head).
+- Persistence: PostgreSQL, Alembic through `20260923_0012` on this branch.
+- Commercial vans: `/cv` and the `cv-*` worker jobs. Irish asking prices come from the documented Autoza search when `CV_AUTOZA` is not `0`. The estimator is `arie-native-v1`.
 
 ## Camera decisions
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from statistics import median
 
 from app.core.money import money
@@ -12,6 +12,7 @@ from app.domains.vehicles.comps import CompScore, score_comp
 from app.domains.vehicles.enums import EvidencePosture, LiquidityClass, ObservationStatus
 from app.domains.vehicles.identity import VehicleIdentity
 from app.domains.vehicles.market import MarketBook, MarketObservation
+from app.domains.vehicles.tax import VAT_RATE
 from app.domains.vehicles.policy import (
     ASKING_ONLY_CONFIDENCE_CAP,
     ASKING_TO_ACHIEVABLE_DISCOUNT,
@@ -100,6 +101,11 @@ class ValuationResult:
     bands: tuple[ValueBand, ...] = ()
     source_count: int = 0
     adjustment_reasons: tuple[str, ...] = ()
+    model_version: str = "arie-native-v1"
+    effective_sample_size: Decimal = Decimal("0")
+    vat_basis: str = "as_stated"
+    trade_downside_eur: Decimal | None = None
+    median_comp_age_days: int | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -119,6 +125,11 @@ class ValuationResult:
             "discount_applied": str(self.discount_applied),
             "source_count": self.source_count,
             "adjustment_reasons": list(self.adjustment_reasons),
+            "model_version": self.model_version,
+            "effective_sample_size": str(self.effective_sample_size),
+            "vat_basis": self.vat_basis,
+            "trade_downside_eur": _s(self.trade_downside_eur),
+            "median_comp_age_days": self.median_comp_age_days,
             "bands": [band.to_dict() for band in self.bands],
             "liquidity": self.liquidity.to_dict(),
             "comps": [comp.to_dict() for comp in self.comps],
@@ -156,6 +167,60 @@ def _mad_keep(prices: list[Decimal]) -> list[Decimal]:
         if modified_z <= Decimal("3.5"):
             kept.append(price)
     return kept or list(prices)
+
+
+def _mad_pairs(pairs: list[tuple[Decimal, Decimal]]) -> list[tuple[Decimal, Decimal]]:
+    if len(pairs) < 4:
+        return list(pairs)
+    prices = [price for price, _weight in pairs]
+    centre = Decimal(str(median(prices)))
+    deviations = sorted(abs(price - centre) for price in prices)
+    mad = Decimal(str(median(deviations)))
+    if mad == 0:
+        return list(pairs)
+    kept = [pair for pair in pairs if abs(pair[0] - centre) / mad <= Decimal("3.5")]
+    return kept or list(pairs)
+
+
+def _drop_same_dealer_van(kept: list[CompScore]) -> tuple[list[CompScore], list[CompScore]]:
+    """The same dealer van must not be counted twice. Spec-only matches stay separate."""
+
+    chosen: dict[tuple[str, int | None, int | None, str, str], CompScore] = {}
+    order: list[CompScore] = []
+    duplicates: list[CompScore] = []
+    for row in sorted(kept, key=lambda item: item.score, reverse=True):
+        if not row.dealer_name:
+            order.append(row)
+            continue
+        key = (row.dealer_name.casefold(), row.year, row.mileage_km, str(row.price_eur), row.model_family)
+        if key in chosen:
+            duplicates.append(
+                CompScore(
+                    observation_id=row.observation_id,
+                    listing_id=row.listing_id,
+                    score=row.score,
+                    close=False,
+                    rejected=True,
+                    reasons=row.reasons + ("Same dealer, year, mileage, and price. Not counted twice.",),
+                    price_eur=row.price_eur,
+                    realised=False,
+                    observed_at_iso=row.observed_at_iso,
+                    url=row.url,
+                    seller_type=row.seller_type,
+                    mileage_km=row.mileage_km,
+                    year=row.year,
+                    model_family=row.model_family,
+                    source=row.source,
+                    registration=row.registration,
+                    dealer_name=row.dealer_name,
+                    differences=row.differences,
+                    vat_presentation=row.vat_presentation,
+                )
+            )
+            continue
+        chosen[key] = row
+        order.append(row)
+    return order, duplicates
 
 
 def _liquidity(
@@ -299,6 +364,83 @@ def _asking_discount(
     return discount, tuple(notes)
 
 
+MODEL_VERSION = "arie-native-v1"
+ASKING_MODEL_VERSION = "asking-haircut-v1"
+_INCLUSIVE = {"inclusive", "inc_vat", "vat_inclusive", "gross"}
+_EXCLUSIVE = {"ex_vat", "exclusive", "plus_vat", "vat_exclusive", "net", "qualifying", "vat_qualifying"}
+
+
+def _vat_class(text: str) -> str:
+    folded = (text or "").casefold().replace("-", " ").replace("_", " ")
+    token = folded.strip()
+    compact = token.replace(" ", "_")
+    if compact in _INCLUSIVE or token in _INCLUSIVE:
+        return "inclusive"
+    if compact in _EXCLUSIVE or token in _EXCLUSIVE:
+        return "exclusive"
+    return "unknown"
+
+
+def _weighted_median(prices: list[Decimal], weights: list[Decimal]) -> Decimal:
+    pairs = sorted(zip(prices, weights, strict=True), key=lambda item: item[0])
+    total = sum(weights, Decimal("0"))
+    if total <= 0:
+        return Decimal(str(median(prices)))
+    half = total / Decimal("2")
+    running = Decimal("0")
+    for price, weight in pairs:
+        running += weight
+        if running >= half:
+            return price
+    return pairs[-1][0]
+
+
+def _effective_sample_size(weights: list[Decimal]) -> Decimal:
+    total = sum(weights, Decimal("0"))
+    square = sum((weight * weight for weight in weights), Decimal("0"))
+    if square == 0:
+        return Decimal("0")
+    return (total * total / square).quantize(Decimal("0.01"))
+
+
+def _coarse(value: Decimal | None, low: Decimal | None, high: Decimal | None) -> Decimal | None:
+    """Keep cent precision when the comp range is tight. Wide ranges round to the evidence."""
+
+    if value is None:
+        return None
+    if low is None or high is None or (high - low) < Decimal("200"):
+        return money(value)
+    step = Decimal("100") if (high - low) < Decimal("2000") else Decimal("250")
+    units = (value / step).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    return money(units * step)
+
+
+def _estimate_prices(
+    rows: list[CompScore],
+) -> tuple[list[Decimal], list[Decimal], str, bool, bool]:
+    """Prices on one VAT basis, weights, basis label, whether unknown VAT was used, whether unknown VAT was dropped."""
+
+    classes = [_vat_class(row.vat_presentation) for row in rows if row.price_eur is not None]
+    known = {item for item in classes if item != "unknown"}
+    unknown_present = "unknown" in classes
+    usable = [row for row in rows if row.price_eur is not None]
+    if len(known) <= 1:
+        basis = "ex_vat" if known == {"exclusive"} else "vat_inclusive" if known == {"inclusive"} else "unknown"
+        prices = [row.price_eur for row in usable if row.price_eur is not None]
+        weights = [Decimal(max(row.score, 1)) for row in usable]
+        return prices, weights, basis, unknown_present and basis == "unknown", False
+    prices: list[Decimal] = []
+    weights: list[Decimal] = []
+    for row in usable:
+        kind = _vat_class(row.vat_presentation)
+        if kind == "unknown" or row.price_eur is None:
+            continue
+        amount = row.price_eur if kind == "inclusive" else money(row.price_eur * (Decimal("1") + VAT_RATE))
+        prices.append(amount)
+        weights.append(Decimal(max(row.score, 1)))
+    return prices, weights, "vat_inclusive_ie_23", False, unknown_present
+
+
 def value_vehicle(
     subject: VehicleIdentity,
     book: MarketBook,
@@ -313,10 +455,15 @@ def value_vehicle(
     rejected_rows = [row for row in scored if row.rejected]
     kept = [row for row in scored if not row.rejected and row.price_eur is not None]
     kept, duplicate_rejected = _drop_duplicate_registrations(kept)
-    rejected = tuple(rejected_rows + duplicate_rejected)
+    kept, dealer_duplicates = _drop_same_dealer_van(kept)
+    rejected = tuple(rejected_rows + duplicate_rejected + dealer_duplicates)
     asking = [row for row in kept if not row.realised]
     realised = [row for row in kept if row.realised]
-    asking_prices = _mad_keep([row.price_eur for row in asking if row.price_eur is not None])
+    raw_prices, weights, vat_basis, unknown_vat_used, unknown_vat_dropped = _estimate_prices(asking)
+    paired = list(zip(raw_prices, weights, strict=True))
+    screened = _mad_pairs(paired)
+    asking_prices = [price for price, _weight in screened]
+    asking_weights = [weight for _price, weight in screened]
     realised_prices = [row.price_eur for row in realised if row.price_eur is not None]
     discount, discount_notes = _asking_discount(
         visible=visible,
@@ -325,9 +472,16 @@ def value_vehicle(
         realised_count=len(realised_prices),
     )
     notes: list[str] = list(discount_notes)
-    market_asking = money(Decimal(str(median(asking_prices)))) if asking_prices else None
-    asking_low = money(min(asking_prices)) if asking_prices else None
-    asking_high = money(max(asking_prices)) if asking_prices else None
+    notes.append(f"Model {MODEL_VERSION}. Asking-to-achievable {ASKING_MODEL_VERSION} is an estimate, not a measured clearance rate.")
+    if unknown_vat_dropped:
+        notes.append("Comps with unknown VAT were left out of the central estimate because other comps had a known VAT basis.")
+    if vat_basis == "vat_inclusive_ie_23":
+        notes.append("Mixed VAT presentations were converted to VAT-inclusive euro at the Irish 23% rate.")
+    if unknown_vat_used:
+        notes.append("VAT presentation is unknown, so prices were not grossed up and confidence is capped.")
+    market_asking = money(_weighted_median(asking_prices, asking_weights)) if asking_prices else None
+    asking_low = money(_percentile(asking_prices, Decimal("0.20"))) if asking_prices else None
+    asking_high = money(_percentile(asking_prices, Decimal("0.80"))) if asking_prices else None
     asking_haircut = discount if discount > 0 else ASKING_TO_ACHIEVABLE_DISCOUNT
 
     if len(realised_prices) >= MIN_REALISED_FOR_UNCAPPED_CONFIDENCE:
@@ -379,20 +533,48 @@ def value_vehicle(
     )
     haircut = LIQUIDITY_QUICK_SALE_HAIRCUT[liquidity.classification.value]
     quick = money(conservative * (Decimal("1") - haircut)) if conservative is not None else None
+    trade_downside = money(_percentile(adjusted, Decimal("0.10"))) if asking_prices and expected is not None else None
 
     close_count = sum(1 for row in kept if row.close)
     confidence = _confidence(kept, realised, close_count, fresh_rows, as_of)
+    if unknown_vat_used:
+        confidence = min(confidence, Decimal("0.55"))
+    sample_size = _effective_sample_size(asking_weights) if asking_weights else Decimal("0")
     freshness_hours = None
     if fresh_rows:
         newest = max(row.observed_at for row in fresh_rows)
         freshness_hours = int((as_of - newest).total_seconds() // 3600)
-    fresh = bool(fresh_rows) and expected is not None
-    if not fresh:
+    fresh_book = bool(fresh_rows) and expected is not None
+    enough = len(kept) >= 5 and close_count >= 3
+    if not fresh_book:
         notes.append("Market evidence is missing or older than the freshness window. No resale value is issued from stale comps.")
         market_asking = None
         expected = None
         conservative = None
         quick = None
+        trade_downside = None
+        asking_low = None
+        asking_high = None
+        fresh = False
+    elif not enough:
+        notes.append("Fewer than 5 kept comps or fewer than 3 close comps. No resale value is issued.")
+        market_asking = None
+        expected = None
+        conservative = None
+        quick = None
+        trade_downside = None
+        asking_low = None
+        asking_high = None
+        fresh = False
+    else:
+        fresh = True
+        market_asking = _coarse(market_asking, asking_low, asking_high)
+        expected = _coarse(expected, asking_low, asking_high)
+        conservative = _coarse(conservative, asking_low, asking_high)
+        quick = _coarse(quick, asking_low, asking_high)
+        trade_downside = _coarse(trade_downside, asking_low, asking_high)
+        asking_low = _coarse(asking_low, asking_low, asking_high)
+        asking_high = _coarse(asking_high, asking_low, asking_high)
 
     source_count = len({row.source for row in kept if row.source})
     depth = liquidity.classification.value
@@ -442,6 +624,11 @@ def value_vehicle(
         bands=bands,
         source_count=source_count,
         adjustment_reasons=tuple(discount_notes),
+        model_version=MODEL_VERSION,
+        effective_sample_size=sample_size,
+        vat_basis=vat_basis,
+        trade_downside_eur=trade_downside,
+        median_comp_age_days=liquidity.median_age_days,
     )
 
 

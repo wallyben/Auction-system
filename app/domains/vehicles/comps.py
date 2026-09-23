@@ -12,6 +12,20 @@ from app.domains.vehicles.policy import COMP_CLOSE_SCORE, COMP_MIN_SCORE
 
 _GOODS_BODIES = {"PANEL", "CHASSIS", "TIPPER", "DROPSIDE", "LUTON"}
 _PEOPLE_BODIES = {"CREW", "KOMBI", "MINIBUS", "WINDOW"}
+_PASSENGER_TOKENS = (
+    "tourneo",
+    "caravelle",
+    "california",
+    "multivan",
+    "traveller",
+    "minibus",
+    "crew van",
+    "crewvan",
+    "window van",
+    "mpv",
+    "kombi",
+)
+_NON_RUNNER_TOKENS = ("non runner", "non-runner", "does not start", "no engine", "spares/repair")
 _DAMAGE_TOKENS = (
     "salvage",
     "cat s",
@@ -47,6 +61,9 @@ class CompScore:
     model_family: str
     source: str = ""
     registration: str = ""
+    dealer_name: str = ""
+    differences: tuple[str, ...] = ()
+    vat_presentation: str = ""
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -66,6 +83,9 @@ class CompScore:
             "model_family": self.model_family,
             "source": self.source,
             "registration": self.registration,
+            "dealer_name": self.dealer_name,
+            "differences": list(self.differences),
+            "vat_presentation": self.vat_presentation,
         }
 
 
@@ -79,16 +99,23 @@ def score_comp(subject: VehicleIdentity, comp: MarketObservation) -> CompScore:
     if comp.model_family != subject.model_family or comp.manufacturer != subject.manufacturer:
         rejected = True
         reasons.append("Different manufacturer or model family. Sibling platforms are not comps.")
-        return _finish(comp, 0, rejected, reasons, subject)
+        return _finish(comp, 0, rejected, reasons, [], subject)
 
     title = (comp.listing_title or "").lower()
     flags = {flag.lower() for flag in comp.condition_flags}
     if flags.intersection(_DAMAGE_TOKENS) or any(token in title for token in _DAMAGE_TOKENS):
         rejected = True
         reasons.append("Damaged, salvage, or spares listing rejected.")
+    if any(token in title for token in _PASSENGER_TOKENS):
+        rejected = True
+        reasons.append("Passenger, crew, or people-mover title rejected.")
+    if any(token in title for token in _NON_RUNNER_TOKENS):
+        rejected = True
+        reasons.append("Non-runner or spares title rejected.")
 
     score = 30
     reasons.append("Same model family (+30).")
+    differences: list[str] = []
 
     if subject.generation and comp.generation:
         if subject.generation == comp.generation:
@@ -125,6 +152,7 @@ def score_comp(subject: VehicleIdentity, comp: MarketObservation) -> CompScore:
         else:
             score -= 4
             reasons.append("Transmission mismatch (-4).")
+            differences.append("transmission")
 
     if subject.year and comp.year:
         gap = abs(subject.year - comp.year)
@@ -167,6 +195,7 @@ def score_comp(subject: VehicleIdentity, comp: MarketObservation) -> CompScore:
         else:
             score -= 6
             reasons.append("Roof mismatch (-6).")
+            differences.append("roof")
     if subject.engine and comp.engine:
         if subject.engine == comp.engine:
             score += 6
@@ -174,6 +203,7 @@ def score_comp(subject: VehicleIdentity, comp: MarketObservation) -> CompScore:
         else:
             score -= 8
             reasons.append("Engine mismatch (-8).")
+            differences.append("engine")
     if subject.derivative and comp.derivative and subject.derivative == comp.derivative:
         score += 4
         reasons.append("Same derivative (+4).")
@@ -181,10 +211,17 @@ def score_comp(subject: VehicleIdentity, comp: MarketObservation) -> CompScore:
     if score < COMP_MIN_SCORE:
         rejected = True
         reasons.append(f"Score {score} below {COMP_MIN_SCORE}.")
-    return _finish(comp, score, rejected, reasons, subject)
+    return _finish(comp, score, rejected, reasons, differences, subject)
 
 
-def _finish(comp: MarketObservation, score: int, rejected: bool, reasons: list[str], subject: VehicleIdentity) -> CompScore:
+def _finish(
+    comp: MarketObservation,
+    score: int,
+    rejected: bool,
+    reasons: list[str],
+    differences: list[str],
+    subject: VehicleIdentity,
+) -> CompScore:
     del subject
     realised = comp.status is ObservationStatus.REALISED_SALE and comp.realised_price_eur is not None
     price = comp.realised_price_eur if realised else comp.asking_price_eur
@@ -212,4 +249,7 @@ def _finish(comp: MarketObservation, score: int, rejected: bool, reasons: list[s
         model_family=comp.model_family,
         source=comp.source,
         registration=(comp.registration or "").upper().replace(" ", ""),
+        dealer_name=comp.dealer_name or "",
+        differences=tuple(differences),
+        vat_presentation=comp.vat_presentation,
     )

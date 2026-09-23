@@ -45,6 +45,7 @@ class MarketObservation:
     native_currency: str | None = None
     parser_version: str | None = None
     raw_reference: str | None = None
+    dealer_name: str | None = None
 
 
 @dataclass(slots=True)

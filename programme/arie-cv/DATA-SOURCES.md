@@ -1,14 +1,14 @@
 # ARIE-CV data sources
 
-Retrieved and reviewed 2026-09-22, rechecked 2026-09-23. The classification and the legal ingestion path for each source are in `PHASE2-AUDIT.md`.
+Retrieved and reviewed 2026-09-22, rechecked 2026-09-23. The classification and the legal ingestion path for each source are in `PHASE2-AUDIT.md`. The native estimator is in `NATIVE-MARKET-ENGINE.md`.
 
-`enabled_live_fetchers()` is empty unless eBay van credentials or `CV_DEALER_FEED_URLS` are set. Mid Ulster is owner catalogue capture, not a crawl. DoneDeal, Carzone, CarsIreland, Adverts.ie, and Wilsons are not scraped.
+`enabled_live_fetchers()` includes `autoza` unless `CV_AUTOZA=0`. eBay vans and dealer URLs stay off until configured. Mid Ulster is owner catalogue capture, not a crawl. DoneDeal, Carzone, CarsIreland, Adverts.ie, and Wilsons are not scraped.
 
-Cartell and Motorcheck are `BLOCKED_CREDENTIALS`: the owner can buy a trade subscription. They are not marked `BLOCKED_EXTERNAL`.
+Cartell and Motorcheck are `OPTIONAL_CALIBRATION`. They are not required for a shadow candidate and they are not called.
 
 ## What a market observation stores
 
-Canonical family, listing id, seller type, asking or realised price, VAT presentation, mileage, year, derivative, body, engine/fuel, transmission, wheelbase, roof, location, observed time, status, source. Historical rows are not updated. A later price is a new row. Derived listing state is `ACTIVE`, `PRICE_REDUCED`, `DISAPPEARED`, `RELISTED`, `RETURNED`, or `UNKNOWN`. Only an explicit `REALISED_SALE` with a realised price is a sale.
+Canonical family, listing id, seller type, asking or realised price, VAT presentation, mileage, year, derivative, body, engine/fuel, transmission, wheelbase, roof, location, observed time, status, source. Historical rows are not updated. A later price is a new row. Derived listing state is `ACTIVE`, `PRICE_REDUCED`, `PRICE_INCREASED`, `DISAPPEARED`, `RELISTED`, `RETURNED`, or `UNKNOWN`. Only an explicit `REALISED_SALE` with a realised price is a sale.
 
 ## Fee schedules
 

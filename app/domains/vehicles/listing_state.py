@@ -17,6 +17,7 @@ _GONE = {
 _PRICE = {
     ObservationStatus.ACTIVE,
     ObservationStatus.PRICE_REDUCED,
+    ObservationStatus.PRICE_INCREASED,
     ObservationStatus.RELISTED,
     ObservationStatus.RETURNED,
     ObservationStatus.REALISED_SALE,
@@ -92,8 +93,10 @@ def _status(ordered: list[MarketObservation]) -> str:
     if previous_gone:
         return ObservationStatus.RETURNED.value
     prices = [row.asking_price_eur for row in ordered if row.asking_price_eur is not None]
-    if len(prices) >= 2 and prices[-1] < prices[0]:
+    if len(prices) >= 2 and prices[-1] < prices[-2]:
         return ObservationStatus.PRICE_REDUCED.value
+    if len(prices) >= 2 and prices[-1] > prices[-2]:
+        return ObservationStatus.PRICE_INCREASED.value
     if latest.status is ObservationStatus.RELISTED:
         return ObservationStatus.RELISTED.value
     if latest.status in _PRICE:
@@ -112,10 +115,9 @@ def status_for_new_observation(
     latest = ordered[-1]
     if latest.status in _GONE:
         return ObservationStatus.RETURNED
-    if (
-        asking_price_eur is not None
-        and latest.asking_price_eur is not None
-        and asking_price_eur < latest.asking_price_eur
-    ):
-        return ObservationStatus.PRICE_REDUCED
+    if asking_price_eur is not None and latest.asking_price_eur is not None:
+        if asking_price_eur < latest.asking_price_eur:
+            return ObservationStatus.PRICE_REDUCED
+        if asking_price_eur > latest.asking_price_eur:
+            return ObservationStatus.PRICE_INCREASED
     return ObservationStatus.ACTIVE

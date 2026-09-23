@@ -45,9 +45,9 @@ def shadow_count() -> int:
         return len(_SHADOW)
 
 
-def shadow_rows() -> list[dict[str, object]]:
+def tracked_titles() -> list[str]:
     with _LOCK:
-        return list(_SHADOW)
+        return [row.title for row in _ROWS if row.title]
 
 
 def view(name: str) -> list[dict[str, object]]:

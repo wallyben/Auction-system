@@ -213,6 +213,10 @@ def test_history_and_images_stay_closed_without_credentials(monkeypatch) -> None
     )
     assert tests[0].jurisdiction is None
     assert observe_images(("https://example.test/van.jpg",)) == ()
+    monkeypatch.delenv("EBAY_CLIENT_ID", raising=False)
+    monkeypatch.delenv("EBAY_CLIENT_SECRET", raising=False)
+    monkeypatch.delenv("CV_DEALER_FEED_URLS", raising=False)
+    monkeypatch.setenv("CV_AUTOZA", "0")
     assert enabled_live_fetchers() == ()
 
 

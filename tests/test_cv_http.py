@@ -114,7 +114,8 @@ def test_cv_dashboard_defaults_to_an_empty_candidate_list() -> None:
     assert "No vehicles in this view" in page.text
     assert "does not bid" in page.text
     assert sources.json()["purchasing_enabled"] is False
-    assert sources.json()["live_fetchers"] == []
+    described = {row["source_id"]: row["status"] for row in sources.json()["sources"]}
+    assert described["autoza"] == "LIVE_PUBLIC"
 
 
 def test_incomplete_case_is_not_buy_candidate() -> None:
