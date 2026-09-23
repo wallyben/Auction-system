@@ -132,9 +132,9 @@ def vehicle_sources() -> tuple[VehicleSource, ...]:
             name="Cartell / Motorcheck",
             geography="IE",
             role="history",
-            status="BLOCKED_EXTERNAL",
+            status="BLOCKED_CREDENTIALS",
             access="Paid Irish vehicle-history reports.",
-            reason="No paid subscription is configured. Finance, write-off, and stolen results are not inferred.",
+            reason="Paid Irish vehicle-history reports. The owner can buy a trade subscription. No key is configured, so finance, write-off, and stolen results are not inferred.",
             buyer_premium="n/a",
             vat="n/a",
             registration_visible="Report-specific.",
@@ -184,13 +184,45 @@ def vehicle_sources() -> tuple[VehicleSource, ...]:
             results_available="Not ingested.",
         ),
         VehicleSource(
+            source_id="mid_ulster",
+            name="Mid Ulster Auctions (Dulster)",
+            geography="NI",
+            role="acquisition",
+            status="MANUAL_ONLY",
+            access="Owner pastes or uploads the catalogue they are using. ARIE does not download the website.",
+            reason=(
+                "Public catalogues exist and robots.txt allows a slow crawl except /login, /signup, and /search. "
+                "The terms say website text may not be copied without written consent, so unattended ingestion is not enabled. "
+                "The owner-capture parser reads lot id, title, registration, year, mileage, VAT, vendor, documents, MOT/PSV, bid, and close time when those lines are in the paste."
+            ),
+            buyer_premium="Parsed only from the Cars, Vans bands in the supplied catalogue. Otherwise unknown.",
+            vat="Lot VAT Yes/No when printed. Premium VAT only when the catalogue says plus VAT. UK 20%, not Irish 23%.",
+            registration_visible="When the catalogue line Serial/Reg# is present.",
+            vin_visible="Not in the public lot summary. Owner document required.",
+            results_available="Not inferred from a closed catalogue. A realised price must be entered as a realised observation.",
+        ),
+        VehicleSource(
+            source_id="dealer_stock_feed",
+            name="Owner-consented dealer stock feed",
+            geography="IE",
+            role="market",
+            status="BLOCKED_CREDENTIALS",
+            access="CSV or JSON the owner is allowed to store, or CV_DEALER_FEED_URLS for feeds the owner is permitted to pull.",
+            reason="DoneDeal, Carzone, CarsIreland, and Adverts do not allow multi-dealer aggregation. A consented single-dealer feed is the lawful market path.",
+            buyer_premium="n/a",
+            vat="Taken from the feed column when present. Not guessed.",
+            registration_visible="Only if the feed includes it.",
+            vin_visible="Only if the feed includes it.",
+            results_available="Disappearance is stored and is not treated as a sale.",
+        ),
+        VehicleSource(
             source_id="ebay_motors",
             name="eBay Motors",
             geography="IE/GB/NI",
             role="acquisition_and_market",
             status="DISABLED",
             access="Official Browse API already exists for the camera pipeline.",
-            reason="The live eBay adapter is camera-filtered and is not certified for vans. It is not called from ARIE-CV.",
+            reason="The camera Browse adapter is not used for vans. A separate van search runs only when EBAY_CLIENT_ID and EBAY_CLIENT_SECRET are set and CV_EBAY_VANS is not 0.",
             buyer_premium="n/a",
             vat="Listing-specific.",
             registration_visible="Varies.",
@@ -201,6 +233,14 @@ def vehicle_sources() -> tuple[VehicleSource, ...]:
 
 
 def enabled_live_fetchers() -> tuple[str, ...]:
-    """Network fetchers that ARIE-CV is willing to call. Intentionally empty."""
+    """Network fetchers ARIE-CV may call. Empty unless a permitted credential exists."""
 
-    return ()
+    import os
+
+    live: list[str] = []
+    if os.environ.get("EBAY_CLIENT_ID", "").strip() and os.environ.get("EBAY_CLIENT_SECRET", "").strip():
+        if os.environ.get("CV_EBAY_VANS", "1") != "0":
+            live.append("ebay_vans")
+    if os.environ.get("CV_DEALER_FEED_URLS", "").strip():
+        live.append("dealer_stock_feed")
+    return tuple(live)

@@ -34,7 +34,34 @@ _OFFLOAD = ("asyncio.to_thread", "to_thread", "isolated_session_async", "run_in_
 
 
 def _http_routes() -> list[APIRoute]:
-    return [route for route in app.routes if isinstance(route, APIRoute)]
+    """API routes, including routers nested by current FastAPI.
+
+    Older FastAPI copies routes onto ``app.routes``. Current FastAPI keeps an
+    included router as ``_IncludedRouter``. Both shapes are walked. The audit
+    still fails if an async handler blocks the loop.
+    """
+
+    found: list[APIRoute] = []
+    seen: set[int] = set()
+
+    def walk(routes: object) -> None:
+        for route in routes:  # type: ignore[union-attr]
+            if isinstance(route, APIRoute):
+                if id(route) in seen:
+                    continue
+                seen.add(id(route))
+                found.append(route)
+                continue
+            original = getattr(route, "original_router", None)
+            if original is not None:
+                walk(original.routes)
+                continue
+            nested = getattr(route, "routes", None)
+            if nested:
+                walk(nested)
+
+    walk(app.routes)
+    return found
 
 
 def test_health_router_module_is_not_mounted() -> None:

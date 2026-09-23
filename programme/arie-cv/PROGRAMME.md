@@ -17,14 +17,14 @@ Camera coupling is isolated, not retired. The worker was not given a van job. Th
 | Phase | Status | What exists | What does not |
 |---|---|---|---|
 | CV-001 domain model | IMPLEMENTED, TESTED | `app/domains/vehicles` types for identity, evidence, costs, decisions | Not a second database product catalogue beyond market observations |
-| CV-002 auction sources | PARTIAL, BLOCKED_EXTERNAL / BLOCKED_POLICY | Independently described sources. `enabled_live_fetchers()` is empty. Manual capture only | No Wilsons, BCA, Manheim, Copart, or eBay Motors fetch |
+| CV-002 auction sources | PARTIAL | Mid Ulster owner-catalogue parser. No unattended crawl | Wilsons, BCA, Manheim, and Copart remain blocked. See PHASE2-AUDIT.md |
 | CV-003 identity | IMPLEMENTED, TESTED | Family parser, VIN/listing split, reappearance keys, passenger and parts rejection | No DVLA/NVDF register lookup |
-| CV-004 history | PARTIAL, TESTED logic | Mileage rollback, and stolen/finance/write-off only when a check result is supplied | DVSA and Cartell/Motorcheck are blocked. Unchecked is not clear |
+| CV-004 history | PARTIAL, TESTED logic | Mileage rollback, supplied check results, and a DVSA contract that stays off without keys | Cartell and Motorcheck need a subscription. NCT and CVRT have no public API |
 | CV-005 provenance | IMPLEMENTED, TESTED | Seven states. Plate shape is not customs status | Revenue still verifies documents. ARIE does not |
 | CV-006 tax | IMPLEMENTED, TESTED | Version `ie-cv-tax-2026-09-22`. Separate VRT, NOx, duty, import VAT, auction VAT | Not tax advice. No assumed 10% van duty. No live OMSP lookup |
 | CV-007 auction costs | IMPLEMENTED, TESTED | Versioned schedules, whole-hammer premium bands, VAT on premium and lot | No production van fee schedule is loaded |
-| CV-008 market book | PARTIAL, TESTED | Append-only observations, disappearance is not a sale, table `cv_market_observations` | No licensed Irish inventory feed |
-| CV-009 comps | IMPLEMENTED, TESTED | Scored comps. Sibling vans are rejected | Not an LLM selector |
+| CV-008 market book | PARTIAL, TESTED | Append-only observations, listing lifecycle, dealer-feed parser, eBay van mapper behind credentials | No consented Irish feed is configured |
+| CV-009 comps | IMPLEMENTED, TESTED | Scored comps. Generation, wheelbase, fuel, salvage, and duplicate-registration mismatches are rejected | Not an LLM selector |
 | CV-010 valuation | IMPLEMENTED, TESTED | Asking, achievable, conservative, quick-sale, confidence cap when sales are thin | No calibration against realised Irish van sales |
 | CV-011 reconditioning | PARTIAL, TESTED | Declared-fault reserves plus a non-zero unknown-mechanical reserve | No image model. Photographs are not read |
 | CV-012 landed cost | IMPLEMENTED, TESTED | Line-level stack. Unknown lines block the total | — |
@@ -32,10 +32,10 @@ Camera coupling is isolated, not retired. The worker was not given a van job. Th
 | CV-014 maximum bid | IMPLEMENTED, TESTED | Cent search over the real fee and tax function | — |
 | CV-015 gates | IMPLEMENTED, TESTED | Fail closed. Zero candidates is valid | — |
 | CV-016 report | IMPLEMENTED, TESTED | Structured report and `/cv` HTML | — |
-| CV-017 dashboard | PARTIAL, TESTED | `/cv` defaults to shadow candidates. Legacy `/` remains the camera floor | Board is process-local, not durable across dynos |
+| CV-017 dashboard | PARTIAL, TESTED | `/cv` defaults to shadow candidates and can reload stored evaluations | Empty until a case is evaluated. Not a live auction floor |
 | CV-018 backtest | PARTIAL, TESTED harness | `evaluate_as_of` hides later observations | No historical auction corpus. Not validated |
-| CV-019 shadow live | NOT STARTED | — | No live auction inventory |
-| CV-020 certification | NOT CERTIFIED | Thresholds below | None of the thresholds have been measured |
+| CV-019 shadow live | NOT STARTED | Snapshot hook exists. A stale buy is downgraded on the board | No live auction inventory and no live Irish book |
+| CV-020 certification | NOT CERTIFIED | Thresholds are defined. An empty sample is `NOT_STARTED`, not a pass | None of the thresholds have been measured |
 
 ## Why this order
 

@@ -12,6 +12,21 @@ from app.domains.vehicles.policy import COMP_CLOSE_SCORE, COMP_MIN_SCORE
 
 _GOODS_BODIES = {"PANEL", "CHASSIS", "TIPPER", "DROPSIDE", "LUTON"}
 _PEOPLE_BODIES = {"CREW", "KOMBI", "MINIBUS", "WINDOW"}
+_DAMAGE_TOKENS = (
+    "salvage",
+    "cat s",
+    "cat n",
+    "cat c",
+    "cat d",
+    "category s",
+    "category n",
+    "write-off",
+    "write off",
+    "for spares",
+    "spares or repair",
+    "accident damaged",
+    "damaged",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +45,8 @@ class CompScore:
     mileage_km: int | None
     year: int | None
     model_family: str
+    source: str = ""
+    registration: str = ""
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -47,6 +64,8 @@ class CompScore:
             "mileage_km": self.mileage_km,
             "year": self.year,
             "model_family": self.model_family,
+            "source": self.source,
+            "registration": self.registration,
         }
 
 
@@ -62,6 +81,12 @@ def score_comp(subject: VehicleIdentity, comp: MarketObservation) -> CompScore:
         reasons.append("Different manufacturer or model family. Sibling platforms are not comps.")
         return _finish(comp, 0, rejected, reasons, subject)
 
+    title = (comp.listing_title or "").lower()
+    flags = {flag.lower() for flag in comp.condition_flags}
+    if flags.intersection(_DAMAGE_TOKENS) or any(token in title for token in _DAMAGE_TOKENS):
+        rejected = True
+        reasons.append("Damaged, salvage, or spares listing rejected.")
+
     score = 30
     reasons.append("Same model family (+30).")
 
@@ -70,8 +95,8 @@ def score_comp(subject: VehicleIdentity, comp: MarketObservation) -> CompScore:
             score += 10
             reasons.append("Same generation (+10).")
         else:
-            score -= 15
-            reasons.append("Generation mismatch (-15).")
+            rejected = True
+            reasons.append("Generation mismatch rejected.")
 
     subject_body = _body_name(subject)
     comp_body = (comp.body or "UNKNOWN").upper()
@@ -133,11 +158,22 @@ def score_comp(subject: VehicleIdentity, comp: MarketObservation) -> CompScore:
             score += 6
             reasons.append("Same wheelbase (+6).")
         else:
+            rejected = True
+            reasons.append("Wheelbase mismatch rejected.")
+    if subject.roof and comp.roof:
+        if subject.roof == comp.roof:
+            score += 4
+            reasons.append("Same roof (+4).")
+        else:
+            score -= 6
+            reasons.append("Roof mismatch (-6).")
+    if subject.engine and comp.engine:
+        if subject.engine == comp.engine:
+            score += 6
+            reasons.append("Same engine (+6).")
+        else:
             score -= 8
-            reasons.append("Wheelbase mismatch (-8).")
-    if subject.roof and comp.roof and subject.roof == comp.roof:
-        score += 4
-        reasons.append("Same roof (+4).")
+            reasons.append("Engine mismatch (-8).")
     if subject.derivative and comp.derivative and subject.derivative == comp.derivative:
         score += 4
         reasons.append("Same derivative (+4).")
@@ -174,4 +210,6 @@ def _finish(comp: MarketObservation, score: int, rejected: bool, reasons: list[s
         mileage_km=comp.mileage_km,
         year=comp.year,
         model_family=comp.model_family,
+        source=comp.source,
+        registration=(comp.registration or "").upper().replace(" ", ""),
     )

@@ -163,6 +163,7 @@ class VehicleIdentity:
     roof: str | None = None
     doors: str | None = None
     fuel: Fuel = Fuel.UNKNOWN
+    engine: str | None = None
     power_ps: int | None = None
     transmission: str | None = None
     year: int | None = None

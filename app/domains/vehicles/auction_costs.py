@@ -14,10 +14,15 @@ from app.domains.vehicles.tax import VAT_RATE
 
 @dataclass(frozen=True, slots=True)
 class PremiumBand:
-    """Rate applied to the whole hammer when the hammer is at or below ``up_to``."""
+    """Rate applied to the whole hammer when the hammer is at or below ``up_to``.
+
+    ``fixed_eur`` is a published flat premium for that band. When it is set,
+    the percentage is not used.
+    """
 
     up_to_eur: Decimal | None
     percent: Decimal
+    fixed_eur: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +51,8 @@ def buyer_premium(schedule: AuctionFeeSchedule, hammer: Decimal) -> Decimal:
         if band.up_to_eur is None or hammer <= band.up_to_eur:
             selected = band
             break
+    if selected.fixed_eur is not None:
+        return money(selected.fixed_eur)
     return money(max(hammer * selected.percent, schedule.minimum_premium_eur))
 
 
@@ -73,6 +80,7 @@ def auction_costs(
     commercial_vat_invoice_expected: bool,
     payment_fee_eur: Decimal | None,
     payment_fee_posture: EvidencePosture,
+    lot_vat_rate: Decimal | None = None,
 ) -> AuctionCostResult:
     lines: list[MoneyLine] = [
         MoneyLine("hammer", money(hammer_eur), EvidencePosture.PROVEN, "bid", "Hammer in EUR"),
@@ -129,7 +137,8 @@ def auction_costs(
     elif hammer_is_vat_inclusive:
         # Cash already includes VAT. Economic cost removes it only when recovery is supported.
         if owner_vat_registered and commercial_vat_invoice_expected:
-            extracted = money(hammer_eur - (hammer_eur / (Decimal("1") + VAT_RATE)))
+            inclusive_rate = VAT_RATE if lot_vat_rate is None else lot_vat_rate
+            extracted = money(hammer_eur - (hammer_eur / (Decimal("1") + inclusive_rate)))
             lot_vat_cash = ZERO
             lot_vat_economic = money(ZERO - extracted)
             lines.append(
@@ -154,7 +163,8 @@ def auction_costs(
                 )
             )
     else:
-        lot_vat_cash = money(hammer_eur * VAT_RATE)
+        rate = VAT_RATE if lot_vat_rate is None else lot_vat_rate
+        lot_vat_cash = money(hammer_eur * rate)
         if owner_vat_registered and commercial_vat_invoice_expected:
             lot_vat_economic = ZERO
             note = "Standard-rated hammer. Input VAT is treated as recoverable for a VAT-registered buyer with an invoice."

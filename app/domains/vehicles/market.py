@@ -37,6 +37,14 @@ class MarketObservation:
     source: str
     url: str | None = None
     confidence: Decimal = Decimal("0.5")
+    registration: str | None = None
+    engine: str | None = None
+    listing_title: str | None = None
+    condition_flags: tuple[str, ...] = ()
+    native_price: Decimal | None = None
+    native_currency: str | None = None
+    parser_version: str | None = None
+    raw_reference: str | None = None
 
 
 @dataclass(slots=True)

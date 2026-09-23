@@ -4,11 +4,11 @@
 <section class="hero">
   <h1>Commercial van candidates</h1>
   <p>Shadow mode. ARIE-CV does not bid, buy, or pay. A result is not a certified purchasing instruction.</p>
-  <p class="meta">Tax rules {{ tax_rule_version }}, retrieved {{ tax_retrieved }}. Live auction fetchers: {{ live_fetchers|length }}.</p>
+  <p class="meta">Tax rules {{ tax_rule_version }}, retrieved {{ tax_retrieved }}. Live fetchers: {{ live_fetchers|join(", ") or "none" }}. Market observations in this process: {{ book_size }}. Shadow snapshots: {{ shadow_count }}. Certification: {{ certification.posture }}.</p>
 </section>
 
 <nav class="controls wrap">
-  <a href="/cv?view_name=candidates">Buy candidates</a>
+  <a href="/cv?view_name=candidates">Buy / shadow candidates</a>
   <a href="/cv?view_name=manual">Needs manual evidence</a>
   <a href="/cv?view_name=price">Price too high</a>
   <a href="/cv?view_name=rejected">Rejected</a>
@@ -16,34 +16,67 @@
   <a href="/cv?view_name=all">All evaluations</a>
 </nav>
 
+{% if notice %}<p class="meta">{{ notice }}</p>{% endif %}
+{% if error %}<p class="warn">{{ error }}</p>{% endif %}
+
 <section>
   <h2>This view</h2>
-  <p class="meta">The board is this web process only. It is empty until an evaluation is submitted here. Zero candidates is a valid result. Market evidence is whatever was supplied with the case, not a live Irish crawl.</p>
+  <p class="meta">Default is shadow candidates that passed every gate. Raw catalogue lots that fail a gate stay off this list. A cached candidate older than the market window, or past its close, is downgraded. ARIE-CV does not bid.</p>
   {% if candidates %}
   <table>
     <thead>
       <tr>
         <th>Vehicle</th>
-        <th>State</th>
+        <th>Auction</th>
+        <th>Closes</th>
         <th>Current bid</th>
         <th>Max safe bid</th>
-        <th>Headroom</th>
+        <th>Expected all-in</th>
+        <th>Quick sale</th>
         <th>Expected profit</th>
+        <th>Downside</th>
         <th>Confidence</th>
-        <th>Liquidity</th>
+        <th>Irish comps</th>
+        <th>Provenance</th>
+        <th>Tax</th>
+        <th>History</th>
       </tr>
     </thead>
     <tbody>
       {% for row in candidates %}
       <tr>
-        <td>{{ row.summary_vehicle }}<br><span class="muted">{{ row.title }}</span></td>
-        <td><span class="pill">{{ row.state.value }}</span><br><span class="muted">{{ row.certification.value }}</span></td>
-        <td>{{ row.current_bid_eur if row.current_bid_eur is not none else "—" }}</td>
-        <td>{{ row.bid.max_safe_hammer_eur if row.bid.max_safe_hammer_eur is not none else "—" }}</td>
-        <td>{{ row.headroom_eur if row.headroom_eur is not none else "—" }}</td>
-        <td>{{ row.expected_profit_at_current_eur if row.expected_profit_at_current_eur is not none else "—" }}</td>
+        <td>{{ row.vehicle }}<br><span class="muted">{{ row.title }}</span><br><span class="pill">{{ row.state }}</span> {{ row.certification }}</td>
+        <td>{{ row.auction }}</td>
+        <td>{{ row.closes_at or "—" }}</td>
+        <td>{{ row.current_bid_eur or "—" }}</td>
+        <td>{{ row.maximum_safe_bid_eur or "—" }}</td>
+        <td>{{ row.expected_all_in_eur or "—" }}</td>
+        <td>{{ row.valuation.quick_sale_eur or "—" }}</td>
+        <td>{{ row.expected_profit_at_current_eur or "—" }}</td>
+        <td>{{ row.downside_profit_at_current_eur or "—" }}</td>
         <td>{{ row.valuation.confidence }}</td>
-        <td>{{ row.valuation.liquidity.classification.value }}</td>
+        <td>{{ row.irish_comparable_count }}</td>
+        <td>{{ row.provenance_status }}</td>
+        <td>{{ row.tax_status }}</td>
+        <td>{{ row.history_status }}</td>
+      </tr>
+      <tr>
+        <td colspan="14">
+          <details>
+            <summary>Due diligence, comps, costs, missing evidence</summary>
+            <p>{{ row.why }}</p>
+            <p>Major risks:
+              {% for risk in row.major_risks %}{{ risk.name }} {{ risk.level }}. {% endfor %}
+            </p>
+            <ul>
+              {% for action in row.owner_actions %}<li>{{ action }}</li>{% endfor %}
+            </ul>
+            <p>Failed gates: {{ row.gates.failures|join(", ") or "none" }}</p>
+            {% for comp in row.valuation.comps %}
+            <p class="muted">{{ comp.model_family }} {{ comp.year or "" }} score {{ comp.score }} €{{ comp.price_eur }} — {{ comp.reasons|join(" ") }}</p>
+            {% endfor %}
+          </details>
+        </td>
       </tr>
       {% endfor %}
     </tbody>
@@ -51,6 +84,35 @@
   {% else %}
   <p class="warn">No vehicles in this view.</p>
   {% endif %}
+</section>
+
+<section>
+  <h2>Mid Ulster catalogue</h2>
+  <p class="meta">Paste the catalogue text you are allowed to keep. ARIE does not fetch the auction website. Non-vans are skipped. Lots that fail a gate do not become buy candidates. A sterling bid needs a fresh EUR rate or the bid is ignored.</p>
+  <form method="post" action="/cv/capture/mid-ulster">
+    <textarea name="catalogue" rows="10" style="width:100%; font: 13px/1.4 ui-monospace, monospace;" placeholder="Paste the Mid Ulster lot text, including Serial/Reg, mileage, VAT, and the buyers premium table if it is in your catalogue."></textarea>
+    <p>EUR per GBP <input name="fx_eur_per_gbp" placeholder="1.17"> retrieved at <input name="fx_retrieved_at" placeholder="2026-09-23T09:00:00+00:00"></p>
+    <p><button class="primary" type="submit">Extract and evaluate vans</button></p>
+  </form>
+</section>
+
+<section>
+  <h2>Irish market observations</h2>
+  <p class="meta">Append dealer stock you are entitled to record. CSV or JSON. Rows are not overwritten. A missing listing is not marked sold by this form.</p>
+  <form method="post" action="/cv/market/feed">
+    <textarea name="feed_text" rows="6" style="width:100%; font: 13px/1.4 ui-monospace, monospace;" placeholder="listing_id,manufacturer,model_family,year,fuel,body,asking_price_eur,mileage_km,location,seller_type"></textarea>
+    <p><button type="submit">Append observations</button></p>
+  </form>
+</section>
+
+<section>
+  <h2>Owner documents</h2>
+  <p class="meta">V5C, CoC, NI import declaration, auction invoice, service record, history report, weight plate, VIN, or photos. A sentence cannot pass a gate. Structured fields are applied only when they match the existing provenance and tax rules.</p>
+  <form method="post" action="/cv/evidence">
+    <textarea name="document" rows="5" style="width:100%; font: 13px/1.4 ui-monospace, monospace;" placeholder='{"kind":"V5C","reference":"V5C-1","jurisdiction":"NI","resident_in":"NI"}'></textarea>
+    <textarea name="payload" rows="5" style="width:100%; font: 13px/1.4 ui-monospace, monospace;" placeholder="Optional vehicle case JSON to re-evaluate"></textarea>
+    <p><button type="submit">Attach evidence</button></p>
+  </form>
 </section>
 
 <section>

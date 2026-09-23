@@ -4,7 +4,7 @@ Deterministic given the observations supplied. Not calibrated to Irish realised 
 
 ## Comps
 
-Same manufacturer and model family are required. Berlingo does not comp Partner, Combo, Doblò, or Proace City. Fuel and goods-versus-people body mismatches are rejected. Year gaps over six years and mileage ratios outside 0.45 to 2.2 are rejected. Remaining comps need a score of at least 55. Close comps score at least 75.
+Same manufacturer and model family are required. Berlingo does not comp Partner, Combo, Doblò, or Proace City. Fuel mismatches, including electric against diesel, are rejected. Goods bodies are not comped with crew, kombi, or people-mover bodies. A known generation mismatch or a known wheelbase mismatch is rejected. Year gaps over six years and mileage ratios outside 0.45 to 2.2 are rejected. Salvage, write-off, and spares listings are rejected. The same registration is kept once. Only the latest observation of a listing is a comp. Remaining comps need a score of at least 55. Close comps score at least 75.
 
 The report lists accepted comps and the points that produced the score.
 
@@ -15,7 +15,7 @@ The report lists accepted comps and the points that produced the score.
 - Conservative: the lower of expected achievable and the 25th percentile of haircut asking prices (realised prices included when present).
 - Quick sale: conservative times a liquidity haircut (deep 5%, adequate 8%, thin 15%, illiquid or unknown 25%).
 
-The 15% asking haircut is an estimate, not a measured clearance rate. Disappeared, withdrawn, expired, and unknown rows are not sales.
+The 15% asking haircut is the floor when realised sales are thin. It widens when current listings are old or have been cut. It is not a measured clearance rate and it is not a sold price. Disappeared, withdrawn, expired, and unknown rows are not sales.
 
 ## Liquidity
 

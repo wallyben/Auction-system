@@ -64,7 +64,7 @@ No step calls an LLM. No step places a bid.
 
 ## UI
 
-`/cv` lists shadow candidates in the current process, then manual, price-too-high, rejected, and insufficient. The candidate list is empty until a case is evaluated in that process. It is not a shared production book. Durable storage in this phase is `cv_market_observations`.
+`/cv` lists shadow candidates. The in-process board is written through to `cv_evaluations` when `DATABASE_URL` is set, and that table is what a restarted web process reads. A buy candidate older than 14 days, or past its auction close, is shown as needing manual evidence. The frozen shadow snapshot is not rewritten into a pass.
 
 ## Real-money control
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from app.core.money import ZERO, money
@@ -23,6 +23,7 @@ from app.domains.vehicles.history import HistoryAssessment, assess_history
 from app.domains.vehicles.identity import apply_vin_consistency
 from app.domains.vehicles.landed import LandedCost, stack_landed_cost
 from app.domains.vehicles.max_bid import BidEconomics, profit_at, solve_max_hammer
+from app.domains.vehicles.owner_documents import note_owner_documents
 from app.domains.vehicles.policy import (
     FX_MAX_AGE_DAYS,
     LIQUIDITY_RANK_FACTOR,
@@ -77,6 +78,9 @@ class Evaluation:
     vehicle_key: str | None
     title: str
     summary_vehicle: str
+    evaluated_at: datetime | None = None
+    auction_source: str = ""
+    closes_at: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -86,6 +90,9 @@ class Evaluation:
             "does_not_bid": True,
             "vehicle": self.summary_vehicle,
             "title": self.title,
+            "auction": self.auction_source or self.listing_key.split(":", 1)[0],
+            "closes_at": self.closes_at,
+            "evaluated_at": self.evaluated_at.isoformat() if self.evaluated_at else None,
             "listing_key": self.listing_key,
             "vehicle_key": self.vehicle_key,
             "current_bid_eur": _s(self.current_bid_eur),
@@ -96,6 +103,11 @@ class Evaluation:
             "expected_profit_at_current_eur": _s(self.expected_profit_at_current_eur),
             "downside_profit_at_current_eur": _s(self.downside_profit_at_current_eur),
             "expected_profit_at_max_bid_eur": _s(self.bid.expected_profit_eur),
+            "irish_comparable_count": self.valuation.comparable_count,
+            "provenance_status": self.provenance.state.value,
+            "tax_status": self.tax.vrt_state.value,
+            "history_status": self.history.mileage.outcome.value,
+            "major_risks": [risk.to_dict() for risk in self.risks if risk.level in {"BLOCKING", "UNKNOWN", "ELEVATED"}],
             "roi_at_max_bid": str(self.bid.roi) if self.bid.roi is not None else None,
             "gates": self.gates.to_dict(),
             "provenance": {
@@ -181,6 +193,7 @@ def _fx_fresh(case: VehicleCase) -> bool:
 def evaluate_vehicle(case: VehicleCase) -> Evaluation:
     ledger = EvidenceLedger()
     apply_vin_consistency(case.identity, ledger)
+    note_owner_documents(case, ledger)
     provenance = assess_provenance(case.provenance, ledger)
     history = assess_history(case.history, ledger)
     repairs = estimate_reconditioning(
@@ -230,6 +243,7 @@ def evaluate_vehicle(case: VehicleCase) -> Evaluation:
             commercial_vat_invoice_expected=case.commercial_vat_invoice_expected and _effective_class(case) is CommercialClass.N1_GOODS,
             payment_fee_eur=case.payment_fee_eur,
             payment_fee_posture=case.payment_fee_posture,
+            lot_vat_rate=case.auction_lot_vat_rate,
         )
         tax = tax_for(hammer, EvidenceLedger())
         return stack_landed_cost(
@@ -307,6 +321,7 @@ def evaluate_vehicle(case: VehicleCase) -> Evaluation:
         commercial_vat_invoice_expected=case.commercial_vat_invoice_expected and commercial is CommercialClass.N1_GOODS,
         payment_fee_eur=case.payment_fee_eur,
         payment_fee_posture=case.payment_fee_posture,
+        lot_vat_rate=case.auction_lot_vat_rate,
     )
     report = decide_gates(
         identity_ok=identity_ok,
@@ -365,6 +380,9 @@ def evaluate_vehicle(case: VehicleCase) -> Evaluation:
         vehicle_key=case.identity.vehicle_key,
         title=case.listing.title,
         summary_vehicle=_summary(case),
+        evaluated_at=case.as_of,
+        auction_source=case.listing.source_id,
+        closes_at=case.listing.ends_at.isoformat() if case.listing.ends_at else None,
     )
 
 

@@ -3,11 +3,26 @@
 from __future__ import annotations
 
 import os
+import platform
 import threading
 import time
 from typing import Any
 
 from app.core.process import process_role
+
+
+def process_hostname() -> str:
+    """Host name on Linux and Windows. os.uname exists only on POSIX."""
+
+    uname = getattr(os, "uname", None)
+    if callable(uname):
+        try:
+            name = str(uname().nodename)
+        except AttributeError:
+            name = ""
+        if name:
+            return name
+    return platform.node() or "unknown"
 
 
 def rss_mb() -> float | None:

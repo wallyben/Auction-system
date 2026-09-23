@@ -15,11 +15,24 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger
+from app.core.runtime import process_hostname
 from app.models.orm import PipelineJob, PipelineWorker
 
 logger = get_logger("arie.jobs.queue")
 
-HEAVY_JOBS = frozenset({"scan", "revalue", "sold-revalidate", "sold-refresh"})
+HEAVY_JOBS = frozenset(
+    {
+        "scan",
+        "revalue",
+        "sold-revalidate",
+        "sold-refresh",
+        "cv-auction-ingest",
+        "cv-market-refresh",
+        "cv-history-enrich",
+        "cv-revalue",
+        "cv-shadow-refresh",
+    }
+)
 SCHEDULER_JOBS = frozenset({"deletion-retry", "self-audit", "sold-ingest"})
 PIPELINE_JOBS = HEAVY_JOBS | SCHEDULER_JOBS
 LEASE_SECONDS = 12 * 60
@@ -272,7 +285,7 @@ def beat_worker(
     if row is None:
         row = PipelineWorker(
             worker_id=worker_id,
-            hostname=hostname or os.uname().nodename,
+            hostname=hostname or process_hostname(),
             pid=pid or os.getpid(),
             heartbeat_at=now,
             started_at=now,

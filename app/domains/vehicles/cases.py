@@ -48,3 +48,5 @@ class VehicleCase:
     fx_retrieved_at: datetime | None = None
     mechanical_inspected: bool = False
     fuel_override: Fuel | None = None
+    auction_lot_vat_rate: Decimal | None = None
+    owner_documents: tuple[object, ...] = ()

@@ -77,6 +77,7 @@ def _identity(raw: dict | None, title: str, description: str) -> VehicleIdentity
         "model_family",
         "generation",
         "derivative",
+        "engine",
         "wheelbase",
         "roof",
         "doors",
@@ -233,7 +234,11 @@ def case_from_payload(data: dict) -> VehicleCase:
             evidence_url=str(schedule_raw.get("evidence_url") or ""),
             applies_to=str(schedule_raw.get("applies_to") or ""),
             bands=tuple(
-                PremiumBand(up_to_eur=_dec(band.get("up_to_eur")), percent=Decimal(str(band["percent"])))
+                PremiumBand(
+                    up_to_eur=_dec(band.get("up_to_eur")),
+                    percent=Decimal(str(band["percent"])),
+                    fixed_eur=_dec(band.get("fixed_eur")),
+                )
                 for band in schedule_raw.get("bands") or []
             ),
             minimum_premium_eur=Decimal(str(schedule_raw.get("minimum_premium_eur") or "0")),
@@ -275,4 +280,5 @@ def case_from_payload(data: dict) -> VehicleCase:
         fx_retrieved_at=_dt(data.get("fx_retrieved_at")),
         mechanical_inspected=bool(data.get("mechanical_inspected")),
         fuel_override=Fuel(data["fuel_override"]) if data.get("fuel_override") else None,
+        auction_lot_vat_rate=_dec(data.get("auction_lot_vat_rate")),
     )

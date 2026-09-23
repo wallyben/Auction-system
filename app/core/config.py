@@ -139,6 +139,16 @@ class Settings(BaseSettings):
     http_user_agent: str = "ARIE/2.0 (Irish reseller intelligence; local operator)"
     request_timeout_seconds: float = 20.0
 
+    # ARIE-CV. Empty values stay fail-closed. They do not enable a crawl.
+    cv_dealer_feed_urls: str = ""
+    cv_ebay_vans: str = "1"
+    dvsa_client_id: str = ""
+    dvsa_client_secret: str = ""
+    dvsa_api_key: str = ""
+    dvsa_token_url: str = ""
+    dvsa_scope: str = "https://tapi.dvsa.gov.uk/.default"
+    cv_condition_provider: str = ""
+
     @field_validator("database_url", mode="before")
     @classmethod
     def _strip_database_url(cls, value: object) -> str | None:

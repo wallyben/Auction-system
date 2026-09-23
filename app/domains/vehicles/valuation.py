@@ -9,7 +9,7 @@ from statistics import median
 
 from app.core.money import money
 from app.domains.vehicles.comps import CompScore, score_comp
-from app.domains.vehicles.enums import EvidencePosture, LiquidityClass
+from app.domains.vehicles.enums import EvidencePosture, LiquidityClass, ObservationStatus
 from app.domains.vehicles.identity import VehicleIdentity
 from app.domains.vehicles.market import MarketBook, MarketObservation
 from app.domains.vehicles.policy import (
@@ -19,6 +19,36 @@ from app.domains.vehicles.policy import (
     MARKET_FRESH_DAYS,
     MIN_REALISED_FOR_UNCAPPED_CONFIDENCE,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class ValueBand:
+    name: str
+    value_eur: Decimal | None
+    low_eur: Decimal | None
+    high_eur: Decimal | None
+    confidence: Decimal
+    comparable_count: int
+    freshness_hours: int | None
+    close_count: int
+    source_count: int
+    market_depth: str
+    adjustment: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "name": self.name,
+            "value_eur": _s(self.value_eur),
+            "low_eur": _s(self.low_eur),
+            "high_eur": _s(self.high_eur),
+            "confidence": str(self.confidence),
+            "comparable_count": self.comparable_count,
+            "freshness_hours": self.freshness_hours,
+            "close_count": self.close_count,
+            "source_count": self.source_count,
+            "market_depth": self.market_depth,
+            "adjustment": self.adjustment,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +97,9 @@ class ValuationResult:
     liquidity: LiquidityResult
     discount_applied: Decimal
     notes: tuple[str, ...]
+    bands: tuple[ValueBand, ...] = ()
+    source_count: int = 0
+    adjustment_reasons: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -84,6 +117,9 @@ class ValuationResult:
             "freshness_hours": self.freshness_hours,
             "fresh": self.fresh,
             "discount_applied": str(self.discount_applied),
+            "source_count": self.source_count,
+            "adjustment_reasons": list(self.adjustment_reasons),
+            "bands": [band.to_dict() for band in self.bands],
             "liquidity": self.liquidity.to_dict(),
             "comps": [comp.to_dict() for comp in self.comps],
             "rejected_comps": [comp.to_dict() for comp in self.rejected],
@@ -163,6 +199,106 @@ def _liquidity(
     )
 
 
+def _latest_per_listing(rows: list[MarketObservation]) -> list[MarketObservation]:
+    latest: dict[str, MarketObservation] = {}
+    for row in rows:
+        current = latest.get(row.listing_id)
+        if current is None or row.observed_at >= current.observed_at:
+            latest[row.listing_id] = row
+    return list(latest.values())
+
+
+def _drop_duplicate_registrations(kept: list[CompScore]) -> tuple[list[CompScore], list[CompScore]]:
+    """One physical listing should not support the value twice."""
+
+    chosen: dict[str, CompScore] = {}
+    order: list[CompScore] = []
+    duplicates: list[CompScore] = []
+    for row in sorted(kept, key=lambda item: item.score, reverse=True):
+        key = row.registration
+        if not key:
+            order.append(row)
+            continue
+        if key in chosen:
+            duplicates.append(
+                CompScore(
+                    observation_id=row.observation_id,
+                    listing_id=row.listing_id,
+                    score=row.score,
+                    close=False,
+                    rejected=True,
+                    reasons=row.reasons + ("Duplicate registration rejected.",),
+                    price_eur=row.price_eur,
+                    realised=False,
+                    observed_at_iso=row.observed_at_iso,
+                    url=row.url,
+                    seller_type=row.seller_type,
+                    mileage_km=row.mileage_km,
+                    year=row.year,
+                    model_family=row.model_family,
+                    source=row.source,
+                    registration=row.registration,
+                )
+            )
+            continue
+        chosen[key] = row
+        order.append(row)
+    return order, duplicates
+
+
+def _asking_discount(
+    *,
+    visible: list[MarketObservation],
+    subject: VehicleIdentity,
+    as_of: datetime,
+    realised_count: int,
+) -> tuple[Decimal, tuple[str, ...]]:
+    """Conservative asking-to-achievable gap. Never a fabricated sold price."""
+
+    if realised_count >= MIN_REALISED_FOR_UNCAPPED_CONFIDENCE:
+        return Decimal("0"), ("Enough realised sales to anchor achievable value. Asking prices stay secondary.",)
+    notes = [
+        "No fabricated sold price. Disappearance, withdrawal, and expiry are not sales.",
+        f"Base asking haircut is {ASKING_TO_ACHIEVABLE_DISCOUNT} because realised Irish sales are thin.",
+    ]
+    extra = Decimal("0")
+    family = [
+        row
+        for row in visible
+        if row.model_family == subject.model_family and row.manufacturer == subject.manufacturer
+    ]
+    by_listing: dict[str, list[MarketObservation]] = {}
+    for row in family:
+        by_listing.setdefault(row.listing_id, []).append(row)
+    aged = 0
+    reduced = 0
+    active = 0
+    for rows in by_listing.values():
+        ordered = sorted(rows, key=lambda item: item.observed_at)
+        latest = ordered[-1]
+        if latest.status in {
+            ObservationStatus.DISAPPEARED,
+            ObservationStatus.WITHDRAWN,
+            ObservationStatus.EXPIRED,
+            ObservationStatus.UNKNOWN,
+        }:
+            continue
+        active += 1
+        if (as_of - ordered[0].observed_at).days > 45:
+            aged += 1
+        prices = [row.asking_price_eur for row in ordered if row.asking_price_eur is not None]
+        if len(prices) >= 2 and prices[-1] < prices[0]:
+            reduced += 1
+    if active and aged / active >= 0.5:
+        extra += Decimal("0.05")
+        notes.append("At least half of the current listings have been up more than 45 days. The haircut widens.")
+    if active and reduced / active >= 0.3:
+        extra += Decimal("0.03")
+        notes.append("Repeated asking-price cuts widen the haircut. The cut itself is not treated as a sold price.")
+    discount = min(Decimal("0.30"), ASKING_TO_ACHIEVABLE_DISCOUNT + extra)
+    return discount, tuple(notes)
+
+
 def value_vehicle(
     subject: VehicleIdentity,
     book: MarketBook,
@@ -172,24 +308,32 @@ def value_vehicle(
     fresh_after = as_of - timedelta(days=MARKET_FRESH_DAYS)
     visible = book.as_of(as_of)
     fresh_rows = [row for row in visible if row.observed_at >= fresh_after]
-    scored = [score_comp(subject, row) for row in fresh_rows]
-    rejected = tuple(row for row in scored if row.rejected)
+    current_rows = _latest_per_listing(fresh_rows)
+    scored = [score_comp(subject, row) for row in current_rows]
+    rejected_rows = [row for row in scored if row.rejected]
     kept = [row for row in scored if not row.rejected and row.price_eur is not None]
+    kept, duplicate_rejected = _drop_duplicate_registrations(kept)
+    rejected = tuple(rejected_rows + duplicate_rejected)
     asking = [row for row in kept if not row.realised]
     realised = [row for row in kept if row.realised]
     asking_prices = _mad_keep([row.price_eur for row in asking if row.price_eur is not None])
     realised_prices = [row.price_eur for row in realised if row.price_eur is not None]
-
-    notes: list[str] = []
+    discount, discount_notes = _asking_discount(
+        visible=visible,
+        subject=subject,
+        as_of=as_of,
+        realised_count=len(realised_prices),
+    )
+    notes: list[str] = list(discount_notes)
     market_asking = money(Decimal(str(median(asking_prices)))) if asking_prices else None
     asking_low = money(min(asking_prices)) if asking_prices else None
     asking_high = money(max(asking_prices)) if asking_prices else None
-    discount = ASKING_TO_ACHIEVABLE_DISCOUNT if len(realised_prices) < MIN_REALISED_FOR_UNCAPPED_CONFIDENCE else Decimal("0")
+    asking_haircut = discount if discount > 0 else ASKING_TO_ACHIEVABLE_DISCOUNT
 
     if len(realised_prices) >= MIN_REALISED_FOR_UNCAPPED_CONFIDENCE:
         realised_central = money(Decimal(str(median(realised_prices))))
         if market_asking is not None:
-            haircut_asking = money(market_asking * (Decimal("1") - ASKING_TO_ACHIEVABLE_DISCOUNT))
+            haircut_asking = money(market_asking * (Decimal("1") - asking_haircut))
             expected = money((realised_central * Decimal("0.70")) + (haircut_asking * Decimal("0.30")))
         else:
             expected = realised_central
@@ -207,7 +351,7 @@ def value_vehicle(
         notes.append("Not enough priced Irish comps inside the freshness window.")
 
     if asking_prices and expected is not None:
-        adjusted = [money(price * (Decimal("1") - ASKING_TO_ACHIEVABLE_DISCOUNT)) for price in asking_prices]
+        adjusted = [money(price * (Decimal("1") - asking_haircut)) for price in asking_prices]
         if realised_prices:
             adjusted.extend(realised_prices)
         conservative = money(min(expected, _percentile(adjusted, Decimal("0.25"))))
@@ -244,8 +388,38 @@ def value_vehicle(
         freshness_hours = int((as_of - newest).total_seconds() // 3600)
     fresh = bool(fresh_rows) and expected is not None
     if not fresh:
-        notes.append("Market evidence is missing or older than the freshness window.")
+        notes.append("Market evidence is missing or older than the freshness window. No resale value is issued from stale comps.")
+        market_asking = None
+        expected = None
+        conservative = None
+        quick = None
 
+    source_count = len({row.source for row in kept if row.source})
+    depth = liquidity.classification.value
+    weak = expected is None
+    band_confidence = Decimal("0") if weak else confidence
+
+    def band(name: str, value: Decimal | None, low: Decimal | None, high: Decimal | None, adjustment: str) -> ValueBand:
+        return ValueBand(
+            name=name,
+            value_eur=None if weak else value,
+            low_eur=None if weak else low,
+            high_eur=None if weak else high,
+            confidence=band_confidence,
+            comparable_count=len(kept),
+            freshness_hours=freshness_hours,
+            close_count=close_count,
+            source_count=source_count,
+            market_depth=depth,
+            adjustment=adjustment,
+        )
+
+    bands = (
+        band("asking_market", market_asking, asking_low, asking_high, "Median current asking price after the outlier screen. Not a sale price."),
+        band("expected_achievable", expected, None, None, " ".join(discount_notes)),
+        band("conservative_resale", conservative, None, None, "Lower of achievable value and the lower quartile of haircut asking prices."),
+        band("quick_sale", quick, None, None, f"Conservative value minus the {liquidity.classification.value} liquidity haircut."),
+    )
     return ValuationResult(
         market_asking_eur=market_asking,
         expected_achievable_eur=expected,
@@ -265,6 +439,9 @@ def value_vehicle(
         liquidity=liquidity,
         discount_applied=discount,
         notes=tuple(notes),
+        bands=bands,
+        source_count=source_count,
+        adjustment_reasons=tuple(discount_notes),
     )
 
 
