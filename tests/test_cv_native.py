@@ -202,7 +202,7 @@ def test_vat_bases_are_not_mixed_and_unknown_caps_confidence() -> None:
     for index in range(12):
         unknown.book.append(_obs(index, vat_presentation="unknown"))
     unknown_result = evaluate_vehicle(unknown)
-    assert unknown_result.valuation.confidence <= Decimal("0.55")
+    assert unknown_result.valuation.expected_achievable_eur is None
     assert unknown_result.state.value != "BUY_CANDIDATE"
 
 

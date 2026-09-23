@@ -15,6 +15,8 @@ from app.domains.vehicles.capture import catalogue_to_cases, evaluate_cases
 from app.domains.vehicles.certification_metrics import score_certification
 from app.domains.vehicles.evaluate import evaluate_vehicle
 from app.domains.vehicles.history_dvsa import dvsa_status
+from app.domains.vehicles.ingest.autoza import autoza_health
+from app.domains.vehicles.market_audit import display_health, market_audit, stored_source_health
 from app.domains.vehicles.ingest.dealer_feed import parse_dealer_feed
 from app.domains.vehicles.owner_documents import apply_owner_document, parse_owner_document
 from app.domains.vehicles.policy import TAX_RULE_VERSION, TAX_RULES_RETRIEVED_AT
@@ -33,7 +35,11 @@ def _page(
     evaluation: dict | None = None,
     error: str | None = None,
     notice: str | None = None,
+    family: str = "",
 ) -> HTMLResponse:
+    audit = market_audit(family or None) if active == "market" else None
+    stored = stored_source_health() or autoza_health()
+    health = display_health(stored)
     return templates.TemplateResponse(
         request,
         "cv_dashboard.html",
@@ -53,6 +59,10 @@ def _page(
             "certification": score_certification(historical_cases=0, live_shadow_cases=shadow_count()),
             "dvsa": dvsa_status(),
             "book_size": len(current_book().observations),
+            "autoza": health,
+            "market": audit,
+            "family": family,
+            "attribution": "Asking prices from Autoza Ireland (autoza.ie). Cite Autoza Ireland and the retrieval date.",
         },
     )
 
@@ -67,9 +77,10 @@ _EXAMPLE = """{
 
 
 @router.get("/cv", response_class=HTMLResponse)
-def cv_dashboard(request: Request, view_name: str = "candidates") -> HTMLResponse:
-    active = view_name if view_name in {"candidates", "manual", "price", "rejected", "insufficient", "all"} else "candidates"
-    return _page(request, active=active)
+def cv_dashboard(request: Request, view_name: str = "candidates", family: str = "") -> HTMLResponse:
+    allowed = {"candidates", "manual", "price", "rejected", "insufficient", "all", "market"}
+    active = view_name if view_name in allowed else "candidates"
+    return _page(request, active=active, family=family.strip().lower())
 
 
 @router.get("/cv/sources")

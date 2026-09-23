@@ -19,10 +19,16 @@ class BidEconomics:
     selling_cost_eur: Decimal
     blocked: bool
     note: str
+    max_bid_base_eur: Decimal | None = None
+    max_bid_conservative_eur: Decimal | None = None
+    max_bid_stress_eur: Decimal | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
             "max_safe_hammer_eur": _s(self.max_safe_hammer_eur),
+            "max_bid_base_eur": _s(self.max_bid_base_eur),
+            "max_bid_conservative_eur": _s(self.max_bid_conservative_eur),
+            "max_bid_stress_eur": _s(self.max_bid_stress_eur),
             "expected_profit_eur": _s(self.expected_profit_eur),
             "downside_profit_eur": _s(self.downside_profit_eur),
             "roi": str(self.roi) if self.roi is not None else None,

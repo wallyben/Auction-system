@@ -46,6 +46,15 @@ class MarketObservation:
     parser_version: str | None = None
     raw_reference: str | None = None
     dealer_name: str | None = None
+    advertised_price_eur: Decimal | None = None
+    net_price_eur: Decimal | None = None
+    gross_price_eur: Decimal | None = None
+    vat_rate: Decimal | None = None
+    vat_classification: str = "UNKNOWN"
+    vat_fragment: str = ""
+    vat_parser_version: str | None = None
+    vat_confidence: Decimal = Decimal("0")
+    source_updated_at: str | None = None
 
 
 @dataclass(slots=True)

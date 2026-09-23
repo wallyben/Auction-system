@@ -20,6 +20,9 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    # 20260823_0002 create_all already builds every mapped table, including this one.
+    if "cv_market_observations" in set(sa.inspect(op.get_bind()).get_table_names()):
+        return
     op.create_table(
         "cv_market_observations",
         sa.Column("observation_id", sa.String(length=64), primary_key=True),

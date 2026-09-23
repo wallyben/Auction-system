@@ -106,6 +106,7 @@ class ValuationResult:
     vat_basis: str = "as_stated"
     trade_downside_eur: Decimal | None = None
     median_comp_age_days: int | None = None
+    haircut_sensitivity: dict[str, str | None] | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -130,6 +131,9 @@ class ValuationResult:
             "vat_basis": self.vat_basis,
             "trade_downside_eur": _s(self.trade_downside_eur),
             "median_comp_age_days": self.median_comp_age_days,
+            "asking_to_achievable_adjustment": "0.15",
+            "asking_to_achievable_status": "UNCALIBRATED_ASSUMPTION",
+            "haircut_sensitivity": self.haircut_sensitivity,
             "bands": [band.to_dict() for band in self.bands],
             "liquidity": self.liquidity.to_dict(),
             "comps": [comp.to_dict() for comp in self.comps],
@@ -367,7 +371,7 @@ def _asking_discount(
 MODEL_VERSION = "arie-native-v1"
 ASKING_MODEL_VERSION = "asking-haircut-v1"
 _INCLUSIVE = {"inclusive", "inc_vat", "vat_inclusive", "gross"}
-_EXCLUSIVE = {"ex_vat", "exclusive", "plus_vat", "vat_exclusive", "net", "qualifying", "vat_qualifying"}
+_EXCLUSIVE = {"ex_vat", "exclusive", "plus_vat", "vat_exclusive", "net"}
 
 
 def _vat_class(text: str) -> str:
@@ -420,20 +424,22 @@ def _estimate_prices(
 ) -> tuple[list[Decimal], list[Decimal], str, bool, bool]:
     """Prices on one VAT basis, weights, basis label, whether unknown VAT was used, whether unknown VAT was dropped."""
 
-    classes = [_vat_class(row.vat_presentation) for row in rows if row.price_eur is not None]
-    known = {item for item in classes if item != "unknown"}
-    unknown_present = "unknown" in classes
-    usable = [row for row in rows if row.price_eur is not None]
-    if len(known) <= 1:
-        basis = "ex_vat" if known == {"exclusive"} else "vat_inclusive" if known == {"inclusive"} else "unknown"
-        prices = [row.price_eur for row in usable if row.price_eur is not None]
-        weights = [Decimal(max(row.score, 1)) for row in usable]
-        return prices, weights, basis, unknown_present and basis == "unknown", False
-    prices: list[Decimal] = []
-    weights: list[Decimal] = []
-    for row in usable:
+    usable = [row for row in rows if row.price_eur is not None and row.price_eur > 0]
+    known_rows = [row for row in usable if _vat_class(row.vat_presentation) != "unknown"]
+    unknown_present = any(_vat_class(row.vat_presentation) == "unknown" for row in usable)
+    if not known_rows:
+        return [], [], "unknown", True, False
+    known = {_vat_class(row.vat_presentation) for row in known_rows}
+    if len(known) == 1:
+        basis = "ex_vat" if known == {"exclusive"} else "vat_inclusive" if known == {"inclusive"} else "known"
+        prices = [row.price_eur for row in known_rows if row.price_eur is not None]
+        weights = [Decimal(max(row.score, 1)) for row in known_rows]
+        return prices, weights, basis, False, unknown_present
+    prices = []
+    weights = []
+    for row in known_rows:
         kind = _vat_class(row.vat_presentation)
-        if kind == "unknown" or row.price_eur is None:
+        if row.price_eur is None:
             continue
         amount = row.price_eur if kind == "inclusive" else money(row.price_eur * (Decimal("1") + VAT_RATE))
         prices.append(amount)
@@ -453,7 +459,7 @@ def value_vehicle(
     current_rows = _latest_per_listing(fresh_rows)
     scored = [score_comp(subject, row) for row in current_rows]
     rejected_rows = [row for row in scored if row.rejected]
-    kept = [row for row in scored if not row.rejected and row.price_eur is not None]
+    kept = [row for row in scored if not row.rejected and row.price_eur is not None and row.price_eur > 0]
     kept, duplicate_rejected = _drop_duplicate_registrations(kept)
     kept, dealer_duplicates = _drop_same_dealer_van(kept)
     rejected = tuple(rejected_rows + duplicate_rejected + dealer_duplicates)
@@ -474,11 +480,12 @@ def value_vehicle(
     notes: list[str] = list(discount_notes)
     notes.append(f"Model {MODEL_VERSION}. Asking-to-achievable {ASKING_MODEL_VERSION} is an estimate, not a measured clearance rate.")
     if unknown_vat_dropped:
-        notes.append("Comps with unknown VAT were left out of the central estimate because other comps had a known VAT basis.")
+        notes.append("Comps with unknown VAT were left out of the central estimate. They do not cap the valuation.")
     if vat_basis == "vat_inclusive_ie_23":
         notes.append("Mixed VAT presentations were converted to VAT-inclusive euro at the Irish 23% rate.")
     if unknown_vat_used:
-        notes.append("VAT presentation is unknown, so prices were not grossed up and confidence is capped.")
+        notes.append("No kept comp states whether the asking price is ex VAT or VAT inclusive. No resale value is issued from that ambiguity.")
+    notes.append("ASKING-TO-ACHIEVABLE ADJUSTMENT: 15% base. STATUS: UNCALIBRATED_ASSUMPTION.")
     market_asking = money(_weighted_median(asking_prices, asking_weights)) if asking_prices else None
     asking_low = money(_percentile(asking_prices, Decimal("0.20"))) if asking_prices else None
     asking_high = money(_percentile(asking_prices, Decimal("0.80"))) if asking_prices else None
@@ -535,18 +542,29 @@ def value_vehicle(
     quick = money(conservative * (Decimal("1") - haircut)) if conservative is not None else None
     trade_downside = money(_percentile(adjusted, Decimal("0.10"))) if asking_prices and expected is not None else None
 
-    close_count = sum(1 for row in kept if row.close)
+    close_count = sum(
+        1 for row in asking if row.close and _vat_class(row.vat_presentation) != "unknown"
+    )
     confidence = _confidence(kept, realised, close_count, fresh_rows, as_of)
-    if unknown_vat_used:
-        confidence = min(confidence, Decimal("0.55"))
     sample_size = _effective_sample_size(asking_weights) if asking_weights else Decimal("0")
     freshness_hours = None
     if fresh_rows:
         newest = max(row.observed_at for row in fresh_rows)
         freshness_hours = int((as_of - newest).total_seconds() // 3600)
-    fresh_book = bool(fresh_rows) and expected is not None
-    enough = len(kept) >= 5 and close_count >= 3
-    if not fresh_book:
+    vat_blocked = unknown_vat_used and not asking_prices
+    fresh_book = bool(fresh_rows) and expected is not None and not vat_blocked
+    enough = len(asking_prices) >= 5 and close_count >= 3 and not vat_blocked
+    if vat_blocked:
+        notes.append("VAT ambiguity could change the price basis. The value is withheld.")
+        market_asking = None
+        expected = None
+        conservative = None
+        quick = None
+        trade_downside = None
+        asking_low = None
+        asking_high = None
+        fresh = False
+    elif not fresh_book:
         notes.append("Market evidence is missing or older than the freshness window. No resale value is issued from stale comps.")
         market_asking = None
         expected = None
@@ -611,7 +629,7 @@ def value_vehicle(
         asking_high_eur=asking_high,
         confidence=confidence,
         confidence_posture=posture,
-        comparable_count=len(kept),
+        comparable_count=len(asking_prices) if asking_prices else 0,
         close_count=close_count,
         realised_count=len(realised),
         freshness_hours=freshness_hours,
@@ -629,6 +647,13 @@ def value_vehicle(
         vat_basis=vat_basis,
         trade_downside_eur=trade_downside,
         median_comp_age_days=liquidity.median_age_days,
+        haircut_sensitivity={
+            "0.10": str(money(market_asking * Decimal("0.90"))),
+            "0.15": str(money(market_asking * Decimal("0.85"))),
+            "0.20": str(money(market_asking * Decimal("0.80"))),
+        }
+        if market_asking is not None
+        else None,
     )
 
 

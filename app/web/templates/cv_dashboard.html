@@ -5,6 +5,7 @@
   <h1>Commercial van candidates</h1>
   <p>Shadow mode. ARIE-CV does not bid, buy, or pay. A result is not a certified purchasing instruction.</p>
   <p class="meta">Tax rules {{ tax_rule_version }}, retrieved {{ tax_retrieved }}. Live fetchers: {{ live_fetchers|join(", ") or "none" }}. Market observations in this process: {{ book_size }}. Shadow snapshots: {{ shadow_count }}. Certification: {{ certification.posture }}.</p>
+  <p class="meta">Autoza {{ autoza.status }}{% if autoza.fresh %} · fresh{% else %} · not fresh{% endif %}. Last success {{ autoza.last_success_at or "none" }}. Rows fetched {{ autoza.rows_received or 0 }}. Commercial rows accepted {{ autoza.rows_accepted or 0 }}. Rows rejected {{ autoza.rows_rejected or 0 }}. Latest observation {{ autoza.last_success_at or "none" }}. {{ attribution }}</p>
 </section>
 
 <nav class="controls wrap">
@@ -14,6 +15,7 @@
   <a href="/cv?view_name=rejected">Rejected</a>
   <a href="/cv?view_name=insufficient">Insufficient data</a>
   <a href="/cv?view_name=all">All evaluations</a>
+  <a href="/cv?view_name=market">Market book</a>
 </nav>
 
 {% if notice %}<p class="meta">{{ notice }}</p>{% endif %}
@@ -76,6 +78,9 @@
               {% for action in row.owner_actions %}<li>{{ action }}</li>{% endfor %}
             </ul>
             <p>Failed gates: {{ row.gates.failures|join(", ") or "none" }}</p>
+            <p>Max bid base {{ row.max_bid_base_eur or "—" }}. Conservative {{ row.max_bid_conservative_eur or "—" }}. Stress {{ row.max_bid_stress_eur or "—" }}.</p>
+            <p>Asking-to-achievable adjustment {{ row.valuation.asking_to_achievable_adjustment }}. Status {{ row.valuation.asking_to_achievable_status }}. VAT basis {{ row.valuation.vat_basis }}. Sensitivity {{ row.valuation.haircut_sensitivity }}.</p>
+            <p>Economic interest {{ row.economic_interest }}. Landing {{ row.landing_scenarios.landing_cost }} / {{ row.landing_scenarios.classification }}.</p>
             {% for comp in row.valuation.comps %}
             <p class="muted">{{ comp.model_family }} {{ comp.year or "" }} {{ comp.mileage_km or "" }} km score {{ comp.score }} €{{ comp.price_eur }} VAT {{ comp.vat_presentation or "unknown" }} {{ comp.source }} — {{ comp.reasons|join(" ") }} {% if comp.differences %}Differs: {{ comp.differences|join(", ") }}.{% endif %}</p>
             {% endfor %}
@@ -179,6 +184,47 @@
   {% endif %}
   <h3>Failed gates</h3>
   <p>{{ evaluation.gates.failures|join(", ") or "None" }}</p>
+  <h3>Max bid sensitivity</h3>
+  <p>Base {{ evaluation.max_bid_base_eur or "—" }}. Conservative {{ evaluation.max_bid_conservative_eur or "—" }}. Stress {{ evaluation.max_bid_stress_eur or "—" }}. The decision ceiling is the conservative figure. Asking-to-achievable adjustment {{ evaluation.valuation.asking_to_achievable_adjustment }}. Status {{ evaluation.valuation.asking_to_achievable_status }}.</p>
+  <p>VAT basis {{ evaluation.valuation.vat_basis }}. Sensitivity at 10/15/20 percent: {{ evaluation.valuation.haircut_sensitivity }}.</p>
+</section>
+{% endif %}
+
+{% if active == "market" %}
+<section>
+  <h2>Market book</h2>
+  <p class="meta">Audit of stored Irish asking observations. {{ attribution }}</p>
+  {% if market and market.available %}
+  <p class="meta">Observations {{ market.total_observations }}. Active vehicles {{ market.active_vehicles }}. Families {{ market.families|length }}. Latest refresh {{ market.latest_refresh or "none" }}.</p>
+  <p>
+    <a href="/cv?view_name=market">All families</a>
+    {% for item in market.families %}
+    · <a href="/cv?view_name=market&family={{ item.family }}">{{ item.family }} ({{ item.active }})</a>
+    {% endfor %}
+  </p>
+  <table>
+    <thead>
+      <tr><th>Vehicle</th><th>Year</th><th>Mileage km</th><th>Price</th><th>VAT basis</th><th>Location</th><th>Source</th><th>First seen</th><th>Last seen</th></tr>
+    </thead>
+    <tbody>
+      {% for row in market.rows %}
+      <tr>
+        <td>{{ row.vehicle }}</td>
+        <td>{{ row.year or "—" }}</td>
+        <td>{{ row.mileage_km or "—" }}</td>
+        <td>{{ row.price_eur or "—" }}</td>
+        <td>{{ row.vat_basis }}</td>
+        <td>{{ row.location or "—" }}</td>
+        <td>{{ row.source }}</td>
+        <td>{{ row.first_seen }}</td>
+        <td>{{ row.last_seen }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="warn">No stored market book is available in this process.</p>
+  {% endif %}
 </section>
 {% endif %}
 

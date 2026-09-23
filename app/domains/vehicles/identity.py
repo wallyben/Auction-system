@@ -82,13 +82,15 @@ def _family(text: str) -> VanFamily | None:
 
 
 def _fuel(text: str) -> Fuel:
-    if re.search(r"\b(bev|electric|ev)\b", text) and not re.search(r"\b(hybrid|phev|plug-in)\b", text):
+    if re.search(r"\b(bev|electric|ev|ze)\b|\bz\.e\b", text) and not re.search(r"\b(hybrid|phev|plug-in)\b", text):
         return Fuel.ELECTRIC
     if re.search(r"\b(phev|plug-in)\b", text):
         return Fuel.PHEV
     if re.search(r"\bhybrid\b", text):
         return Fuel.HYBRID
-    if re.search(r"\b(tdci|tdi|dci|cdti|crdi|diesel|hdi|bluetec|ecoblue)\b", text):
+    if re.search(r"\b(tdci|tdi|dci|cdti|crdi|diesel|hdi|bluehdi|bluetec|ecoblue)\b", text):
+        return Fuel.DIESEL
+    if re.search(r"\b\d(?:\.\d)?\s*td\b", text):
         return Fuel.DIESEL
     if re.search(r"\b(petrol|gasoline|tsi|tfsi)\b", text):
         return Fuel.PETROL
@@ -249,8 +251,31 @@ def parse_listing_text(title: str, description: str = "") -> VehicleIdentity:
     identity.year = int(year.group(1)) if year else None
     power = _POWER.search(text)
     identity.power_ps = int(power.group(1)) if power else None
-    identity.wheelbase = _token(text, r"\b(swb|lwb|mwb|l1|l2|l3|l4)\b")
-    identity.roof = _token(text, r"\b(h1|h2|h3)\b")
+    size = re.search(r"\b(l[1-4]|swb|lwb|mwb)(?:\s*(h[1-3]))?\b", text)
+    if size:
+        identity.wheelbase = size.group(1)
+        if size.group(2):
+            identity.roof = size.group(2)
+    if identity.wheelbase is None and re.search(r"\blong\s+wheel\s*base\b", text):
+        identity.wheelbase = "lwb"
+    elif identity.wheelbase is None and re.search(r"\bshort\s+wheel\s*base\b", text):
+        identity.wheelbase = "swb"
+    elif identity.wheelbase is None and re.search(r"\bmedium\s+wheel\s*base\b", text):
+        identity.wheelbase = "mwb"
+    elif identity.wheelbase is None and re.search(r"\bll21\b", text):
+        identity.wheelbase = "l2"
+    if identity.roof is None and re.search(r"\bextra\s+(?:high|hi)\s+roof\b", text):
+        identity.roof = "h3"
+    elif identity.roof is None and re.search(r"\b(?:high|hi)\s+roof\b", text):
+        identity.roof = "h2"
+    elif identity.roof is None:
+        identity.roof = _token(text, r"\b(h1|h2|h3)\b")
+    series = re.search(r"\b(2[5-9]0|3[0-5]0)l?\b", text)
+    payload = re.search(r"\bt(26|28|30|32)\b", text)
+    if series:
+        identity.derivative = series.group(1)
+    elif payload:
+        identity.derivative = f"t{payload.group(1)}"
     if re.search(r"\b(automatic|dsg|auto)\b", text):
         identity.transmission = "automatic"
     elif re.search(r"\bmanual\b", text):

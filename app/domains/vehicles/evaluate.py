@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from decimal import Decimal
 
@@ -18,6 +18,7 @@ from app.domains.vehicles.enums import (
     ProvenanceState,
 )
 from app.domains.vehicles.evidence import EvidenceLedger
+from app.domains.vehicles.scenarios import economic_label, ni_landing_scenarios
 from app.domains.vehicles.gates import GateReport, decide_gates
 from app.domains.vehicles.history import HistoryAssessment, assess_history
 from app.domains.vehicles.identity import apply_vin_consistency
@@ -88,6 +89,13 @@ class Evaluation:
             "certification": self.certification.value,
             "purchasing_recommendation": self.purchasing_recommendation,
             "does_not_bid": True,
+            "economic_interest": economic_label(
+                state=self.state.value,
+                market_pass=bool(self.gates.gates.get("MARKET_EVIDENCE_PASS")),
+                auction_cost_pass=bool(self.gates.gates.get("AUCTION_COST_PASS")),
+                has_conservative=self.valuation.conservative_eur is not None,
+            ),
+            "landing_scenarios": ni_landing_scenarios(self.provenance.state.value),
             "vehicle": self.summary_vehicle,
             "title": self.title,
             "auction": self.auction_source or self.listing_key.split(":", 1)[0],
@@ -97,6 +105,9 @@ class Evaluation:
             "vehicle_key": self.vehicle_key,
             "current_bid_eur": _s(self.current_bid_eur),
             "maximum_safe_bid_eur": _s(self.bid.max_safe_hammer_eur),
+            "max_bid_base_eur": _s(self.bid.max_bid_base_eur),
+            "max_bid_conservative_eur": _s(self.bid.max_bid_conservative_eur),
+            "max_bid_stress_eur": _s(self.bid.max_bid_stress_eur),
             "headroom_eur": _s(self.headroom_eur),
             "expected_all_in_eur": _s(self.expected_all_in_eur),
             "downside_all_in_eur": _s(self.downside_all_in_eur),
@@ -259,6 +270,25 @@ def evaluate_vehicle(case: VehicleCase) -> Evaluation:
         quick_sale_eur=valuation.quick_sale_eur,
         selling_cost_eur=selling,
         landed_at=landed_at,
+    )
+    base_bid = solve_max_hammer(
+        conservative_eur=valuation.expected_achievable_eur,
+        quick_sale_eur=valuation.conservative_eur,
+        selling_cost_eur=selling,
+        landed_at=landed_at,
+    )
+    stress_anchor = money(valuation.conservative_eur * Decimal("0.90")) if valuation.conservative_eur is not None else None
+    stress_bid = solve_max_hammer(
+        conservative_eur=stress_anchor,
+        quick_sale_eur=valuation.quick_sale_eur,
+        selling_cost_eur=selling,
+        landed_at=landed_at,
+    )
+    bid = replace(
+        bid,
+        max_bid_base_eur=base_bid.max_safe_hammer_eur,
+        max_bid_conservative_eur=bid.max_safe_hammer_eur,
+        max_bid_stress_eur=stress_bid.max_safe_hammer_eur,
     )
     tax = tax_for(current if current is not None else (bid.max_safe_hammer_eur or ZERO), ledger)
     reference_hammer = current if current is not None else bid.max_safe_hammer_eur

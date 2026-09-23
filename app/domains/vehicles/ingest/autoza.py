@@ -24,7 +24,7 @@ from app.domains.vehicles.identity import parse_listing_text
 from app.domains.vehicles.listing_state import status_for_new_observation
 from app.domains.vehicles.market import MarketBook, MarketObservation
 
-PARSER_VERSION = "autoza-vehicles-1"
+PARSER_VERSION = "autoza-vehicles-2"
 SOURCE_ID = "autoza"
 SEARCH_URL = "https://autoza.ie/api/v1/vehicles"
 PAGE_LIMIT = 50
@@ -248,13 +248,19 @@ def _one(row: dict[str, Any], observed_at: datetime) -> MarketObservation | None
         parser_version=PARSER_VERSION,
         raw_reference=json.dumps(raw, default=str, separators=(",", ":"))[:4000],
         dealer_name=None,
+        advertised_price_eur=price,
+        vat_classification="UNKNOWN",
+        source_updated_at=str(row.get("updated_at") or "") or None,
     )
 
 
 def _eur_price(value: object, currency: str) -> Decimal | None:
     if currency != "EUR":
         return None
-    return _decimal(value)
+    amount = _decimal(value)
+    if amount is None or amount <= 0:
+        return None
+    return amount
 
 
 def _decimal(value: object) -> Decimal | None:
@@ -291,3 +297,202 @@ def _fuel(text: str) -> Fuel:
     if "petrol" in folded:
         return Fuel.PETROL
     return Fuel.UNKNOWN
+
+
+DETAIL_URL = "https://autoza.ie/api/v1/vehicles/{listing_id}"
+MAX_INVENTORY_PAGES = 6
+MAX_DETAIL_LOOKUPS = 180
+
+
+@dataclass(frozen=True, slots=True)
+class InventoryFetch:
+    observations: tuple[MarketObservation, ...]
+    rows_received: int
+    rows_accepted: int
+    rows_rejected: int
+    rejection_reasons: dict[str, int]
+    pages: int
+    complete: bool
+    details_fetched: int
+    error: str = ""
+
+
+def apply_detail(observation: MarketObservation, payload: dict[str, Any]) -> MarketObservation:
+    """VAT and dealer name from the documented detail resource. Descriptions are not stored."""
+
+    from app.domains.vehicles.vat_text import classify_vat_text, price_basis
+
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+    description = str(data.get("description") or "")
+    reading = classify_vat_text(observation.listing_title or "", description)
+    seller = data.get("seller") if isinstance(data.get("seller"), dict) else {}
+    dealer = str(seller.get("name") or "").strip() or None
+    net, gross, rate = price_basis(observation.advertised_price_eur or observation.asking_price_eur, reading.classification, reading.fragment)
+    updated = str(data.get("updated_at") or observation.source_updated_at or "") or None
+    return replace(
+        observation,
+        dealer_name=dealer or observation.dealer_name,
+        vat_presentation=reading.presentation(),
+        vat_classification=reading.classification,
+        vat_fragment=reading.fragment,
+        vat_parser_version=reading.parser_version,
+        vat_confidence=reading.confidence,
+        net_price_eur=net,
+        gross_price_eur=gross,
+        vat_rate=rate,
+        source_updated_at=updated,
+        engine=str(data.get("engine_size") or observation.engine or "") or observation.engine,
+    )
+
+
+async def fetch_van_inventory(
+    client: httpx.AsyncClient,
+    *,
+    observed_at: datetime | None = None,
+    pause_seconds: float = PAUSE_SECONDS,
+    prior: list[MarketObservation] | None = None,
+) -> InventoryFetch:
+    """Page body_type=van, then detail only commercial rows whose VAT text is not cached."""
+
+    moment = observed_at or datetime.now(timezone.utc)
+    received = 0
+    rejected: dict[str, int] = {}
+    accepted: list[MarketObservation] = []
+    pages = 0
+    complete = True
+    error = ""
+    for page in range(1, MAX_INVENTORY_PAGES + 1):
+        if page > 1 and pause_seconds:
+            await asyncio.sleep(pause_seconds)
+        try:
+            _response, payload = await request_json(
+                client,
+                "GET",
+                SEARCH_URL,
+                params={"body_type": "van", "page": str(page), "limit": str(PAGE_LIMIT)},
+            )
+        except (RateLimitError, SourceHttpError, httpx.HTTPError, ValueError) as exc:
+            error = str(exc)
+            complete = False
+            _HEALTH["status"] = "DEGRADED" if accepted else "DOWN"
+            _HEALTH["last_failure_at"] = moment.isoformat()
+            _HEALTH["last_error"] = error
+            break
+        pages += 1
+        if not isinstance(payload, dict):
+            error = "Autoza search did not return a JSON object."
+            complete = False
+            break
+        data = payload.get("data") or []
+        received += len(data)
+        for row in data:
+            if not isinstance(row, dict):
+                rejected["not_an_object"] = rejected.get("not_an_object", 0) + 1
+                continue
+            mapped = _one(row, moment)
+            if mapped is None:
+                rejected["not_a_recognised_commercial_van"] = rejected.get("not_a_recognised_commercial_van", 0) + 1
+                continue
+            accepted.append(mapped)
+        meta = payload.get("meta") or {}
+        total = int(meta["total"]) if isinstance(meta, dict) and meta.get("total") is not None else None
+        if not data or (total is not None and received >= total) or len(data) < PAGE_LIMIT:
+            complete = True
+            break
+    else:
+        complete = False
+    details = 0
+    enriched: list[MarketObservation] = []
+    if not error:
+        enriched, details, detail_error = await _enrich(client, accepted, prior or [], pause_seconds, moment)
+        if detail_error:
+            error = detail_error
+            complete = False
+    else:
+        enriched = accepted
+    if not error:
+        _HEALTH["status"] = "LIVE"
+        _HEALTH["last_success_at"] = moment.isoformat()
+        _HEALTH["last_error"] = ""
+        _HEALTH["observation_count"] = len(enriched)
+        _HEALTH["rows_received"] = received
+        _HEALTH["rows_accepted"] = len(enriched)
+        _HEALTH["rows_rejected"] = received - len(accepted)
+    return InventoryFetch(
+        observations=tuple(enriched),
+        rows_received=received,
+        rows_accepted=len(enriched),
+        rows_rejected=max(0, received - len(accepted)),
+        rejection_reasons=rejected,
+        pages=pages,
+        complete=complete and not error,
+        details_fetched=details,
+        error=error,
+    )
+
+
+async def _enrich(
+    client: httpx.AsyncClient,
+    rows: list[MarketObservation],
+    prior: list[MarketObservation],
+    pause_seconds: float,
+    moment: datetime,
+) -> tuple[list[MarketObservation], int, str]:
+    cached: dict[str, MarketObservation] = {}
+    for item in prior:
+        if item.source == SOURCE_ID and item.vat_classification != "UNKNOWN":
+            cached[item.listing_id] = item
+    enriched: list[MarketObservation] = []
+    fetched = 0
+    error = ""
+    for row in rows:
+        previous = cached.get(row.listing_id)
+        if (
+            previous is not None
+            and previous.source_updated_at
+            and previous.source_updated_at == row.source_updated_at
+        ):
+            enriched.append(
+                replace(
+                    row,
+                    dealer_name=previous.dealer_name,
+                    vat_presentation=previous.vat_presentation,
+                    vat_classification=previous.vat_classification,
+                    vat_fragment=previous.vat_fragment,
+                    vat_parser_version=previous.vat_parser_version,
+                    vat_confidence=previous.vat_confidence,
+                    net_price_eur=previous.net_price_eur,
+                    gross_price_eur=previous.gross_price_eur,
+                    vat_rate=previous.vat_rate,
+                )
+            )
+            continue
+        if fetched >= MAX_DETAIL_LOOKUPS:
+            enriched.append(row)
+            continue
+        if fetched and pause_seconds:
+            await asyncio.sleep(pause_seconds)
+        listing_uuid = row.listing_id.removeprefix("autoza:")
+        try:
+            _response, payload = await request_json(client, "GET", DETAIL_URL.format(listing_id=listing_uuid))
+        except (RateLimitError, SourceHttpError, httpx.HTTPError, ValueError) as exc:
+            error = str(exc)
+            _HEALTH["status"] = "DEGRADED"
+            _HEALTH["last_failure_at"] = moment.isoformat()
+            _HEALTH["last_error"] = error
+            enriched.append(row)
+            enriched.extend(rows[len(enriched) :])
+            break
+        fetched += 1
+        try:
+            if isinstance(payload, dict):
+                enriched.append(apply_detail(row, payload))
+            else:
+                enriched.append(row)
+        except Exception as exc:  # noqa: BLE001 — one bad detail must not drop the inventory
+            error = str(exc)
+            _HEALTH["status"] = "DEGRADED"
+            _HEALTH["last_error"] = error
+            enriched.append(row)
+    return enriched, fetched, error
+

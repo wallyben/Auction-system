@@ -1,0 +1,67 @@
+"""Labels for the owner. None of these pass a due-diligence gate."""
+
+from __future__ import annotations
+
+
+def economic_label(*, state: str, market_pass: bool, auction_cost_pass: bool, has_conservative: bool) -> str:
+    if state == "BUY_CANDIDATE":
+        return "SHADOW_CANDIDATE"
+    if state == "PRICE_TOO_HIGH" or (has_conservative and state == "REJECT"):
+        return "NOT_ECONOMIC"
+    if market_pass and auction_cost_pass and has_conservative and state == "MANUAL_EVIDENCE_REQUIRED":
+        return "ECONOMICALLY_INTERESTING_PENDING_DILIGENCE"
+    if not has_conservative:
+        return "INSUFFICIENT_MARKET"
+    return "NOT_A_CANDIDATE"
+
+
+def ni_landing_scenarios(
+    provenance_state: str,
+    *,
+    conservative_resale_eur: object = None,
+    scenario_landed_eur: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Show NI cost scenarios. survives is an economic comparison, never a gate pass."""
+
+    unresolved = provenance_state in {"UNKNOWN", "LIKELY_NI_NEEDS_DOCUMENTS", "GB_TO_NI_UNPROVEN"}
+    landed = scenario_landed_eur or {}
+    names = (
+        ("SCENARIO_A", "qualifying NI treatment"),
+        ("SCENARIO_B", "import VAT or customs exposure"),
+        ("SCENARIO_C", "VRT uncertainty"),
+    )
+    scenarios = []
+    compared = 0
+    survivors = 0
+    for name, treatment in names:
+        cost = landed.get(name)
+        survives = None
+        if conservative_resale_eur is not None and cost is not None:
+            compared += 1
+            survives = cost < conservative_resale_eur
+            survivors += int(bool(survives))
+        scenarios.append(
+            {
+                "name": name,
+                "treatment": treatment,
+                "landed_eur": None if cost is None else str(cost),
+                "survives_conservative_resale": survives,
+                "passes_gate": False,
+            }
+        )
+    if unresolved and compared == 0:
+        classification = "DOCUMENT_DEPENDENT"
+    elif compared and survivors == compared:
+        classification = "ROBUST_OPPORTUNITY"
+    elif compared and survivors == 0:
+        classification = "NOT_ECONOMIC"
+    elif compared:
+        classification = "DOCUMENT_DEPENDENT"
+    else:
+        classification = "USE_GATES"
+    return {
+        "landing_cost": "LANDING_COST_UNRESOLVED" if unresolved else "SEE_TAX_MODEL",
+        "classification": classification,
+        "gate_pass": False,
+        "scenarios": scenarios,
+    }

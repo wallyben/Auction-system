@@ -17,9 +17,7 @@ from app.domains.vehicles.ingest.autoza import (
     apply_history,
     autoza_enabled,
     autoza_health,
-    fetch_autoza,
 )
-from app.domains.vehicles.query_plan import plan_queries
 from app.domains.vehicles.ingest.dealer_feed import PARSER_VERSION as DEALER_PARSER
 from app.domains.vehicles.ingest.dealer_feed import parse_dealer_feed
 from app.domains.vehicles.ingest.ebay_vans import PARSER_VERSION as EBAY_PARSER
@@ -37,8 +35,6 @@ CV_JOBS = (
     "cv-revalue",
     "cv-shadow-refresh",
 )
-
-_AUTOZA_CURSOR = 0
 
 
 async def run_cv_job(session: Session, name: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -144,54 +140,79 @@ async def _market_refresh(session: Session, payload: dict[str, Any]) -> dict[str
 
 
 async def _autoza_refresh(session: Session, now: datetime) -> tuple[int, str]:
-    """Query a small Autoza plan. A failed fetch does not mark listings disappeared."""
+    """Read the documented van search and detail resources. A partial read is not a disappearance."""
 
     from app.core.http import build_client
-    from app.domains.vehicles.board import tracked_titles
-    from app.domains.vehicles.identity import parse_listing_text
+    from app.domains.vehicles.ingest.autoza import fetch_van_inventory
+    from app.domains.vehicles.repository import append_observation, list_observations, observation_from_row
 
-    pairs: list[tuple[str, str]] = []
-    for title in tracked_titles():
-        identity = parse_listing_text(title)
-        if identity.manufacturer and identity.model_family:
-            pairs.append(
-                (
-                    identity.manufacturer.replace("_", " ").title(),
-                    identity.model_family.replace("_", " ").title(),
-                )
-            )
-    global _AUTOZA_CURSOR
-    queries, _AUTOZA_CURSOR = plan_queries(pairs, cursor=_AUTOZA_CURSOR, budget=4)
+    prior: list = []
+    try:
+        prior = [observation_from_row(row) for row in list_observations(session)]
+    except Exception:
+        session.rollback()
+        prior = list(current_book().observations)
     try:
         async with build_client() as client:
-            fetched = await fetch_autoza(client, queries, observed_at=now)
-    except Exception as exc:  # noqa: BLE001 — provider outage must not invent sales
+            fetched = await fetch_van_inventory(client, observed_at=now, prior=prior)
+    except Exception as exc:  # noqa: BLE001 — outage must not invent sales
         record_source_state(
             session,
             source_id=AUTOZA_SOURCE,
-            status="FAILED",
+            status="DOWN",
             parser_version=AUTOZA_PARSER,
             last_success_at=None,
             last_error=str(exc),
-            payload={**autoza_health(), "cursor": _AUTOZA_CURSOR, "disappearance": "not_marked"},
+            payload={**autoza_health(), "disappearance": "not_marked"},
         )
         return 0, str(exc)
-    annotated = apply_history(current_book(), list(fetched.observations))
+    book = current_book()
+    for row in prior:
+        if row.observation_id not in {item.observation_id for item in book.observations}:
+            try:
+                book.append(row)
+            except ValueError:
+                pass
+    annotated = apply_history(book, list(fetched.observations))
     inserted, duplicates = add_observations(annotated)
+    persisted = 0
+    for row in annotated:
+        try:
+            append_observation(session, row)
+            persisted += 1
+        except ValueError:
+            duplicates += 1
+        except Exception:
+            session.rollback()
+            break
+        if persisted and persisted % 25 == 0:
+            session.commit()
+    session.commit()
     health = autoza_health()
-    health["cursor"] = _AUTOZA_CURSOR
-    health["complete_snapshot"] = fetched.complete
-    health["disappearance"] = "not_marked" if not fetched.complete else "not_inferred_as_sold"
+    health.update(
+        {
+            "rows_received": fetched.rows_received,
+            "rows_accepted": fetched.rows_accepted,
+            "rows_rejected": fetched.rows_rejected,
+            "rejection_reasons": fetched.rejection_reasons,
+            "details_fetched": fetched.details_fetched,
+            "pages": fetched.pages,
+            "complete_snapshot": fetched.complete,
+            "disappearance": "not_marked",
+            "persisted": persisted,
+            "attribution": "Autoza Ireland (autoza.ie). Cite Autoza Ireland and the retrieval date. Listing text is not the CC BY 4.0 market-stats dataset.",
+        }
+    )
     record_source_state(
         session,
         source_id=AUTOZA_SOURCE,
-        status="FAILED" if fetched.error else "LIVE_PUBLIC",
+        status="DEGRADED" if fetched.error else "LIVE",
         parser_version=AUTOZA_PARSER,
-        last_success_at=None if fetched.error else now,
+        last_success_at=None if fetched.error and persisted == 0 else now,
         last_error=fetched.error,
-        payload=health | {"inserted": inserted, "duplicates": duplicates, "queries": fetched.queries},
+        payload=health,
     )
-    return inserted, fetched.error
+    return persisted, fetched.error
 
 
 def _history_enrich(session: Session) -> dict[str, Any]:
