@@ -79,7 +79,8 @@
             </ul>
             <p>Failed gates: {{ row.gates.failures|join(", ") or "none" }}</p>
             <p>Max bid base {{ row.max_bid_base_eur or "—" }}. Conservative {{ row.max_bid_conservative_eur or "—" }}. Stress {{ row.max_bid_stress_eur or "—" }}.</p>
-            <p>Asking-to-achievable adjustment {{ row.valuation.asking_to_achievable_adjustment }}. Status {{ row.valuation.asking_to_achievable_status }}. VAT basis {{ row.valuation.vat_basis }}. Sensitivity {{ row.valuation.haircut_sensitivity }}.</p>
+            <p>Asking-to-achievable adjustment {{ row.valuation.asking_to_achievable_adjustment }}. Status {{ row.valuation.asking_to_achievable_status }}. VAT basis {{ row.valuation.vat_basis }}. Known VAT share {{ row.valuation.known_vat_share or "—" }}. Effective sample {{ row.valuation.effective_sample_size }}. Confidence {{ row.valuation.confidence_label or row.valuation.confidence }}.</p>
+            <p>Market range {{ row.valuation.asking_low_eur or "—" }} / {{ row.valuation.market_asking_eur or "—" }} / {{ row.valuation.asking_high_eur or "—" }}. Tier A {{ row.valuation.tier_a_count }} B {{ row.valuation.tier_b_count }} C {{ row.valuation.tier_c_count }}.</p>
             <p>Economic interest {{ row.economic_interest }}. Landing {{ row.landing_scenarios.landing_cost }} / {{ row.landing_scenarios.classification }}.</p>
             {% for comp in row.valuation.comps %}
             <p class="muted">{{ comp.model_family }} {{ comp.year or "" }} {{ comp.mileage_km or "" }} km score {{ comp.score }} €{{ comp.price_eur }} VAT {{ comp.vat_presentation or "unknown" }} {{ comp.source }} — {{ comp.reasons|join(" ") }} {% if comp.differences %}Differs: {{ comp.differences|join(", ") }}.{% endif %}</p>
@@ -186,7 +187,29 @@
   <p>{{ evaluation.gates.failures|join(", ") or "None" }}</p>
   <h3>Max bid sensitivity</h3>
   <p>Base {{ evaluation.max_bid_base_eur or "—" }}. Conservative {{ evaluation.max_bid_conservative_eur or "—" }}. Stress {{ evaluation.max_bid_stress_eur or "—" }}. The decision ceiling is the conservative figure. Asking-to-achievable adjustment {{ evaluation.valuation.asking_to_achievable_adjustment }}. Status {{ evaluation.valuation.asking_to_achievable_status }}.</p>
-  <p>VAT basis {{ evaluation.valuation.vat_basis }}. Sensitivity at 10/15/20 percent: {{ evaluation.valuation.haircut_sensitivity }}.</p>
+  <p>VAT basis {{ evaluation.valuation.vat_basis }}. Known VAT share {{ evaluation.valuation.known_vat_share or "—" }}. Effective comps {{ evaluation.valuation.effective_sample_size }}. Label {{ evaluation.valuation.confidence_label or "—" }}. This is an asking-market estimate, not a verified sold price.</p>
+  <p>Sensitivity at 10/15/20 percent: {{ evaluation.valuation.haircut_sensitivity }}. Scenario sensitivity: {{ evaluation.valuation.sensitivity }}.</p>
+  {% if evaluation.valuation.evidence %}
+  <h3>Valuation evidence</h3>
+  <table>
+    <thead><tr><th>Vehicle</th><th>Year</th><th>Mileage</th><th>Price</th><th>VAT</th><th>Tier</th><th>Weight</th><th>Adjustment</th><th>Why</th></tr></thead>
+    <tbody>
+      {% for comp in evaluation.valuation.evidence %}
+      <tr>
+        <td>{{ comp.vehicle }}</td>
+        <td>{{ comp.year or "—" }}</td>
+        <td>{{ comp.mileage_km or "—" }}</td>
+        <td>{{ comp.asking_price_eur }}</td>
+        <td>{{ comp.vat_basis }}</td>
+        <td>{{ comp.tier }}</td>
+        <td>{{ comp.similarity_weight }}</td>
+        <td>{{ comp.adjustments_eur }}</td>
+        <td class="muted">{{ comp.why }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
 </section>
 {% endif %}
 

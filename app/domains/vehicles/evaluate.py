@@ -38,7 +38,8 @@ from app.domains.vehicles.policy import (
 from app.domains.vehicles.provenance import ProvenanceResult, assess_provenance
 from app.domains.vehicles.reconditioning import ReconditioningResult, estimate_reconditioning
 from app.domains.vehicles.tax import TaxInput, TaxPosition, assess_tax
-from app.domains.vehicles.valuation import ValuationResult, value_vehicle
+from app.domains.vehicles.valuation import ValuationResult
+from app.domains.vehicles.valuation_v2 import value_vehicle_v2
 
 _GOODS = {BodyKind.PANEL, BodyKind.CHASSIS, BodyKind.TIPPER, BodyKind.DROPSIDE, BodyKind.LUTON}
 
@@ -212,7 +213,7 @@ def evaluate_vehicle(case: VehicleCase) -> Evaluation:
         keys=case.history.keys,
         mechanical_inspected=case.mechanical_inspected,
     )
-    valuation = value_vehicle(case.identity, case.book, as_of=case.as_of)
+    valuation = value_vehicle_v2(case.identity, case.book, as_of=case.as_of)
     selling = _selling_cost(valuation.conservative_eur)
     currency = case.listing.currency
     rate = Decimal("1") if currency.upper() == "EUR" else case.fx_eur_per_unit

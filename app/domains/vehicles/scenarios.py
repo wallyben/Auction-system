@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 
 def economic_label(*, state: str, market_pass: bool, auction_cost_pass: bool, has_conservative: bool) -> str:
     if state == "BUY_CANDIDATE":
@@ -65,3 +67,23 @@ def ni_landing_scenarios(
         "gate_pass": False,
         "scenarios": scenarios,
     }
+
+
+def vat_decision(
+    *,
+    all_in_eur: Decimal,
+    pessimistic_resale_eur: Decimal,
+    optimistic_resale_eur: Decimal,
+    required_profit_eur: Decimal = Decimal("1500"),
+) -> dict[str, object]:
+    """VAT uncertainty blocks a buy. It blocks a preliminary look only when the scenarios disagree."""
+
+    pessimistic_ok = pessimistic_resale_eur - all_in_eur >= required_profit_eur
+    optimistic_ok = optimistic_resale_eur - all_in_eur >= required_profit_eur
+    if pessimistic_ok and optimistic_ok:
+        label = "ECONOMICALLY_INTERESTING_PENDING_DILIGENCE"
+    elif pessimistic_ok or optimistic_ok:
+        label = "VALUATION_UNRESOLVED"
+    else:
+        label = "NOT_ECONOMIC"
+    return {"label": label, "buy_candidate": False, "gate_pass": False}

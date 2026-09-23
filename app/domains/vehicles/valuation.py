@@ -107,6 +107,14 @@ class ValuationResult:
     trade_downside_eur: Decimal | None = None
     median_comp_age_days: int | None = None
     haircut_sensitivity: dict[str, str | None] | None = None
+    confidence_label: str = ""
+    tier_a_count: int = 0
+    tier_b_count: int = 0
+    tier_c_count: int = 0
+    known_vat_share: str = ""
+    evidence: tuple[dict[str, object], ...] = ()
+    sensitivity: dict[str, str] | None = None
+    effect_basis: str = ""
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -139,6 +147,15 @@ class ValuationResult:
             "comps": [comp.to_dict() for comp in self.comps],
             "rejected_comps": [comp.to_dict() for comp in self.rejected],
             "notes": list(self.notes),
+            "confidence_label": self.confidence_label,
+            "tier_a_count": self.tier_a_count,
+            "tier_b_count": self.tier_b_count,
+            "tier_c_count": self.tier_c_count,
+            "known_vat_share": self.known_vat_share,
+            "evidence": list(self.evidence),
+            "sensitivity": self.sensitivity,
+            "effect_basis": self.effect_basis,
+            "asking_market_only": True,
         }
 
 

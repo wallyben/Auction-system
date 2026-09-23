@@ -229,7 +229,10 @@ def test_outlier_does_not_set_the_median_and_thin_book_withholds() -> None:
     case.book.append(_obs(30, asking_price_eur=Decimal("80000")))
     result = evaluate_vehicle(case)
     assert result.valuation.market_asking_eur == Decimal("18000.00")
-    assert result.valuation.model_version == "arie-native-v1"
+    assert result.valuation.model_version == "arie-native-v2"
+    from app.domains.vehicles.valuation import value_vehicle
+
+    assert value_vehicle(case.identity, case.book, as_of=case.as_of).model_version == "arie-native-v1"
     assert result.valuation.effective_sample_size >= Decimal("11")
 
     thin = golden()
