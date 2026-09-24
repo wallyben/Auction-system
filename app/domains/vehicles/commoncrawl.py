@@ -6,7 +6,6 @@ Archived HTML is parsed in memory and discarded. The marketplace is not fetched.
 from __future__ import annotations
 
 import json
-import os
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -31,7 +30,9 @@ class ArchiveCapture:
 
 
 def crawl_enabled() -> bool:
-    return os.environ.get("CV_COMMON_CRAWL_ENABLED", "true").strip().lower() not in {"0", "false", "no"}
+    from app.core import config
+
+    return bool(config.settings.cv_common_crawl_enabled)
 
 
 class CommonCrawlMarketEnricher:

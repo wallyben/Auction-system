@@ -149,6 +149,13 @@ class Settings(BaseSettings):
     dvsa_token_url: str = ""
     dvsa_scope: str = "https://tapi.dvsa.gov.uk/.default"
     cv_condition_provider: str = ""
+    brave_search_api_key: str = ""
+    cv_market_search_enabled: bool = True
+    cv_common_crawl_enabled: bool = True
+    cv_search_max_requests_per_auction: int = 120
+    cv_search_max_requests_per_market_group: int = 12
+    cv_search_market_cache_hours: int = 12
+    cv_search_max_requests_per_day: int = 400
 
     @field_validator("database_url", mode="before")
     @classmethod

@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import os
-
 import httpx
 import pytest
 
+from app.core.config import settings
 from app.domains.vehicles.commoncrawl import CommonCrawlMarketEnricher
 from app.domains.vehicles.market_provider import BraveMarketSearchProvider
 
@@ -15,9 +14,9 @@ pytestmark = pytest.mark.live
 
 @pytest.mark.asyncio
 async def test_brave_live_market_search() -> None:
-    key = os.environ.get("BRAVE_SEARCH_API_KEY", "").strip()
+    key = (settings.brave_search_api_key or "").strip()
     if not key:
-        pytest.skip("BRAVE_SEARCH_API_KEY is not set")
+        pytest.skip("Brave Search is not configured")
     async with httpx.AsyncClient(timeout=30) as client:
         found = await BraveMarketSearchProvider(client, api_key=key).search('site:donedeal.ie "Ford Transit Custom" "2018"')
     assert found.provider == "brave"

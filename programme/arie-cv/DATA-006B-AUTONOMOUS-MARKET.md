@@ -40,12 +40,12 @@ Usage is stored under `artifacts/runtime/market_search/` (gitignored): requests 
 
 ## Known limitations
 
-This workspace has no `BRAVE_SEARCH_API_KEY` and no `DATABASE_URL`, so the live Stage A proof and the T426 coverage replay were not run. A broad Common Crawl URL filter for DoneDeal returned HTTP 504; exact-URL enrichment is implemented and unit-tested. Search-index evidence is snippet evidence, not a full listing page. Native v2 was not retuned.
+Stage A was `STAGE_A_NOT_EXECUTED_CONFIGURATION_BLOCKED`: zero Brave requests because the key was absent. That is not a retrieval-quality result. This workspace also had no `DATABASE_URL`, so the T426 coverage replay was not run. A broad Common Crawl URL filter for DoneDeal returned HTTP 504; exact-URL enrichment is implemented and unit-tested. Search-index evidence is snippet evidence, not a full listing page. Native v2 was not retuned.
 
 ## Setup
 
 1. Create a Brave Search API key.
-2. Add `BRAVE_SEARCH_API_KEY=<key>` to the environment.
+2. Add `BRAVE_SEARCH_API_KEY=<key>` to the repository-root `.env`. Docker Compose passes that value into `app` and `worker`.
 3. Restart the ARIE worker.
 
 `CV_MARKET_SEARCH_ENABLED` and `CV_COMMON_CRAWL_ENABLED` default on. With no key, `/cv` shows `SEARCH PROVIDER NOT CONFIGURED` and Autoza continues.

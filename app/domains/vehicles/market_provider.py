@@ -16,6 +16,8 @@ from typing import Any, Protocol
 
 import httpx
 
+from app.core import config
+
 BRAVE_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
 PARSER_VERSION = "brave-market-1"
 
@@ -57,8 +59,12 @@ class MarketSearchProvider(Protocol):
     async def search(self, query: str, *, country: str = "IE") -> SearchResponse: ...
 
 
+def brave_api_key() -> str:
+    return (config.settings.brave_search_api_key or "").strip()
+
+
 def brave_configured() -> bool:
-    return bool(os.environ.get("BRAVE_SEARCH_API_KEY", "").strip())
+    return bool(brave_api_key())
 
 
 def source_health() -> dict[str, dict[str, object]]:
@@ -70,21 +76,21 @@ def source_health() -> dict[str, dict[str, object]]:
     brave_status = "LIVE" if brave_configured() and search_enabled() else "NOT_CONFIGURED"
     if not search_enabled():
         brave_status = "DOWN"
-    crawl = os.environ.get("CV_COMMON_CRAWL_ENABLED", "true").strip().lower() not in {"0", "false", "no"}
     return {
         "autoza": {"name": "AUTOZA", "status": "NOT_RUN"},
         "brave": {
             "name": "BRAVE SEARCH",
             "status": brave_status,
+            "configured": brave_configured(),
             "requests_today": usage.get("requests_today", 0),
             "requests_this_month": usage.get("requests_this_month", 0),
         },
-        "common_crawl": {"name": "COMMON CRAWL", "status": "LIVE" if crawl else "DOWN"},
+        "common_crawl": {"name": "COMMON CRAWL", "status": "LIVE" if config.settings.cv_common_crawl_enabled else "DOWN"},
     }
 
 
 def search_enabled() -> bool:
-    return os.environ.get("CV_MARKET_SEARCH_ENABLED", "true").strip().lower() not in {"0", "false", "no"}
+    return bool(config.settings.cv_market_search_enabled)
 
 
 class BraveMarketSearchProvider:
@@ -92,7 +98,7 @@ class BraveMarketSearchProvider:
 
     def __init__(self, client: httpx.AsyncClient, api_key: str | None = None) -> None:
         self.client = client
-        self.api_key = api_key if api_key is not None else os.environ.get("BRAVE_SEARCH_API_KEY", "").strip()
+        self.api_key = brave_api_key() if api_key is None else api_key.strip()
 
     async def search(self, query: str, *, country: str = "IE") -> SearchResponse:
         if not self.api_key:
@@ -163,10 +169,10 @@ class SearchBudget:
         root.mkdir(parents=True, exist_ok=True)
         self.path = root / "usage.json"
         self.cache_path = root / "query_cache.json"
-        self.group_cap = int(os.environ.get("CV_SEARCH_MAX_REQUESTS_PER_MARKET_GROUP", "12"))
-        self.auction_cap = int(os.environ.get("CV_SEARCH_MAX_REQUESTS_PER_AUCTION", "120"))
-        self.day_cap = int(os.environ.get("CV_SEARCH_MAX_REQUESTS_PER_DAY", "400"))
-        self.cache_hours = int(os.environ.get("CV_SEARCH_MARKET_CACHE_HOURS", "12"))
+        self.group_cap = int(config.settings.cv_search_max_requests_per_market_group)
+        self.auction_cap = int(config.settings.cv_search_max_requests_per_auction)
+        self.day_cap = int(config.settings.cv_search_max_requests_per_day)
+        self.cache_hours = int(config.settings.cv_search_market_cache_hours)
         self.data = self._load(self.path)
         self.cache = self._load(self.cache_path)
 

@@ -17,7 +17,9 @@ from app.domains.vehicles.market import MarketBook, MarketObservation
 from app.domains.vehicles.market_dedupe import assign_duplicate_groups, primary_observations, seller_key
 from app.domains.vehicles.market_extract import classify_listing_url, extract_listing
 from app.domains.vehicles.market_harvest import harvest_group
-from app.domains.vehicles.market_provider import BraveMarketSearchProvider, SearchBudget, SearchNotConfigured, source_health
+from app.core.config import Settings
+from app.core import config
+from app.domains.vehicles.market_provider import BraveMarketSearchProvider, SearchBudget, SearchNotConfigured, brave_configured, source_health
 from app.domains.vehicles.market_search import group_for, groups_for_lots, queries_for
 from app.domains.vehicles.enums import ObservationStatus
 from tests.test_cv_engine import AS_OF
@@ -90,7 +92,7 @@ def test_seller_and_cross_source_dedupe() -> None:
 
 
 def test_budget_stops_and_cache_hits(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("CV_SEARCH_MAX_REQUESTS_PER_MARKET_GROUP", "1")
+    monkeypatch.setattr(config.settings, "cv_search_max_requests_per_market_group", 1)
     budget = SearchBudget(tmp_path)
     assert budget.allow(group_id="g", auction_id="a")
     budget.record(group_id="g", auction_id="a")
@@ -137,8 +139,9 @@ async def test_archive_miss_and_brave_parse(monkeypatch: pytest.MonkeyPatch, tmp
 
 @pytest.mark.asyncio
 async def test_harvest_accepts_roi_listing_and_records_budget(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("BRAVE_SEARCH_API_KEY", "test")
-    monkeypatch.setenv("CV_COMMON_CRAWL_ENABLED", "false")
+    monkeypatch.setattr(config.settings, "brave_search_api_key", "test")
+    monkeypatch.setattr(config.settings, "cv_common_crawl_enabled", False)
+    monkeypatch.setattr(config.settings, "cv_market_search_enabled", True)
     group = group_for("transit_custom", 2018, "PANEL", "DIESEL")
     assert group is not None
     payload = {
@@ -170,10 +173,51 @@ async def test_harvest_accepts_roi_listing_and_records_budget(tmp_path: Path, mo
 
 
 def test_missing_brave_key_is_not_configured(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("BRAVE_SEARCH_API_KEY", raising=False)
+    monkeypatch.setattr(config.settings, "brave_search_api_key", "")
+    monkeypatch.setattr(config.settings, "cv_market_search_enabled", True)
     health = source_health()
     assert health["brave"]["status"] == "NOT_CONFIGURED"
+    assert health["brave"]["configured"] is False
     assert health["autoza"]["status"] == "NOT_RUN"
+
+
+def test_settings_env_file_configures_market_search_without_logging_the_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    secret = "unit-test-brave-token-not-a-real-key"
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                f"BRAVE_SEARCH_API_KEY={secret}",
+                "CV_MARKET_SEARCH_ENABLED=true",
+                "CV_COMMON_CRAWL_ENABLED=false",
+                "CV_SEARCH_MAX_REQUESTS_PER_AUCTION=77",
+                "CV_SEARCH_MAX_REQUESTS_PER_MARKET_GROUP=3",
+                "CV_SEARCH_MARKET_CACHE_HOURS=6",
+                "CV_SEARCH_MAX_REQUESTS_PER_DAY=9",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    loaded = Settings(_env_file=env_file)
+    assert loaded.brave_search_api_key == secret
+    assert loaded.cv_search_max_requests_per_auction == 77
+    assert loaded.cv_common_crawl_enabled is False
+    monkeypatch.setattr(config, "settings", loaded)
+    assert brave_configured() is True
+    health = source_health()
+    assert health["brave"]["configured"] is True
+    assert health["brave"]["status"] != "NOT_CONFIGURED"
+    rendered = repr(health)
+    assert secret not in rendered
+    budget = SearchBudget(tmp_path / "state")
+    assert budget.auction_cap == 77
+    assert budget.group_cap == 3
+    assert budget.day_cap == 9
+    assert budget.cache_hours == 6
+    empty = Settings(brave_search_api_key="")
+    monkeypatch.setattr(config, "settings", empty)
+    assert brave_configured() is False
+    assert source_health()["brave"]["status"] == "NOT_CONFIGURED"
 
 
 def test_cat_s_and_non_runner_enter_the_risk_gate() -> None:
