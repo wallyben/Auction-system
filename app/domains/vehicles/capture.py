@@ -7,6 +7,8 @@ from decimal import Decimal
 
 from app.domains.vehicles.cases import VehicleCase
 from app.domains.vehicles.evaluate import Evaluation, evaluate_vehicle
+from app.domains.vehicles.enums import CheckOutcome, EvidencePosture
+from app.domains.vehicles.evidence import CheckResult
 from app.domains.vehicles.history import HistoryInput
 from app.domains.vehicles.identity import ListingIdentity, parse_listing_text, registration_signal
 from app.domains.vehicles.ingest.mid_ulster import (
@@ -98,7 +100,7 @@ def _case(
             vehicle_vin=identity.vin,
             auction_country="NI",
         ),
-        history=HistoryInput(listing_mileage_km=lot.mileage_km),
+        history=_history(lot),
         book=book,
         schedule=schedule,
         vat_treatment=treatment,
@@ -107,3 +109,39 @@ def _case(
         fx_retrieved_at=fx_at,
         auction_lot_vat_rate=Decimal("0.20") if treatment.value == "STANDARD_ON_HAMMER" else None,
     )
+
+
+_CAT = {
+    "CAT S": "CAT S",
+    "CAT N": "CAT N",
+    "CAT B": "CAT B",
+    "CAT A": "CAT A",
+    "CATEGORY S": "CAT S",
+    "CATEGORY N": "CAT N",
+    "CATEGORY B": "CAT B",
+    "CATEGORY A": "CAT A",
+}
+
+
+def _history(lot: ParsedLot) -> HistoryInput:
+    text = " ".join(
+        part for part in (lot.title, lot.vendor_disclosure, lot.vcar, " ".join(lot.raw_lines)) if part
+    ).upper()
+    write_off = None
+    for token, label in _CAT.items():
+        if token in text:
+            write_off = CheckResult(
+                name="write_off",
+                outcome=CheckOutcome.FAIL,
+                posture=EvidencePosture.PROVEN,
+                source="auction_catalogue",
+                interpretation=f"Catalogue states {label}.",
+                blocking=True,
+                raw_reference=lot.vcar or token,
+            )
+            break
+    faults: list[str] = []
+    folded = text.lower()
+    if "non-runner" in folded or "non runner" in folded:
+        faults.append("non-runner")
+    return HistoryInput(listing_mileage_km=lot.mileage_km, write_off=write_off, declared_faults=tuple(faults))

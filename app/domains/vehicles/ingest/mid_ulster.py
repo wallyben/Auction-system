@@ -23,7 +23,7 @@ LONDON = ZoneInfo("Europe/London")
 
 _FIELD = re.compile(
     r"^(Year|Serial/Reg#|Mileage/Clock|KMS/Miles/Hrs|Wrtd/Not Wrtd|Fuel Type|MOT/PSV|"
-    r"Document Status|Vendor Disclosure|Vendor|VAT|Buyers Premium|Lot|Current Bid|Starting Bid|Status)"
+    r"Document Status|Vendor Disclosure|Vendor|VAT|VCAR|Buyers Premium|Lot|Current Bid|Starting Bid|Status)"
     r"\s*[:#]?\s*(.*)$",
     re.I,
 )
@@ -52,6 +52,7 @@ class ParsedLot:
     vat: str | None
     vendor: str | None
     vendor_disclosure: str | None
+    vcar: str | None
     document_status: str | None
     mot_expiry: str | None
     current_bid_gbp: Decimal | None
@@ -257,6 +258,7 @@ def _lot(title: str, fields: dict[str, str], images: tuple[str, ...], raw: tuple
         vat=fields.get("vat"),
         vendor=fields.get("vendor"),
         vendor_disclosure=fields.get("vendor disclosure"),
+        vcar=fields.get("vcar"),
         document_status=fields.get("document status"),
         mot_expiry=fields.get("mot/psv"),
         current_bid_gbp=bid,

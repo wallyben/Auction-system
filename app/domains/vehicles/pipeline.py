@@ -34,6 +34,11 @@ CV_JOBS = (
     "cv-history-enrich",
     "cv-revalue",
     "cv-shadow-refresh",
+    "cv-market-gap-analysis",
+    "cv-market-search-harvest",
+    "cv-market-archive-enrich",
+    "cv-market-dedupe",
+    "cv-market-revalue",
 )
 
 
@@ -48,6 +53,14 @@ async def run_cv_job(session: Session, name: str, payload: dict[str, Any]) -> di
         return {"status": "idle", "reason": "Stored cases are revalued when the owner captures a lot or posts /cv/api/evaluate. No autonomous auction book is live."}
     if name == "cv-shadow-refresh":
         return _shadow_refresh(session)
+    if name in {
+        "cv-market-gap-analysis",
+        "cv-market-search-harvest",
+        "cv-market-archive-enrich",
+        "cv-market-dedupe",
+        "cv-market-revalue",
+    }:
+        return await _market_intelligence(session, name, payload)
     raise ValueError(f"unknown cv job {name}")
 
 
@@ -269,3 +282,57 @@ async def _ebay_summaries() -> list[dict[str, Any]]:
                 )
                 found.extend(payload.get("itemSummaries") or [])
     return found
+
+
+async def _market_intelligence(session: Session, name: str, payload: dict[str, Any]) -> dict[str, Any]:
+    from app.core.http import build_client
+    from app.domains.vehicles.market_harvest import harvest_group
+    from app.domains.vehicles.market_provider import SearchBudget, brave_configured
+    from app.domains.vehicles.market_search import groups_for_lots
+    from app.domains.vehicles.repository import append_observation
+
+    lots = list(payload.get("lots") or [])
+    groups = groups_for_lots(lots)
+    if name == "cv-market-gap-analysis":
+        return {"status": "ok", "groups": [group.to_dict() for group in groups]}
+    if not brave_configured():
+        record_source_state(
+            session,
+            source_id="brave_search",
+            status="NOT_CONFIGURED",
+            parser_version="brave-market-1",
+            last_success_at=None,
+            last_error="BRAVE_SEARCH_API_KEY is not set",
+            payload={"status": "NOT_CONFIGURED"},
+        )
+        return {"status": "NOT_CONFIGURED", "groups": [group.to_dict() for group in groups], "owner_action": "SET BRAVE_SEARCH_API_KEY"}
+    auction_id = str(payload.get("auction_id") or "auction")
+    budget = SearchBudget()
+    reports = []
+    inserted = 0
+    async with build_client() as client:
+        for group in groups:
+            if name == "cv-market-archive-enrich":
+                continue
+            report = await harvest_group(group, client=client, budget=budget, auction_id=auction_id)
+            for row in report.observations:
+                try:
+                    append_observation(session, row)
+                    inserted += 1
+                except ValueError:
+                    pass
+                except Exception:
+                    session.rollback()
+                    break
+            reports.append(report.to_dict())
+    session.commit()
+    record_source_state(
+        session,
+        source_id="brave_search",
+        status="LIVE",
+        parser_version="brave-market-1",
+        last_success_at=datetime.now(timezone.utc),
+        last_error="",
+        payload={"inserted": inserted, "requests": budget.usage(auction_id)},
+    )
+    return {"status": "ok", "job": name, "inserted": inserted, "reports": reports, "groups": len(groups)}

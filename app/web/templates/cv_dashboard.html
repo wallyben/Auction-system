@@ -18,6 +18,17 @@
   <a href="/cv?view_name=market">Market book</a>
 </nav>
 
+<section>
+  <h2>Market intelligence</h2>
+  <p class="meta">Search runs by market group after a catalogue is ingested. The owner does not open marketplace pages.</p>
+  {% for source in intelligence.sources.values() %}
+  <p>{{ source.name }}: {{ source.status }}{% if source.requests_today is defined %} · requests today {{ source.requests_today }} · this month {{ source.requests_this_month }}{% endif %}</p>
+  {% endfor %}
+  {% if intelligence.sources.brave.status == "NOT_CONFIGURED" %}
+  <p class="warn">SEARCH PROVIDER NOT CONFIGURED. Set BRAVE_SEARCH_API_KEY and restart the worker. Autoza is unchanged.</p>
+  {% endif %}
+</section>
+
 {% if notice %}<p class="meta">{{ notice }}</p>{% endif %}
 {% if error %}<p class="warn">{{ error }}</p>{% endif %}
 

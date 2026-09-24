@@ -2,7 +2,7 @@
 
 Retrieved and reviewed 2026-09-22, rechecked 2026-09-23. The classification and the legal ingestion path for each source are in `PHASE2-AUDIT.md`. The native estimator is in `NATIVE-MARKET-ENGINE.md`.
 
-`enabled_live_fetchers()` includes `autoza` unless `CV_AUTOZA=0`. eBay vans and dealer URLs stay off until configured. Mid Ulster is owner catalogue capture, not a crawl. DoneDeal, Carzone, CarsIreland, Adverts.ie, and Wilsons are not scraped.
+`enabled_live_fetchers()` includes `autoza` unless `CV_AUTOZA=0`. eBay vans and dealer URLs stay off until configured. Mid Ulster is owner catalogue capture, not a crawl. DoneDeal, Carzone, CarsIreland, Adverts.ie, and Wilsons are not scraped. Marketplace evidence may be read from the Brave Search index and from Common Crawl captures of URLs that search already returned. See `DATA-006B-AUTONOMOUS-MARKET.md`.
 
 Cartell and Motorcheck are `OPTIONAL_CALIBRATION`. They are not required for a shadow candidate and they are not called.
 

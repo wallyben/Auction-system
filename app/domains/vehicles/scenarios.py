@@ -5,12 +5,19 @@ from __future__ import annotations
 from decimal import Decimal
 
 
-def economic_label(*, state: str, market_pass: bool, auction_cost_pass: bool, has_conservative: bool) -> str:
+def economic_label(
+    *,
+    state: str,
+    market_pass: bool,
+    auction_cost_pass: bool,
+    has_conservative: bool,
+    preliminary_economics: bool = False,
+) -> str:
     if state == "BUY_CANDIDATE":
         return "SHADOW_CANDIDATE"
     if state == "PRICE_TOO_HIGH" or (has_conservative and state == "REJECT"):
         return "NOT_ECONOMIC"
-    if market_pass and auction_cost_pass and has_conservative and state == "MANUAL_EVIDENCE_REQUIRED":
+    if market_pass and has_conservative and state == "MANUAL_EVIDENCE_REQUIRED" and (auction_cost_pass or preliminary_economics):
         return "ECONOMICALLY_INTERESTING_PENDING_DILIGENCE"
     if not has_conservative:
         return "INSUFFICIENT_MARKET"

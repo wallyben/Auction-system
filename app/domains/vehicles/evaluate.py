@@ -83,6 +83,9 @@ class Evaluation:
     evaluated_at: datetime | None = None
     auction_source: str = ""
     closes_at: str | None = None
+    listing_screen: str = ""
+    preliminary_max_hammer_eur: Decimal | None = None
+    preliminary_note: str = ""
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -95,7 +98,14 @@ class Evaluation:
                 market_pass=bool(self.gates.gates.get("MARKET_EVIDENCE_PASS")),
                 auction_cost_pass=bool(self.gates.gates.get("AUCTION_COST_PASS")),
                 has_conservative=self.valuation.conservative_eur is not None,
+                preliminary_economics=self.listing_screen == "VALUATION_SUFFICIENT",
             ),
+            "listing_screen": self.listing_screen,
+            "valuation_sufficient": self.listing_screen == "VALUATION_SUFFICIENT",
+            "diligence_incomplete": self.state is not CandidateState.BUY_CANDIDATE,
+            "buy_ready": self.state is CandidateState.BUY_CANDIDATE,
+            "preliminary_max_hammer_eur": _s(self.preliminary_max_hammer_eur),
+            "preliminary_note": self.preliminary_note,
             "landing_scenarios": ni_landing_scenarios(self.provenance.state.value),
             "vehicle": self.summary_vehicle,
             "title": self.title,
@@ -342,6 +352,7 @@ def evaluate_vehicle(case: VehicleCase) -> Evaluation:
         or history.stolen.outcome.value == "FAIL"
         or history.write_off.outcome.value == "FAIL"
         or vin_conflict
+        or _explicit_non_runner(case)
     )
     auction_probe = auction_costs(
         hammer_eur=current or ZERO,
@@ -386,6 +397,7 @@ def evaluate_vehicle(case: VehicleCase) -> Evaluation:
         has_vin=bool(case.identity.vin),
     )
     why = _why(report)
+    preliminary_hammer, preliminary_note = _payment_fee_reserve(case, valuation, selling, landed_at)
     return Evaluation(
         state=report.state,
         certification=CertificationPosture.SHADOW,
@@ -414,7 +426,90 @@ def evaluate_vehicle(case: VehicleCase) -> Evaluation:
         evaluated_at=case.as_of,
         auction_source=case.listing.source_id,
         closes_at=case.listing.ends_at.isoformat() if case.listing.ends_at else None,
+        listing_screen="VALUATION_SUFFICIENT" if listing_identity_sufficient(case) and valuation.conservative_eur is not None else "LISTING_IDENTITY_INCOMPLETE",
+        preliminary_max_hammer_eur=preliminary_hammer,
+        preliminary_note=preliminary_note,
     )
+
+
+def _payment_fee_reserve(case: VehicleCase, valuation: ValuationResult, selling: Decimal, landed_at) -> tuple[Decimal | None, str]:
+    if case.payment_fee_posture is not EvidencePosture.UNKNOWN or valuation.conservative_eur is None or case.schedule is None:
+        return None, ""
+    from app.core.config import settings
+
+    percent = Decimal(str(settings.payment_fee_percent))
+    fixed = Decimal(str(settings.payment_fee_fixed_eur))
+
+    def reserved(hammer: Decimal) -> LandedCost:
+        fee = money(hammer * percent + fixed)
+        auction = auction_costs(
+            hammer_eur=hammer,
+            schedule=case.schedule,
+            vat_treatment=case.vat_treatment,
+            hammer_is_vat_inclusive=case.hammer_includes_vat,
+            owner_vat_registered=case.owner_vat_registered,
+            commercial_vat_invoice_expected=case.commercial_vat_invoice_expected and _effective_class(case) is CommercialClass.N1_GOODS,
+            payment_fee_eur=fee,
+            payment_fee_posture=EvidencePosture.ESTIMATED,
+            lot_vat_rate=case.auction_lot_vat_rate,
+        )
+        return stack_landed_cost(
+            auction=auction,
+            tax=landed_at(hammer).tax if False else _tax_only(case, hammer, valuation),
+            transport_eur=case.transport_eur,
+            transport_posture=case.transport_posture,
+            repairs=estimate_reconditioning(
+                declared_faults=case.history.declared_faults,
+                keys=case.history.keys,
+                mechanical_inspected=case.mechanical_inspected,
+            ),
+        )
+
+    del landed_at
+    solved = solve_max_hammer(
+        conservative_eur=valuation.conservative_eur,
+        quick_sale_eur=valuation.quick_sale_eur,
+        selling_cost_eur=selling,
+        landed_at=reserved,
+    )
+    note = "UNKNOWN PAYMENT METHOD FEE. Preliminary hammer uses the configured payment reserve and does not pass the auction-cost gate."
+    return solved.max_safe_hammer_eur, note
+
+
+def _tax_only(case: VehicleCase, hammer: Decimal, valuation: ValuationResult) -> TaxPosition:
+    del valuation
+    from app.domains.vehicles.tax import TaxInput, assess_tax
+    from app.domains.vehicles.provenance import assess_provenance
+
+    provenance = assess_provenance(case.provenance, EvidenceLedger())
+    return assess_tax(
+        TaxInput(
+            provenance=provenance.state,
+            fuel=case.fuel_override or case.identity.fuel,
+            seats=case.homologation.seats if case.homologation else case.identity.seats,
+            homologation=case.homologation,
+            co2_g_per_km=case.co2_g_per_km,
+            co2_basis=case.co2_basis,
+            nox_mg_per_km=case.nox_mg_per_km,
+            omsp_eur=case.omsp_eur,
+            omsp_source=case.omsp_source,
+            duty_rate=case.duty_rate,
+            preferential_origin_proven=case.preferential_origin_proven,
+            registration_fee_eur=case.registration_fee_eur,
+            registration_fee_posture=case.registration_fee_posture,
+        ),
+        EvidenceLedger(),
+    )
+
+
+def _explicit_non_runner(case: VehicleCase) -> bool:
+    text = " ".join(case.history.declared_faults).lower()
+    return "non-runner" in text or "non runner" in text
+
+
+def listing_identity_sufficient(case: VehicleCase) -> bool:
+    identity = case.identity
+    return bool(identity.manufacturer and identity.model_family and identity.year and identity.mileage_km and identity.body)
 
 
 def _summary(case: VehicleCase) -> str:

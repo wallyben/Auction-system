@@ -63,8 +63,57 @@ def _page(
             "market": audit,
             "family": family,
             "attribution": "Asking prices from Autoza Ireland (autoza.ie). Cite Autoza Ireland and the retrieval date.",
+            "intelligence": _intelligence(str(health.get("status") or "NOT_RUN")),
         },
     )
+
+
+def _intelligence(autoza_status: str) -> dict[str, object]:
+    from app.domains.vehicles.market_provider import source_health
+
+    try:
+        health = source_health()
+    except Exception:
+        health = {
+            "autoza": {"name": "AUTOZA", "status": "DEGRADED"},
+            "brave": {"name": "BRAVE SEARCH", "status": "NOT_CONFIGURED"},
+            "common_crawl": {"name": "COMMON CRAWL", "status": "DEGRADED"},
+        }
+    health["autoza"]["status"] = autoza_status
+    return {"sources": health}
+
+
+def _enqueue_market(parsed, cases, summary: str) -> str:
+    from app.domains.vehicles.market_search import groups_for_lots
+    from app.jobs.queue import enqueue_http
+
+    lots = []
+    for case in cases:
+        identity = case.identity
+        if not identity.model_family:
+            continue
+        lots.append(
+            {
+                "model_family": identity.model_family,
+                "year": identity.year,
+                "body": identity.body.value,
+                "fuel": identity.fuel.value,
+            }
+        )
+    groups = groups_for_lots(lots)
+    if not groups:
+        return summary
+    try:
+        queued = enqueue_http(
+            "cv-market-search-harvest",
+            "catalogue",
+            {"auction_id": parsed.sale_code or "catalogue", "lots": lots},
+        )
+    except Exception:
+        return summary + " Market harvest was not queued because the job database is unavailable."
+    if queued.get("ok"):
+        return summary + f" Queued market harvest for {len(groups)} groups."
+    return summary + " Market harvest was not queued because a pipeline job is already open."
 
 
 _EXAMPLE = """{
@@ -146,6 +195,7 @@ def cv_capture_mid_ulster(
         f"{len(evaluations)} van lots evaluated. {parsed.skipped_not_vans} non-van lots skipped. "
         "Nothing was downloaded from the auction site. Buy candidates stay empty until the gates pass."
     )
+    summary = _enqueue_market(parsed, cases, summary)
     latest = evaluations[0].to_dict() if evaluations else None
     return _page(request, active="all", evaluation=latest, notice=summary)
 

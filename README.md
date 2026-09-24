@@ -54,7 +54,7 @@ All ordinary configuration is in `.env`. You do not edit Python to change thresh
 
 ## Commercial vans (ARIE-CV)
 
-`/cv` is a separate shadow engine for Irish and Northern Irish commercial vans. It does not replace the camera floor at `/`. It does not bid or buy. Source status, tax version, and certification limits are in `programme/arie-cv/`. A vehicle with missing evidence is not a buy candidate.
+`/cv` is a separate shadow engine for Irish and Northern Irish commercial vans. It does not replace the camera floor at `/`. It does not bid or buy. Irish asking prices come from Autoza. Search-index harvest uses the Brave Search API when `BRAVE_SEARCH_API_KEY` is set, and Common Crawl can date a listing URL that search already found. DoneDeal, CarsIreland, and Carzone are not scraped. Source status, tax version, and certification limits are in `programme/arie-cv/`. A vehicle with missing evidence is not a buy candidate.
 
 ## Honest limits
 
