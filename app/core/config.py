@@ -156,6 +156,13 @@ class Settings(BaseSettings):
     cv_search_max_requests_per_market_group: int = 12
     cv_search_market_cache_hours: int = 12
     cv_search_max_requests_per_day: int = 400
+    cv_browser_enabled: bool = True
+    cv_browser_max_pages_per_source_group: int = 5
+    cv_browser_max_listing_enrichments_per_group: int = 12
+    cv_browser_max_groups_per_auction: int = 30
+    cv_browser_page_delay_ms: int = 1500
+    cv_browser_nav_timeout_ms: int = 30000
+    cv_browser_cache_hours: int = 12
 
     @field_validator("database_url", mode="before")
     @classmethod

@@ -86,11 +86,38 @@ def source_health() -> dict[str, dict[str, object]]:
             "requests_this_month": usage.get("requests_this_month", 0),
         },
         "common_crawl": {"name": "COMMON CRAWL", "status": "LIVE" if config.settings.cv_common_crawl_enabled else "DOWN"},
+        "donedeal_browser": _browser_health("DONEDEAL BROWSER", "browser-donedeal-1"),
+        "carsireland_browser": _browser_health("CARSIRELAND BROWSER", "browser-carsireland-1"),
+        "carzone_browser": _browser_health("CARZONE BROWSER", "browser-carzone-1"),
+        "dealer_browser": _browser_health("GENERIC DEALER BROWSER", "browser-dealer-1"),
     }
 
 
 def search_enabled() -> bool:
     return bool(config.settings.cv_market_search_enabled)
+
+
+def _browser_health(name: str, source_id: str) -> dict[str, object]:
+    from app.domains.vehicles.browser_market import RIGHTS_STATUS, TECHNICAL_STATUS
+    from app.domains.vehicles.browser_market.cache import read_group_snapshot
+
+    status = "NOT_TESTED"
+    for row in read_group_snapshot():
+        sources = row.get("sources") or {}
+        item = sources.get(source_id) or {}
+        found = str(item.get("status") or "")
+        if found:
+            status = found
+            break
+    if not config.settings.cv_browser_enabled:
+        status = "DISABLED"
+    return {
+        "name": name,
+        "status": status,
+        "technical_status": TECHNICAL_STATUS,
+        "rights_status": RIGHTS_STATUS,
+        "evidence_class": "PUBLIC_PAGE_CURRENT_UNLICENSED",
+    }
 
 
 class BraveMarketSearchProvider:

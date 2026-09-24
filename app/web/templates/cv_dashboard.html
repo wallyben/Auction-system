@@ -25,7 +25,40 @@
   <p>{{ source.name }}: {{ source.status }}{% if source.requests_today is defined %} · requests today {{ source.requests_today }} · this month {{ source.requests_this_month }}{% endif %}</p>
   {% endfor %}
   {% if intelligence.sources.brave.status == "NOT_CONFIGURED" %}
-  <p class="warn">SEARCH PROVIDER NOT CONFIGURED. Set BRAVE_SEARCH_API_KEY and restart the worker. Autoza is unchanged.</p>
+  <p class="warn">Brave is not configured. It is only used to discover public search URLs. Autoza and the browser harvest still run.</p>
+  {% endif %}
+  <p class="meta">Browser observations are PUBLIC_PAGE_CURRENT_UNLICENSED. Technical status is experimental public browsing. Rights status stays unlicensed public web. DoneDeal and Carzone remain BLOCKED_POLICY for any licensed feed.</p>
+  {% if market_groups %}
+  <table>
+    <thead>
+      <tr>
+        <th>Market group</th>
+        <th>Unique ROI</th>
+        <th>VAT known</th>
+        <th>Mileage known</th>
+        <th>Status</th>
+        <th>DoneDeal</th>
+        <th>CarsIreland</th>
+        <th>Carzone</th>
+        <th>Dealer</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for group in market_groups %}
+      <tr>
+        <td>{{ group.market_group_id }}</td>
+        <td>{{ group.unique_roi }}</td>
+        <td>{{ group.vat_known }}</td>
+        <td>{{ group.mileage_known }}</td>
+        <td>{{ group.stopped_reason }}</td>
+        <td>{{ group.sources.get("browser-donedeal-1", {}).get("status", "NOT_TESTED") }}</td>
+        <td>{{ group.sources.get("browser-carsireland-1", {}).get("status", "NOT_TESTED") }}</td>
+        <td>{{ group.sources.get("browser-carzone-1", {}).get("status", "NOT_TESTED") }}</td>
+        <td>{{ group.sources.get("browser-dealer-1", {}).get("status", "NOT_TESTED") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
   {% endif %}
 </section>
 

@@ -36,6 +36,8 @@ HEAVY_JOBS = frozenset(
         "cv-market-archive-enrich",
         "cv-market-dedupe",
         "cv-market-revalue",
+        "cv-browser-market-harvest",
+        "cv-browser-listing-enrich",
     }
 )
 SCHEDULER_JOBS = frozenset({"deletion-retry", "self-audit", "sold-ingest"})

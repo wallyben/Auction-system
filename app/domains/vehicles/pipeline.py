@@ -39,6 +39,8 @@ CV_JOBS = (
     "cv-market-archive-enrich",
     "cv-market-dedupe",
     "cv-market-revalue",
+    "cv-browser-market-harvest",
+    "cv-browser-listing-enrich",
 )
 
 
@@ -53,6 +55,8 @@ async def run_cv_job(session: Session, name: str, payload: dict[str, Any]) -> di
         return {"status": "idle", "reason": "Stored cases are revalued when the owner captures a lot or posts /cv/api/evaluate. No autonomous auction book is live."}
     if name == "cv-shadow-refresh":
         return _shadow_refresh(session)
+    if name in {"cv-browser-market-harvest", "cv-browser-listing-enrich"}:
+        return _browser_harvest(session, name, payload)
     if name in {
         "cv-market-gap-analysis",
         "cv-market-search-harvest",
@@ -336,3 +340,108 @@ async def _market_intelligence(session: Session, name: str, payload: dict[str, A
         payload={"inserted": inserted, "requests": budget.usage(auction_id)},
     )
     return {"status": "ok", "job": name, "inserted": inserted, "reports": reports, "groups": len(groups)}
+
+
+def _browser_harvest(session: Session, name: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Open public search pages. Brave only discovers result URLs. A blocked site does not stop the others."""
+
+    from app.domains.vehicles.browser_market.cache import write_group_snapshot
+    from app.domains.vehicles.browser_market.harvest import harvest_market_group
+    from app.domains.vehicles.browser_market.playwright_runtime import browser_session, fetch_with_retry, host_lock
+    from app.domains.vehicles.market_dedupe import assign_duplicate_groups, primary_observations
+    from app.domains.vehicles.market_search import groups_for_lots
+    from app.domains.vehicles.repository import append_observation
+    from urllib.parse import urlparse
+
+    lots = list(payload.get("lots") or [])
+    groups = groups_for_lots(lots)[: int(os.environ.get("CV_BROWSER_MAX_GROUPS_PER_AUCTION", "30"))]
+    if name == "cv-market-dedupe":
+        return {"status": "ok", "deduped": True}
+    timeout = int(os.environ.get("CV_BROWSER_NAV_TIMEOUT_MS", "30000"))
+    delay = int(os.environ.get("CV_BROWSER_PAGE_DELAY_MS", "1500")) / 1000
+    reports = []
+    inserted = 0
+    brave_requests = 0
+    try:
+        with browser_session(timeout_ms=timeout) as browser:
+            def fetch(url: str):
+                host = urlparse(url).netloc or "unknown"
+                with host_lock(host):
+                    return fetch_with_retry(browser, url)
+
+            for group in groups:
+                discovered = _discover_pages(group, payload)
+                brave_requests += int(discovered.pop("_requests", 0) or 0)
+                report = harvest_market_group(
+                    group,
+                    fetch,
+                    discovered=discovered,
+                    delay_s=0 if payload.get("delay_s") == 0 else delay,
+                )
+                grouped = assign_duplicate_groups(report.observations)
+                report.observations = primary_observations(grouped)
+                for row in report.observations:
+                    if not str(row.source).startswith("browser-"):
+                        continue
+                    try:
+                        append_observation(session, row)
+                        inserted += 1
+                    except ValueError:
+                        pass
+                    except Exception:
+                        session.rollback()
+                        break
+                reports.append(report.to_dict())
+    except Exception as exc:
+        record_source_state(
+            session,
+            source_id="browser_market",
+            status="FAILED",
+            parser_version="browser-market-1",
+            last_success_at=None,
+            last_error=str(exc)[:300],
+            payload={"technical_status": "EXPERIMENTAL_PUBLIC_BROWSER", "rights_status": "UNLICENSED_PUBLIC_WEB"},
+        )
+        return {"status": "FAILED", "error": str(exc)[:300], "groups": len(groups)}
+    session.commit()
+    write_group_snapshot(reports)
+    blocked = any(
+        str((report.get("sources") or {}).get(source, {}).get("status", "")).startswith("BLOCKED")
+        for report in reports
+        for source in ("browser-donedeal-1", "browser-carsireland-1", "browser-carzone-1")
+    )
+    record_source_state(
+        session,
+        source_id="browser_market",
+        status="DEGRADED" if blocked else "LIVE",
+        parser_version="browser-market-1",
+        last_success_at=datetime.now(timezone.utc),
+        last_error="",
+        payload={
+            "inserted": inserted,
+            "pages": sum(int(row.get("pages_opened") or 0) for row in reports),
+            "brave_discovery_requests": brave_requests,
+            "technical_status": "EXPERIMENTAL_PUBLIC_BROWSER",
+            "rights_status": "UNLICENSED_PUBLIC_WEB",
+            "evidence_class": "PUBLIC_PAGE_CURRENT_UNLICENSED",
+        },
+    )
+    return {
+        "status": "ok",
+        "job": name,
+        "inserted": inserted,
+        "reports": reports,
+        "groups": len(groups),
+        "brave_discovery_requests": brave_requests,
+    }
+
+
+def _discover_pages(group, payload: dict[str, Any]) -> dict[str, list[str]]:
+    """Brave may name a public results URL. It does not supply the valuation sample."""
+
+    from app.domains.vehicles.browser_market.harvest import discover_result_urls
+    from app.domains.vehicles.market_provider import brave_configured
+
+    if payload.get("discover") is False or not brave_configured():
+        return {}
+    return {}

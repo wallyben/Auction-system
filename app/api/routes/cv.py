@@ -64,6 +64,7 @@ def _page(
             "family": family,
             "attribution": "Asking prices from Autoza Ireland (autoza.ie). Cite Autoza Ireland and the retrieval date.",
             "intelligence": _intelligence(str(health.get("status") or "NOT_RUN")),
+            "market_groups": _market_groups(),
         },
     )
 
@@ -81,6 +82,15 @@ def _intelligence(autoza_status: str) -> dict[str, object]:
         }
     health["autoza"]["status"] = autoza_status
     return {"sources": health}
+
+
+def _market_groups() -> list[dict]:
+    try:
+        from app.domains.vehicles.browser_market.cache import read_group_snapshot
+
+        return read_group_snapshot()
+    except Exception:
+        return []
 
 
 def _enqueue_market(parsed, cases, summary: str) -> str:
@@ -105,7 +115,7 @@ def _enqueue_market(parsed, cases, summary: str) -> str:
         return summary
     try:
         queued = enqueue_http(
-            "cv-market-search-harvest",
+            "cv-browser-market-harvest",
             "catalogue",
             {"auction_id": parsed.sale_code or "catalogue", "lots": lots},
         )
