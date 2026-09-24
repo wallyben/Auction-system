@@ -85,6 +85,16 @@ def observation_from_row(row: CvMarketObservationRow) -> MarketObservation:
         vat_parser_version=payload.get("vat_parser_version"),
         vat_confidence=_money(payload.get("vat_confidence")) or Decimal("0"),
         source_updated_at=payload.get("source_updated_at"),
+        source_type=str(payload.get("source_type") or ""),
+        capture_method=str(payload.get("capture_method") or ""),
+        evidence_quality=str(payload.get("evidence_quality") or ""),
+        geography=str(payload.get("geography") or "UNKNOWN"),
+        price_status=str(payload.get("price_status") or ""),
+        cross_source_duplicate_group_id=payload.get("cross_source_duplicate_group_id"),
+        mileage_evidence=str(payload.get("mileage_evidence") or ""),
+        price_evidence=str(payload.get("price_evidence") or ""),
+        listing_class=str(payload.get("listing_class") or ""),
+        source_observed_at=_when(payload.get("source_observed_at")),
     )
 
 
@@ -121,12 +131,31 @@ def _payload(observation: MarketObservation) -> dict[str, object]:
         "vat_parser_version": observation.vat_parser_version,
         "vat_confidence": _text(observation.vat_confidence),
         "source_updated_at": observation.source_updated_at,
+        "source_type": observation.source_type,
+        "capture_method": observation.capture_method,
+        "evidence_quality": observation.evidence_quality,
+        "geography": observation.geography,
+        "price_status": observation.price_status,
+        "cross_source_duplicate_group_id": observation.cross_source_duplicate_group_id,
+        "mileage_evidence": observation.mileage_evidence,
+        "price_evidence": observation.price_evidence,
+        "listing_class": observation.listing_class,
+        "source_observed_at": observation.source_observed_at.isoformat() if observation.source_observed_at else None,
         "model_version": "arie-native-v1",
     }
 
 
 def _text(value: Decimal | None) -> str | None:
     return str(value) if value is not None else None
+
+
+def _when(value: object) -> datetime | None:
+    if not value:
+        return None
+    from datetime import datetime
+
+    parsed = datetime.fromisoformat(str(value))
+    return parsed
 
 
 def _money(value: object) -> Decimal | None:

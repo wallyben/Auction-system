@@ -31,6 +31,14 @@ _MARGIN = (
     re.compile(r"\bmargin\s+scheme\b", re.I),
     re.compile(r"\bvat\s+margin\b", re.I),
 )
+_NONE = (
+    re.compile(r"\bno\s+vat\b", re.I),
+    re.compile(r"\bvat\s+not\s+applicable\b", re.I),
+)
+_RECLAIM = (
+    re.compile(r"\bvat\s+reclaimable\b", re.I),
+    re.compile(r"\bvat\s+qualifying\b", re.I),
+)
 _RATE = re.compile(r"\b23\s*%")
 _PHONE = re.compile(r"\b(?:\+?\d[\d\s/()-]{7,}\d)\b")
 
@@ -48,6 +56,7 @@ class VatReading:
             "VAT_INCLUSIVE": "vat_inclusive",
             "VAT_QUALIFYING": "qualifying",
             "MARGIN_SCHEME": "margin_scheme",
+            "NO_VAT": "no_vat",
         }.get(self.classification, "unknown")
 
 
@@ -57,8 +66,9 @@ def classify_vat_text(*parts: str) -> VatReading:
         return VatReading("UNKNOWN", "", PARSER_VERSION, Decimal("0"))
     exclusive = _fragment(text, _EXCLUSIVE)
     inclusive = _fragment(text, _INCLUSIVE)
-    qualifying = _fragment(text, _QUALIFYING)
+    qualifying = _fragment(text, _QUALIFYING) or _fragment(text, _RECLAIM)
     margin = _fragment(text, _MARGIN)
+    none = _fragment(text, _NONE)
     if exclusive and inclusive:
         return VatReading("UNKNOWN", _redact(exclusive), PARSER_VERSION, Decimal("0.2"))
     if exclusive:
@@ -67,6 +77,8 @@ def classify_vat_text(*parts: str) -> VatReading:
     if inclusive:
         confidence = Decimal("0.95") if _RATE.search(inclusive) else Decimal("0.85")
         return VatReading("VAT_INCLUSIVE", _redact(inclusive), PARSER_VERSION, confidence)
+    if none and not (exclusive or inclusive):
+        return VatReading("NO_VAT", _redact(none), PARSER_VERSION, Decimal("0.9"))
     if margin:
         return VatReading("MARGIN_SCHEME", _redact(margin), PARSER_VERSION, Decimal("0.9"))
     if qualifying:

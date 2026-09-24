@@ -55,6 +55,16 @@ class MarketObservation:
     vat_parser_version: str | None = None
     vat_confidence: Decimal = Decimal("0")
     source_updated_at: str | None = None
+    source_type: str = ""
+    capture_method: str = ""
+    evidence_quality: str = ""
+    source_observed_at: datetime | None = None
+    geography: str = "UNKNOWN"
+    price_status: str = ""
+    cross_source_duplicate_group_id: str | None = None
+    mileage_evidence: str = ""
+    price_evidence: str = ""
+    listing_class: str = ""
 
 
 @dataclass(slots=True)
