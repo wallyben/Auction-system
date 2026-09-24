@@ -56,7 +56,7 @@ class SearchResponse:
 class MarketSearchProvider(Protocol):
     name: str
 
-    async def search(self, query: str, *, country: str = "IE") -> SearchResponse: ...
+    async def search(self, query: str, *, country: str = "ALL") -> SearchResponse: ...
 
 
 def brave_api_key() -> str:
@@ -100,7 +100,7 @@ class BraveMarketSearchProvider:
         self.client = client
         self.api_key = brave_api_key() if api_key is None else api_key.strip()
 
-    async def search(self, query: str, *, country: str = "IE") -> SearchResponse:
+    async def search(self, query: str, *, country: str = "ALL") -> SearchResponse:
         if not self.api_key:
             raise SearchNotConfigured("BRAVE_SEARCH_API_KEY is not set")
         params = {

@@ -125,11 +125,15 @@ async def test_archive_miss_and_brave_parse(monkeypatch: pytest.MonkeyPatch, tmp
         "web": {"results": [{"title": "Van", "url": "https://www.donedeal.ie/commercials/ford/39112233", "description": "€14,995 + VAT", "page_age": "2026-09-01T00:00:00Z", "extra_snippets": ["112,000 km"]}]},
     }
 
+    seen: dict[str, str] = {}
+
     def brave(request: httpx.Request) -> httpx.Response:
+        seen["country"] = request.url.params.get("country", "")
         return httpx.Response(200, json=payload)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(brave)) as client:
         found = await BraveMarketSearchProvider(client, api_key="test").search('site:donedeal.ie "Ford Transit Custom"')
+    assert seen["country"] == "ALL"
     assert found.hits[0].page_age
     assert found.hits[0].extra_snippets == ("112,000 km",)
     async with httpx.AsyncClient(transport=httpx.MockTransport(brave)) as client:
