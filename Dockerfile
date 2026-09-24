@@ -13,6 +13,7 @@ COPY scripts /app/scripts
 
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir ".[dev]" \
+    && python -m playwright install --with-deps chromium \
     && chmod +x /app/scripts/start.sh /app/scripts/start-worker.sh
 
 EXPOSE 8000
