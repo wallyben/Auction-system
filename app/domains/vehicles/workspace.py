@@ -19,6 +19,7 @@ from app.domains.vehicles.market import MarketBook, MarketObservation
 from app.domains.vehicles.orm import CvAuctionRow, CvLotRow, CvOwnerEvidenceRow
 from app.domains.vehicles.owner_documents import apply_owner_document, parse_owner_document
 from app.domains.vehicles.owner_view import owner_quote, owner_status, plain_provenance
+from app.domains.vehicles.tax_scenarios import default_t426_schedule
 
 EVIDENCE_DIR = Path("artifacts/runtime/cv_evidence")
 T426_PATH = Path("artifacts/runtime/cv019/T426_CV019_INPUT_2026-09-23.txt")
@@ -198,10 +199,14 @@ def auction_card(session: Session, auction: CvAuctionRow) -> dict:
 
 
 def lot_card(row: CvLotRow, *, fx: str = "") -> dict:
-    report = row.payload.get("evaluation") or {}
+    report = dict(row.payload.get("evaluation") or {})
+    # Catalogue title carries engine/fuel tokens the evaluation summary often drops.
+    report["title"] = row.title
+    report["vehicle"] = f"{report.get('vehicle') or ''} {row.title}".strip()
     economics = report.get("economics") or {}
     valuation = report.get("valuation") or {}
-    quote = owner_quote(report, fx=fx, registration=row.registration)
+    schedule = default_t426_schedule(Decimal(fx)) if fx else None
+    quote = owner_quote(report, fx=fx, registration=row.registration, schedule=schedule)
     return {
         "lot_id": row.lot_id,
         "auction_id": row.auction_id,

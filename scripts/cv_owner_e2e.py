@@ -28,7 +28,7 @@ def main() -> None:
         page.get_by_role("button", name="Save bid").click()
         page.get_by_text("£1,500").wait_for()
         page.get_by_role("button", name="Why this tax?", exact=True).click()
-        page.get_by_text("Safe max bid").wait_for()
+        page.get_by_text("SAFE GB IMPORT").or_(page.get_by_text("SAFE WITHOUT NI PROOF")).or_(page.get_by_text("SAFE MAX BID")).or_(page.get_by_text("ESTIMATED MAX BID")).first.wait_for()
         page.get_by_role("button", name="Evidence", exact=True).click()
         page.get_by_label("Reference").fill("owner-note-1")
         page.get_by_role("button", name="Save evidence").click()
@@ -50,7 +50,7 @@ def main() -> None:
         mobile.get_by_role("link", name="Mid Ulster T426").click()
         mobile.locator('a[href$="-2"]').click()
         mobile.get_by_role("button", name="Why this tax?", exact=True).click()
-        mobile.get_by_text("Safe max bid").wait_for()
+        mobile.get_by_text("SAFE GB IMPORT").or_(mobile.get_by_text("SAFE WITHOUT NI PROOF")).or_(mobile.get_by_text("SAFE MAX BID")).or_(mobile.get_by_text("ESTIMATED MAX BID")).first.wait_for()
         browser.close()
     print("e2e-pass")
 

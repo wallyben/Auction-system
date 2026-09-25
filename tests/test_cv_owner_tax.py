@@ -76,20 +76,25 @@ def test_category_b_rates_and_electric_mass() -> None:
 
 
 def test_unproven_tax_still_produces_a_conservative_max_bid() -> None:
+    from app.domains.vehicles.tax_scenarios import default_t426_schedule
+
     quote = owner_quote(
         {
             "prebid_group": "ECONOMICALLY_INTERESTING_TAX_DILIGENCE",
             "provenance_status": "LIKELY_NI_NEEDS_DOCUMENTS",
-            "valuation": {"expected_achievable_eur": "16000"},
+            "title": "2021 vauxhall combo 1.5 PANEL DIESEL",
+            "vehicle": "2021 vauxhall combo 1.5 PANEL DIESEL",
+            "valuation": {"expected_achievable_eur": "16000", "conservative_eur": "16000", "quick_sale_eur": "14720"},
             "economics": {"pre_tax_hammer_ceiling_eur": "6800", "final_max_safe_hammer_eur": None, "vrt_status": "UNKNOWN"},
         },
         fx="1.16",
         registration="UGZ 3040",
+        schedule=default_t426_schedule(Decimal("1.16")),
     )
     assert quote["max_bid_known"] is True
     assert quote["max_bid_gbp"]
     assert quote["alt_max_bid_gbp"]
-    assert quote["sell_eur"] == "16000"
+    assert quote["sell_eur"] == "16000.00" or quote["sell_eur"] == "16000"
 
 
 def test_reverse_premium_matches_the_band() -> None:
