@@ -25,6 +25,7 @@ dependencies = [
   "feedparser>=6.0.11",
   "email-validator>=2.1.0",
   "cryptography>=42.0.0",
+  "playwright>=1.49.0",
 ]
 
 [project.optional-dependencies]

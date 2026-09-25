@@ -14,6 +14,7 @@ from typing import Any
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.logging import configure_logging, get_logger
+from app.core.runtime import process_hostname
 from app.jobs.queue import beat_worker, claim_next, finish, heartbeat, new_worker_id
 from app.models.orm import PipelineJob
 
@@ -99,6 +100,10 @@ async def execute_job(session: Session, job: PipelineJob) -> dict[str, Any]:
         from app.sold.ebay_owner_oauth import ingest_owner_orders
 
         return await ingest_owner_orders(session, limit=int(payload.get("limit") or 100))
+    if name.startswith("cv-"):
+        from app.domains.vehicles.pipeline import run_cv_job
+
+        return await run_cv_job(session, name, payload)
     raise ValueError(f"unknown pipeline job {name}")
 
 
@@ -118,7 +123,7 @@ def beat_worker_process(worker_id: str, *, factory: sessionmaker[Session] | None
         beat_worker(
             session,
             worker_id,
-            hostname=os.uname().nodename,
+            hostname=process_hostname(),
             pid=os.getpid(),
             details={"scheduler": local_scheduler_snapshot(), "runtime": process_runtime_snapshot()},
         )

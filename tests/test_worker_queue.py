@@ -272,6 +272,9 @@ def test_health_stays_responsive_while_worker_revalues(monkeypatch) -> None:
     time.sleep(0.05)
     latencies: list[float] = []
     with TestClient(create_app()) as client:
+        # The first hit includes application startup. Measure the requests after that.
+        warmup = client.get("/health")
+        assert warmup.status_code == 200
         for _ in range(12):
             started = time.perf_counter()
             response = client.get("/health")

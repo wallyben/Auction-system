@@ -19,6 +19,15 @@ dev:
 test:
 	$(PYTHON) -m pytest tests -m "not live"
 
+cv-dev:
+	cd frontend && npm install && npm run dev
+
+cv-build:
+	cd frontend && npm install && npm run build
+
+cv-test:
+	cd frontend && npm test
+
 test-live:
 	$(PYTHON) -m pytest tests -m live -v
 

@@ -125,6 +125,22 @@ def _scheduled_revalue() -> None:
     _enqueue_or_skip("revalue", "scheduler", {"reason": f"scheduled:{VALUATION_ALGORITHM_VERSION}"})
 
 
+def _scheduled_cv_market() -> None:
+    _enqueue_or_skip("cv-market-refresh", "scheduler", {})
+
+
+def _scheduled_cv_auction() -> None:
+    _enqueue_or_skip("cv-auction-ingest", "scheduler", {})
+
+
+def _scheduled_cv_history() -> None:
+    _enqueue_or_skip("cv-history-enrich", "scheduler", {})
+
+
+def _scheduled_cv_shadow() -> None:
+    _enqueue_or_skip("cv-shadow-refresh", "scheduler", {})
+
+
 def start_scheduler() -> None:
     """Start APScheduler in the worker process only."""
     global _scheduler
@@ -195,6 +211,38 @@ def start_scheduler() -> None:
         id="revalue-all-active",
         replace_existing=True,
         max_instances=1,
+    )
+    _scheduler.add_job(
+        _scheduled_cv_market,
+        IntervalTrigger(hours=6, jitter=180),
+        id="cv-market-refresh",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    _scheduler.add_job(
+        _scheduled_cv_auction,
+        IntervalTrigger(hours=6, jitter=240),
+        id="cv-auction-ingest",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    _scheduler.add_job(
+        _scheduled_cv_history,
+        IntervalTrigger(hours=12, jitter=300),
+        id="cv-history-enrich",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    _scheduler.add_job(
+        _scheduled_cv_shadow,
+        CronTrigger(hour=5, minute=50),
+        id="cv-shadow-refresh",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
     )
     _scheduler.start()
     logger.info(

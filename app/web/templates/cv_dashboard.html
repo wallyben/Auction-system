@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+{% block title %}Commercial vans · ARIE-CV{% endblock %}
+{% block body %}
+<section class="hero">
+  <h1>Commercial van candidates</h1>
+  <p>Shadow mode. ARIE-CV does not bid, buy, or pay. A result is not a certified purchasing instruction.</p>
+  <p class="meta">Tax rules {{ tax_rule_version }}, retrieved {{ tax_retrieved }}. Live fetchers: {{ live_fetchers|join(", ") or "none" }}. Market observations in this process: {{ book_size }}. Shadow snapshots: {{ shadow_count }}. Certification: {{ certification.posture }}.</p>
+  <p class="meta">Autoza {{ autoza.status }}{% if autoza.fresh %} · fresh{% else %} · not fresh{% endif %}. Last success {{ autoza.last_success_at or "none" }}. Rows fetched {{ autoza.rows_received or 0 }}. Commercial rows accepted {{ autoza.rows_accepted or 0 }}. Rows rejected {{ autoza.rows_rejected or 0 }}. Latest observation {{ autoza.last_success_at or "none" }}. {{ attribution }}</p>
+</section>
+
+<nav class="controls wrap">
+  <a href="/cv?view_name=candidates">Buy / shadow candidates</a>
+  <a href="/cv?view_name=manual">Needs manual evidence</a>
+  <a href="/cv?view_name=price">Price too high</a>
+  <a href="/cv?view_name=rejected">Rejected</a>
+  <a href="/cv?view_name=insufficient">Insufficient data</a>
+  <a href="/cv?view_name=all">All evaluations</a>
+  <a href="/cv?view_name=market">Market book</a>
+</nav>
+
+<section>
+  <h2>Market intelligence</h2>
+  <p class="meta">Search runs by market group after a catalogue is ingested. The owner does not open marketplace pages.</p>
+  {% for source in intelligence.sources.values() %}
+  <p>{{ source.name }}: {{ source.status }}{% if source.requests_today is defined %} · requests today {{ source.requests_today }} · this month {{ source.requests_this_month }}{% endif %}</p>
+  {% endfor %}
+  {% if intelligence.sources.brave.status == "NOT_CONFIGURED" %}
+  <p class="warn">Brave is not configured. It is only used to discover public search URLs. Autoza and the browser harvest still run.</p>
+  {% endif %}
+  <p class="meta">Browser observations are PUBLIC_PAGE_CURRENT_UNLICENSED. Technical status is experimental public browsing. Rights status stays unlicensed public web. DoneDeal and Carzone remain BLOCKED_POLICY for any licensed feed.</p>
+  {% if market_groups %}
+  <table>
+    <thead>
+      <tr>
+        <th>Market group</th>
+        <th>Unique ROI</th>
+        <th>VAT known</th>
+        <th>Mileage known</th>
+        <th>Status</th>
+        <th>DoneDeal</th>
+        <th>CarsIreland</th>
+        <th>Carzone</th>
+        <th>Dealer</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for group in market_groups %}
+      <tr>
+        <td>{{ group.market_group_id }}</td>
+        <td>{{ group.unique_roi }}</td>
+        <td>{{ group.vat_known }}</td>
+        <td>{{ group.mileage_known }}</td>
+        <td>{{ group.stopped_reason }}</td>
+        <td>{{ group.sources.get("browser-donedeal-1", {}).get("status", "NOT_TESTED") }}</td>
+        <td>{{ group.sources.get("browser-carsireland-1", {}).get("status", "NOT_TESTED") }}</td>
+        <td>{{ group.sources.get("browser-carzone-1", {}).get("status", "NOT_TESTED") }}</td>
+        <td>{{ group.sources.get("browser-dealer-1", {}).get("status", "NOT_TESTED") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+{% if notice %}<p class="meta">{{ notice }}</p>{% endif %}
+{% if error %}<p class="warn">{{ error }}</p>{% endif %}
+
+<section>
+  <h2>This view</h2>
+  <p class="meta">Default is shadow candidates that passed every gate. Raw catalogue lots that fail a gate stay off this list. A cached candidate older than the market window, or past its close, is downgraded. ARIE-CV does not bid.</p>
+  {% if candidates %}
+  <table>
+    <thead>
+      <tr>
+        <th>Vehicle</th>
+        <th>Auction</th>
+        <th>Closes</th>
+        <th>Current bid</th>
+        <th>Max safe bid</th>
+        <th>Expected all-in</th>
+        <th>Expected achievable</th>
+        <th>Quick sale</th>
+        <th>Trade downside</th>
+        <th>Expected profit</th>
+        <th>Downside</th>
+        <th>Confidence</th>
+        <th>Irish comps</th>
+        <th>Provenance</th>
+        <th>Tax</th>
+        <th>History</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in candidates %}
+      <tr>
+        <td>{{ row.vehicle }}<br><span class="muted">{{ row.title }}</span><br><span class="pill">{{ row.state }}</span> {{ row.certification }}</td>
+        <td>{{ row.auction }}</td>
+        <td>{{ row.closes_at or "—" }}</td>
+        <td>{{ row.current_bid_eur or "—" }}</td>
+        <td>{{ row.maximum_safe_bid_eur or "—" }}</td>
+        <td>{{ row.expected_all_in_eur or "—" }}</td>
+        <td>{{ row.valuation.expected_achievable_eur or "—" }}</td>
+        <td>{{ row.valuation.quick_sale_eur or "—" }}</td>
+        <td>{{ row.valuation.trade_downside_eur or "—" }}</td>
+        <td>{{ row.expected_profit_at_current_eur or "—" }}</td>
+        <td>{{ row.downside_profit_at_current_eur or "—" }}</td>
+        <td>{{ row.valuation.confidence }}</td>
+        <td>{{ row.irish_comparable_count }}</td>
+        <td>{{ row.provenance_status }}</td>
+        <td>{{ row.tax_status }}</td>
+        <td>{{ row.history_status }}</td>
+      </tr>
+      <tr>
+        <td colspan="16">
+          <details>
+            <summary>Due diligence, comps, costs, missing evidence</summary>
+            <p>{{ row.why }}</p>
+            <p>Major risks:
+              {% for risk in row.major_risks %}{{ risk.name }} {{ risk.level }}. {% endfor %}
+            </p>
+            <ul>
+              {% for action in row.owner_actions %}<li>{{ action }}</li>{% endfor %}
+            </ul>
+            <p>Failed gates: {{ row.gates.failures|join(", ") or "none" }}</p>
+            <p>Max bid base {{ row.max_bid_base_eur or "—" }}. Conservative {{ row.max_bid_conservative_eur or "—" }}. Stress {{ row.max_bid_stress_eur or "—" }}.</p>
+            <p>Irish market evidence. Unique comps {{ row.irish_comparable_count }}. VAT explicit share {{ row.valuation.known_vat_share or "—" }}. Market confidence {{ row.valuation.market_floor_confidence or row.valuation.confidence_label or "—" }}. VAT confidence {{ row.valuation.vat_basis_confidence or "—" }}.</p>
+            <p>Market cash range {{ row.valuation.market_cash_low_eur or "—" }} – {{ row.valuation.market_cash_high_eur or "—" }}. Conservative resale floor {{ row.valuation.conservative_eur or "—" }}. VAT stress resale {{ row.valuation.vat_stress_proceeds_eur or "—" }}.</p>
+            <p>Market floor {{ row.valuation.conservative_resale_floor_eur or row.valuation.conservative_eur or "—" }}. Market confidence {{ row.valuation.market_floor_confidence or "—" }}. Dealer diversity {{ row.valuation.dealer_diversity_status or "—" }}.</p>
+            <p>Provenance {{ row.provenance_status or "—" }}. Pre-tax ceiling {{ row.economics.pre_tax_hammer_ceiling_eur if row.economics else "—" }}. Final safe hammer {{ row.economics.final_max_safe_hammer_eur if row.economics else "—" }}. Status {{ row.prebid_group }}.</p>
+            <p>Market range {{ row.valuation.asking_low_eur or "—" }} / {{ row.valuation.market_asking_eur or "—" }} / {{ row.valuation.asking_high_eur or "—" }}. Tier A {{ row.valuation.tier_a_count }} B {{ row.valuation.tier_b_count }} C {{ row.valuation.tier_c_count }}.</p>
+            <p>Economic interest {{ row.economic_interest }}. Landing {{ row.landing_scenarios.landing_cost }} / {{ row.landing_scenarios.classification }}.</p>
+            {% for comp in row.valuation.comps %}
+            <p class="muted">{{ comp.model_family }} {{ comp.year or "" }} {{ comp.mileage_km or "" }} km score {{ comp.score }} €{{ comp.price_eur }} VAT {{ comp.vat_presentation or "unknown" }} {{ comp.source }} — {{ comp.reasons|join(" ") }} {% if comp.differences %}Differs: {{ comp.differences|join(", ") }}.{% endif %}</p>
+            {% endfor %}
+          </details>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="warn">No vehicles in this view.</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Mid Ulster catalogue</h2>
+  <p class="meta">Paste the catalogue text you are allowed to keep. ARIE does not fetch the auction website. Non-vans are skipped. Lots that fail a gate do not become buy candidates. A sterling bid needs a fresh EUR rate or the bid is ignored.</p>
+  <form method="post" action="/cv/capture/mid-ulster">
+    <textarea name="catalogue" rows="10" style="width:100%; font: 13px/1.4 ui-monospace, monospace;" placeholder="Paste the Mid Ulster lot text, including Serial/Reg, mileage, VAT, and the buyers premium table if it is in your catalogue."></textarea>
+    <p>EUR per GBP <input name="fx_eur_per_gbp" placeholder="1.17"> retrieved at <input name="fx_retrieved_at" placeholder="2026-09-23T09:00:00+00:00"></p>
+    <p><button class="primary" type="submit">Extract and evaluate vans</button></p>
+  </form>
+</section>
+
+<section>
+  <h2>Irish market observations</h2>
+  <p class="meta">Append dealer stock you are entitled to record. CSV or JSON. Rows are not overwritten. A missing listing is not marked sold by this form.</p>
+  <form method="post" action="/cv/market/feed">
+    <textarea name="feed_text" rows="6" style="width:100%; font: 13px/1.4 ui-monospace, monospace;" placeholder="listing_id,manufacturer,model_family,year,fuel,body,asking_price_eur,mileage_km,location,seller_type"></textarea>
+    <p><button type="submit">Append observations</button></p>
+  </form>
+</section>
+
+<section>
+  <h2>Owner documents</h2>
+  <p class="meta">V5C, CoC, NI import declaration, auction invoice, service record, history report, weight plate, VIN, or photos. A sentence cannot pass a gate. Structured fields are applied only when they match the existing provenance and tax rules.</p>
+  <form method="post" action="/cv/evidence">
+    <textarea name="document" rows="5" style="width:100%; font: 13px/1.4 ui-monospace, monospace;" placeholder='{"kind":"V5C","reference":"V5C-1","jurisdiction":"NI","resident_in":"NI"}'></textarea>
+    <textarea name="payload" rows="5" style="width:100%; font: 13px/1.4 ui-monospace, monospace;" placeholder="Optional vehicle case JSON to re-evaluate"></textarea>
+    <p><button type="submit">Attach evidence</button></p>
+  </form>
+</section>
+
+<section>
+  <h2>Evaluate a captured lot</h2>
+  <p class="meta">Paste a structured case. Incomplete evidence fails closed. This does not contact an auction.</p>
+  {% if error %}<p class="warn">{{ error }}</p>{% endif %}
+  <form method="post" action="/cv/evaluate">
+    <textarea name="payload" rows="14" style="width:100%; font: 13px/1.4 ui-monospace, monospace;">{{ example }}</textarea>
+    <p><button class="primary" type="submit">Evaluate</button></p>
+  </form>
+</section>
+
+{% if evaluation %}
+<section>
+  <h2>Latest report</h2>
+  <p><strong>{{ evaluation.vehicle }}</strong> · {{ evaluation.state }} · {{ evaluation.certification }} · purchasing recommendation: {{ evaluation.purchasing_recommendation }}</p>
+  <div class="numbers">
+    <div><span>Current bid</span><strong>{{ evaluation.current_bid_eur or "—" }}</strong></div>
+    <div class="emphasis"><span>Maximum safe bid</span><strong>{{ evaluation.maximum_safe_bid_eur or "—" }}</strong></div>
+    <div><span>Headroom</span><strong>{{ evaluation.headroom_eur or "—" }}</strong></div>
+    <div><span>Expected all-in</span><strong>{{ evaluation.expected_all_in_eur or "—" }}</strong></div>
+    <div><span>Downside all-in</span><strong>{{ evaluation.downside_all_in_eur or "—" }}</strong></div>
+    <div><span>Expected resale</span><strong>{{ evaluation.valuation.expected_achievable_eur or "—" }}</strong></div>
+    <div><span>Quick sale</span><strong>{{ evaluation.valuation.quick_sale_eur or "—" }}</strong></div>
+    <div><span>Expected profit</span><strong>{{ evaluation.expected_profit_at_current_eur or "—" }}</strong></div>
+    <div><span>Downside profit</span><strong>{{ evaluation.downside_profit_at_current_eur or "—" }}</strong></div>
+    <div><span>Confidence</span><strong>{{ evaluation.valuation.confidence }}</strong></div>
+  </div>
+  <h3>Provenance</h3>
+  <p>{{ evaluation.provenance.state }} — {{ evaluation.provenance.interpretation }}</p>
+  <h3>Tax</h3>
+  <p>VRT {{ evaluation.tax.vrt_state }} {{ evaluation.tax.vrt_eur or "unknown" }}. NOx {{ evaluation.tax.nox_eur or "unknown" }}. Customs {{ evaluation.tax.customs_duty_eur or "unknown" }}. Import VAT {{ evaluation.tax.import_vat_eur or "unknown" }}.</p>
+  <h3>Why</h3>
+  <p>{{ evaluation.why }}</p>
+  <h3>Owner actions</h3>
+  <ul>
+    {% for action in evaluation.owner_actions %}<li>{{ action }}</li>{% endfor %}
+  </ul>
+  <h3>Risks</h3>
+  <ul>
+    {% for risk in evaluation.risks %}<li><strong>{{ risk.name }}</strong> {{ risk.level }} — {{ risk.detail }}</li>{% endfor %}
+  </ul>
+  <h3>Comparables used</h3>
+  {% if evaluation.valuation.comps %}
+  <table>
+    <thead><tr><th>Listing</th><th>Score</th><th>Price</th><th>Why</th></tr></thead>
+    <tbody>
+      {% for comp in evaluation.valuation.comps %}
+      <tr>
+        <td>{{ comp.model_family }} {{ comp.year or "" }}</td>
+        <td>{{ comp.score }}{% if comp.close %} close{% endif %}</td>
+        <td>{{ comp.price_eur }}</td>
+        <td class="muted">{{ comp.reasons|join(" ") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No comparables were accepted.</p>
+  {% endif %}
+  <h3>Failed gates</h3>
+  <p>{{ evaluation.gates.failures|join(", ") or "None" }}</p>
+  <h3>Max bid sensitivity</h3>
+  <p>Base {{ evaluation.max_bid_base_eur or "—" }}. Conservative {{ evaluation.max_bid_conservative_eur or "—" }}. Stress {{ evaluation.max_bid_stress_eur or "—" }}. The decision ceiling is the conservative figure. Asking-to-achievable adjustment {{ evaluation.valuation.asking_to_achievable_adjustment }}. Status {{ evaluation.valuation.asking_to_achievable_status }}.</p>
+  <p>Irish market evidence. Unique comps {{ evaluation.irish_comparable_count }}. Mileage-aware effective sample {{ evaluation.valuation.effective_sample_size }}. VAT explicit share {{ evaluation.valuation.known_vat_share or "—" }}.</p>
+  <p>Market cash range {{ evaluation.valuation.market_cash_low_eur or "—" }} – {{ evaluation.valuation.market_cash_high_eur or "—" }}. Lower median {{ evaluation.valuation.market_cash_central_low_eur or "—" }}. Upper median {{ evaluation.valuation.market_cash_central_high_eur or "—" }}.</p>
+  <p>Conservative resale floor {{ evaluation.valuation.conservative_eur or "—" }}. VAT stress resale {{ evaluation.valuation.vat_stress_proceeds_eur or "—" }}. Expected interval {{ evaluation.valuation.expected_achievable_low_eur or "—" }} – {{ evaluation.valuation.expected_achievable_high_eur or "—" }}.</p>
+  <p>Market floor {{ evaluation.valuation.conservative_eur or "—" }}. Market confidence {{ evaluation.valuation.market_floor_confidence or "—" }}. Dealer diversity {{ evaluation.valuation.dealer_diversity_status or "—" }}.</p>
+  <p>Provenance {{ evaluation.provenance_status }}. Customs {{ evaluation.economics.customs_status }}. Import VAT {{ evaluation.economics.import_vat_status }}. VRT {{ evaluation.economics.vrt_status }}. Tariff {{ evaluation.economics.tariff_status }}.</p>
+  <p>Pre-tax ceiling {{ evaluation.economics.pre_tax_hammer_ceiling_eur or "—" }}. NI-clear hammer {{ evaluation.economics.ni_clear_max_hammer_eur or "—" }}. Preferential hammer {{ evaluation.economics.gb_preferential_max_hammer_eur or "—" }}. Confirmed-duty hammer {{ evaluation.economics.gb_confirmed_duty_max_hammer_eur or "—" }}. Final safe hammer {{ evaluation.economics.final_max_safe_hammer_eur or "—" }}.</p>
+  <p>Status {{ evaluation.prebid_group }}. Headroom {{ evaluation.economics.headroom_status }}. Buy ready {{ evaluation.buy_ready }}.</p>
+  <p>Remaining blockers: {{ evaluation.gates.failures|join(", ") or "none" }}. This is an asking-market estimate, not a verified sold price. Unknown VAT is an interval, not a guess.</p>
+  <p>Sensitivity at 10/15/20 percent: {{ evaluation.valuation.haircut_sensitivity }}. Scenario sensitivity: {{ evaluation.valuation.sensitivity }}.</p>
+  {% if evaluation.valuation.evidence %}
+  <h3>Valuation evidence</h3>
+  <table>
+    <thead><tr><th>Vehicle</th><th>Year</th><th>Mileage</th><th>Advertised</th><th>Cash interval</th><th>VAT</th><th>Tier</th><th>Weight</th><th>Adjustment</th><th>Why</th></tr></thead>
+    <tbody>
+      {% for comp in evaluation.valuation.evidence %}
+      <tr>
+        <td>{{ comp.vehicle }}</td>
+        <td>{{ comp.year or "—" }}</td>
+        <td>{{ comp.mileage_km or "—" }}</td>
+        <td>{{ comp.advertised_eur or comp.asking_price_eur }}</td>
+        <td>{{ comp.cash_low_eur or "—" }} – {{ comp.cash_high_eur or "—" }}</td>
+        <td>{{ comp.vat_basis }}</td>
+        <td>{{ comp.tier }}</td>
+        <td>{{ comp.similarity_weight }}</td>
+        <td>{{ comp.adjustments_eur }}</td>
+        <td class="muted">{{ comp.why }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if active == "market" %}
+<section>
+  <h2>Market book</h2>
+  <p class="meta">Audit of stored Irish asking observations. {{ attribution }}</p>
+  {% if market and market.available %}
+  <p class="meta">Observations {{ market.total_observations }}. Active vehicles {{ market.active_vehicles }}. Families {{ market.families|length }}. Latest refresh {{ market.latest_refresh or "none" }}.</p>
+  <p>
+    <a href="/cv?view_name=market">All families</a>
+    {% for item in market.families %}
+    · <a href="/cv?view_name=market&family={{ item.family }}">{{ item.family }} ({{ item.active }})</a>
+    {% endfor %}
+  </p>
+  <table>
+    <thead>
+      <tr><th>Vehicle</th><th>Year</th><th>Mileage km</th><th>Price</th><th>VAT basis</th><th>Location</th><th>Source</th><th>First seen</th><th>Last seen</th></tr>
+    </thead>
+    <tbody>
+      {% for row in market.rows %}
+      <tr>
+        <td>{{ row.vehicle }}</td>
+        <td>{{ row.year or "—" }}</td>
+        <td>{{ row.mileage_km or "—" }}</td>
+        <td>{{ row.price_eur or "—" }}</td>
+        <td>{{ row.vat_basis }}</td>
+        <td>{{ row.location or "—" }}</td>
+        <td>{{ row.source }}</td>
+        <td>{{ row.first_seen }}</td>
+        <td>{{ row.last_seen }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="warn">No stored market book is available in this process.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+<section>
+  <h2>Sources</h2>
+  <table>
+    <thead><tr><th>Source</th><th>Status</th><th>Why</th></tr></thead>
+    <tbody>
+      {% for source in sources %}
+      <tr>
+        <td>{{ source.name }}<br><span class="muted">{{ source.geography }} · {{ source.role }}</span></td>
+        <td><span class="pill {{ source.status }}">{{ source.status }}</span></td>
+        <td>{{ source.reason }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

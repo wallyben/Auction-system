@@ -10,6 +10,8 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app.api.routes.cv import router as cv_router
+from app.api.routes.cv_v1 import router as cv_v1_router
 from app.api.routes.dashboard import router as dashboard_router
 from app.api.routes.ebay_oauth import router as ebay_oauth_router
 from app.api.routes.ebay_webhooks import router as ebay_webhook_router
@@ -61,7 +63,48 @@ def create_app() -> FastAPI:
     application.include_router(ebay_webhook_router)
     application.include_router(ebay_oauth_router)
     application.include_router(dashboard_router)
+    application.include_router(cv_router)
+    application.include_router(cv_v1_router)
+    _mount_owner_app(application)
     return application
+
+
+def _mount_owner_app(application: FastAPI) -> None:
+    dist = Path("frontend/dist")
+    index = dist / "index.html"
+    if not index.exists():
+        return
+
+    from fastapi.responses import FileResponse
+
+    def owner_index() -> FileResponse:
+        return FileResponse(index)
+
+    for route in (
+        "/cv",
+        "/cv/auctions",
+        "/cv/auctions/{auction_id}",
+        "/cv/lots/{lot_id}",
+        "/cv/shortlist",
+        "/cv/diligence",
+        "/cv/market",
+        "/cv/source-health",
+        "/cv/tax",
+        "/cv/settings",
+    ):
+        application.add_api_route(route, owner_index, methods=["GET"], include_in_schema=False)
+    if (dist / "assets").is_dir():
+        application.mount("/cv/assets", StaticFiles(directory=dist / "assets"), name="cv-assets")
+
+    def send_asset(path: Path) -> FileResponse:
+        def _send() -> FileResponse:
+            return FileResponse(path)
+
+        return _send
+
+    for asset in dist.iterdir():
+        if asset.is_file() and asset.name != "index.html":
+            application.add_api_route(f"/cv/{asset.name}", send_asset(asset), methods=["GET"], include_in_schema=False)
 
 
 app = create_app()

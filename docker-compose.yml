@@ -27,11 +27,23 @@ services:
       EBAY_ENV: ${EBAY_ENV:-production}
       EBAY_NOTIFICATION_VERIFICATION_TOKEN: ${EBAY_NOTIFICATION_VERIFICATION_TOKEN:-}
       EBAY_NOTIFICATION_ENDPOINT_URL: ${EBAY_NOTIFICATION_ENDPOINT_URL:-}
+      BRAVE_SEARCH_API_KEY: ${BRAVE_SEARCH_API_KEY:-}
+      CV_MARKET_SEARCH_ENABLED: ${CV_MARKET_SEARCH_ENABLED:-true}
+      CV_COMMON_CRAWL_ENABLED: ${CV_COMMON_CRAWL_ENABLED:-true}
+      CV_SEARCH_MAX_REQUESTS_PER_AUCTION: ${CV_SEARCH_MAX_REQUESTS_PER_AUCTION:-120}
+      CV_SEARCH_MAX_REQUESTS_PER_MARKET_GROUP: ${CV_SEARCH_MAX_REQUESTS_PER_MARKET_GROUP:-12}
+      CV_SEARCH_MARKET_CACHE_HOURS: ${CV_SEARCH_MARKET_CACHE_HOURS:-12}
+      CV_SEARCH_MAX_REQUESTS_PER_DAY: ${CV_SEARCH_MAX_REQUESTS_PER_DAY:-400}
     depends_on:
       db:
         condition: service_healthy
     ports:
       - "8000:8000"
+    volumes:
+      - ./artifacts:/app/artifacts
+      - ./frontend/dist:/app/frontend/dist
+      - ./app:/app/app
+      - ./alembic:/app/alembic
     command: >
       sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000"
@@ -43,9 +55,26 @@ services:
     environment:
       APP_ENV: development
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/arie
+      BRAVE_SEARCH_API_KEY: ${BRAVE_SEARCH_API_KEY:-}
+      CV_MARKET_SEARCH_ENABLED: ${CV_MARKET_SEARCH_ENABLED:-true}
+      CV_COMMON_CRAWL_ENABLED: ${CV_COMMON_CRAWL_ENABLED:-true}
+      CV_SEARCH_MAX_REQUESTS_PER_AUCTION: ${CV_SEARCH_MAX_REQUESTS_PER_AUCTION:-120}
+      CV_SEARCH_MAX_REQUESTS_PER_MARKET_GROUP: ${CV_SEARCH_MAX_REQUESTS_PER_MARKET_GROUP:-12}
+      CV_SEARCH_MARKET_CACHE_HOURS: ${CV_SEARCH_MARKET_CACHE_HOURS:-12}
+      CV_SEARCH_MAX_REQUESTS_PER_DAY: ${CV_SEARCH_MAX_REQUESTS_PER_DAY:-400}
+      CV_BROWSER_MAX_PAGES_PER_SOURCE_GROUP: ${CV_BROWSER_MAX_PAGES_PER_SOURCE_GROUP:-5}
+      CV_BROWSER_MAX_LISTING_ENRICHMENTS_PER_GROUP: ${CV_BROWSER_MAX_LISTING_ENRICHMENTS_PER_GROUP:-12}
+      CV_BROWSER_MAX_GROUPS_PER_AUCTION: ${CV_BROWSER_MAX_GROUPS_PER_AUCTION:-30}
+      CV_BROWSER_PAGE_DELAY_MS: ${CV_BROWSER_PAGE_DELAY_MS:-1500}
+      CV_BROWSER_NAV_TIMEOUT_MS: ${CV_BROWSER_NAV_TIMEOUT_MS:-30000}
+      CV_BROWSER_CACHE_HOURS: ${CV_BROWSER_CACHE_HOURS:-12}
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - ./app:/app/app
+      - ./alembic:/app/alembic
+      - ./artifacts:/app/artifacts
     command: sh scripts/start-worker.sh
 
 volumes:
