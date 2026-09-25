@@ -1,15 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
-import { ClipboardList, Gavel, LayoutDashboard, LineChart, Radio, Star } from "lucide-react";
+import { ClipboardList, Gavel, LayoutDashboard, Radio, Star } from "lucide-react";
 import { NavLink, Route, Routes } from "react-router-dom";
-import { AuctionPage, AuctionsPage, ComparePage, DiligencePage, MarketPage, OverviewPage, SourcesPage, VehiclePage } from "./pages";
+import { AuctionPage, AuctionsPage, ComparePage, DiligencePage, MarketPage, OverviewPage, SettingsPage, SourcesPage, TaxGuidePage, VehiclePage } from "./pages";
 
 const links = [
   ["/", "Overview", LayoutDashboard],
   ["/auctions", "Auctions", Gavel],
   ["/shortlist", "Shortlist", Star],
-  ["/diligence", "Diligence", ClipboardList],
-  ["/market", "Market", LineChart],
-  ["/source-health", "Sources", Radio],
+  ["/tax", "Tax / VRT", ClipboardList],
+  ["/settings", "Settings", Radio],
 ] as const;
 
 export function App() {
@@ -33,6 +32,8 @@ export function App() {
           <Route path="/lots/:id" element={<VehiclePage />} />
           <Route path="/shortlist" element={<ComparePage />} />
           <Route path="/diligence" element={<DiligencePage />} />
+          <Route path="/tax" element={<TaxGuidePage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="/market" element={<MarketPage />} />
           <Route path="/source-health" element={<SourcesPage />} />
         </Routes>

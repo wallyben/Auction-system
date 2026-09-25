@@ -3,8 +3,8 @@ import { money } from "./api";
 
 describe("money", () => {
   it("shows an unresolved amount as a dash", () => {
-    expect(money(null)).toBe("—");
-    expect(money("")).toBe("—");
+    expect(money(null)).toBe("NOT YET KNOWN");
+    expect(money("")).toBe("NOT YET KNOWN");
   });
 
   it("formats euros without cents", () => {

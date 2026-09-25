@@ -89,6 +89,8 @@ def _mount_owner_app(application: FastAPI) -> None:
         "/cv/diligence",
         "/cv/market",
         "/cv/source-health",
+        "/cv/tax",
+        "/cv/settings",
     ):
         application.add_api_route(route, owner_index, methods=["GET"], include_in_schema=False)
     if (dist / "assets").is_dir():

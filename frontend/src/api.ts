@@ -21,6 +21,22 @@ export type Lot = {
   provenance_plain: string;
   blockers: string[];
   buy_ready: boolean;
+  quote?: {
+    status: string;
+    tax_label: string;
+    sell_eur: string | null;
+    conservative_eur: string | null;
+    quick_eur: string | null;
+    max_bid_gbp: string | null;
+    max_bid_known: boolean;
+    ceiling_before_tax_gbp: string | null;
+    customs_eur: string | null;
+    import_vat_eur: string | null;
+    vrt_eur: string | null;
+    registration_eur: string | null;
+    profit_eur: string | null;
+    rules_checked: string;
+  };
   evaluation?: Record<string, unknown>;
   evidence?: { evidence_id: string; kind: string; filename: string }[];
   request_pack?: string;
@@ -78,8 +94,15 @@ export type Counts = {
 };
 
 export function money(value: string | null | undefined, currency = "EUR") {
-  if (!value) return "—";
+  if (!value) return "NOT YET KNOWN";
   const amount = Number(value);
   if (Number.isNaN(amount)) return value;
   return new Intl.NumberFormat("en-IE", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
+}
+
+export function pounds(value: string | null | undefined) {
+  if (!value) return "NOT YET KNOWN";
+  const amount = Number(value);
+  if (Number.isNaN(amount)) return value;
+  return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(amount);
 }

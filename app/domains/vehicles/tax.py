@@ -26,6 +26,27 @@ REVENUE_ORIGIN = "https://www.revenue.ie/en/customs/documents/ccc/ccc79-preferen
 REVENUE_MARGIN = "https://www.revenue.ie/en/vat/vat-on-goods/schemes/margin-scheme/index.aspx"
 REVENUE_GB_NI_VAT = "https://www.revenue.ie/en/tax-professionals/tdm/value-added-tax/movement-of-second-motor-vehicles-from-gb-and-ni/movement-of-second-hand-motor-vehicles-from-gb-ni.pdf"
 TAX_RULES_RECHECKED_AT = "2026-09-25"
+REVENUE_NI = "https://www.revenue.ie/en/vrt/registration-of-imported-used-vehicles/registering-vehicles-from-ni.aspx"
+REVENUE_EV = "https://www.revenue.ie/en/vrt/reliefs-and-exemptions/electric-vehicles/index.aspx"
+
+TAX_RULES = (
+    {"id": "ni-import", "description": "NI customs duty and import VAT relief", "effective": "2021-01-01", "url": REVENUE_NI, "checked": TAX_RULES_RECHECKED_AT},
+    {"id": "gb-import", "description": "GB import duty and import VAT", "effective": "2021-01-01", "url": REVENUE_GB_NI_VAT, "checked": TAX_RULES_RECHECKED_AT},
+    {"id": "vat-standard", "description": "Standard VAT 23%", "effective": "2026-01-01", "url": REVENUE_VAT_RATES, "checked": TAX_RULES_RECHECKED_AT},
+    {"id": "uk-origin", "description": "Preferential UK origin is not implied by a GB plate", "effective": "2021-01-01", "url": REVENUE_ORIGIN, "checked": TAX_RULES_RECHECKED_AT},
+    {"id": "category-b", "description": "Category B VRT 8% or 13.3%", "effective": "2025-07-01", "url": REVENUE_APPLYING_TAX, "checked": TAX_RULES_RECHECKED_AT},
+    {"id": "n1-200", "description": "€200 N1 VRT where seats and mass tests pass", "effective": "2025-07-01", "url": REVENUE_APPLYING_TAX, "checked": TAX_RULES_RECHECKED_AT},
+    {"id": "ev-relief", "description": "Electric Category A/B relief up to €5,000 through 31 Dec 2026", "effective": "2026-01-01", "url": REVENUE_EV, "checked": TAX_RULES_RECHECKED_AT},
+    {"id": "vrt-calculator", "description": "Revenue calculator is an estimate; registration decides the exact VRT", "effective": "2026-01-01", "url": "https://www.ros.ie/evrt-enquiry/vrtenquiry.html", "checked": TAX_RULES_RECHECKED_AT},
+)
+
+
+def ev_vrt_relief_cap_eur(*, electric: bool, before_deadline: bool = True) -> Decimal | None:
+    """Official cap. The exact OMSP taper is Revenue's calculator, not a guessed slope."""
+
+    if not electric or not before_deadline:
+        return None
+    return Decimal("5000")
 
 VAT_RATE = Decimal("0.23")
 VAT_EFFECTIVE = datetime(2026, 1, 1, tzinfo=timezone.utc)

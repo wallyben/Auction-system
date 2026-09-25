@@ -16,10 +16,10 @@ def test_ni_looking_plates_need_documents() -> None:
         )
         assert result.state is ProvenanceState.LIKELY_NI_NEEDS_DOCUMENTS
         assert result.customs_clear is False
-        assert plain_provenance(result.state.value) == "NI history possible — documents needed"
+        assert plain_provenance(result.state.value) == "NI TAX RELIEF POSSIBLE — NEED DOCUMENTS"
 
 
 def test_tax_diligence_is_not_market_ready() -> None:
-    assert owner_status({"prebid_group": "ECONOMICALLY_INTERESTING_TAX_DILIGENCE", "buy_ready": False}) == "TAX DILIGENCE"
-    assert owner_status({"prebid_group": "REJECT_WRITE_OFF_CAT_S"}) == "HARD REJECT"
-    assert owner_status({"prebid_group": "MARKET_INSUFFICIENT"}) == "MARKET INSUFFICIENT"
+    assert owner_status({"prebid_group": "ECONOMICALLY_INTERESTING_TAX_DILIGENCE", "buy_ready": False, "valuation": {"expected_achievable_eur": "1"}}) == "NEED TAX PROOF"
+    assert owner_status({"prebid_group": "REJECT_WRITE_OFF_CAT_S"}) == "REJECT"
+    assert owner_status({"prebid_group": "MARKET_INSUFFICIENT"}) == "NEED MARKET DATA"

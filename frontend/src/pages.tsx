@@ -4,10 +4,10 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
-import { Auction, Lot, cv, money } from "./api";
+import { Auction, Lot, cv, money, pounds } from "./api";
 
 function badge(status: string) {
-  const tone = status === "HARD REJECT" ? "bg-red-950 text-red-200" : status === "TAX DILIGENCE" ? "bg-amber-950 text-amber-100" : status === "MARKET READY" || status === "BUY READY" ? "bg-emerald-950 text-emerald-100" : "bg-stone-800 text-stone-300";
+  const tone = status === "REJECT" || status === "PRICE TOO HIGH" ? "bg-red-950 text-red-200" : status === "READY TO BID" ? "bg-emerald-950 text-emerald-100" : "bg-amber-950 text-amber-100";
   return <span className={`rounded-full px-2 py-1 text-xs ${tone}`}>{status}</span>;
 }
 
@@ -22,12 +22,14 @@ export function OverviewPage() {
   const data = query.data!;
   const counts = data.counts;
   return (
-    <Shell title="What needs attention">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Stat label="Market priced" value={counts.priced} />
-        <Stat label="Need documents" value={counts.tax_diligence} />
-        <Stat label="Hard rejected" value={counts.hard_reject} />
+    <Shell title="How many vans can I bid on?">
+      <div className="grid gap-3 sm:grid-cols-4">
+        <Stat label="Ready to bid" value={counts.market_ready} />
+        <Stat label="Need tax or VRT" value={counts.tax_diligence} />
+        <Stat label="Need market data" value={counts.market_insufficient} />
+        <Stat label="Rejected" value={counts.hard_reject} />
       </div>
+      {counts.market_ready === 0 && <p className="mt-4 text-sm text-stone-400">No vans have a fully evidenced maximum bid yet.</p>}
       <div className="mt-6 grid gap-3">
         {data.auctions.map((auction) => <AuctionCard key={auction.auction_id} auction={auction} />)}
         {data.auctions.length === 0 && <p>No auctions yet. Import one from the Auctions page.</p>}
@@ -97,13 +99,13 @@ export function AuctionPage() {
         <button className="rounded-lg border border-stone-700 px-2 py-1" onClick={() => refresh.mutate()}>Refresh market</button>
       </div>
       <div className="mb-4 grid gap-3 sm:grid-cols-4">
-        <Stat label="Relevant" value={auction.lots} />
-        <Stat label="Priced" value={auction.priced} />
-        <Stat label="Documents" value={auction.tax_diligence} />
+        <Stat label="Ready to bid" value={auction.market_ready} />
+        <Stat label="Need tax or VRT" value={auction.tax_diligence} />
+        <Stat label="Need market" value={auction.market_insufficient} />
         <Stat label="Rejected" value={auction.hard_reject} />
       </div>
       <div className="mb-3 flex flex-wrap gap-2">
-        {["All", "Selected", "TAX DILIGENCE", "MARKET INSUFFICIENT", "HARD REJECT", "MARKET READY"].map((item) => (
+        {["All", "Selected", "READY TO BID", "NEED TAX PROOF", "NEED VRT INFO", "NEED MARKET DATA", "REJECT", "PRICE TOO HIGH"].map((item) => (
           <button key={item} className={`rounded-full px-3 py-1 text-xs ${filter === item ? "bg-emerald-900" : "bg-stone-800"}`} onClick={() => setFilter(item)}>{item}</button>
         ))}
         <select className="rounded-lg bg-stone-900 px-2" value={sort} onChange={(event) => setSort(event.target.value)}>
@@ -125,16 +127,19 @@ function VehicleRow({ lot }: { lot: Lot }) {
   return (
     <article className="grid gap-2 rounded-xl border border-stone-800 bg-stone-900/60 p-3 sm:grid-cols-[auto_1fr_auto]">
       <button aria-label={lot.selected ? "Unselect" : "Select"} onClick={() => select.mutate()} className={lot.selected ? "text-amber-300" : "text-stone-500"}><Star size={18} /></button>
-      <Link to={`/lots/${lot.lot_id}`}>
-        <p className="text-sm text-stone-400">Lot {lot.lot_number} · {lot.registration || "no plate"} · {lot.year || "—"} · {lot.mileage_km ? `${lot.mileage_km.toLocaleString()} km` : "mileage unknown"}</p>
-        <p>{lot.vehicle}</p>
+      <Link to={`/lots/${lot.lot_id}`} className="grid gap-3 sm:grid-cols-[1fr_auto]">
+        <div>
+          <p className="text-sm text-stone-400">Lot {lot.lot_number} · {lot.year || "—"} · {lot.mileage_km ? `${Math.round(lot.mileage_km / 1.609).toLocaleString()} mi` : "mileage unknown"}</p>
+          <p className="text-lg">{lot.title || lot.vehicle}</p>
+        </div>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:text-right">
+          <span className="text-stone-500">Sell</span><span>{money(lot.quote?.sell_eur || lot.market_floor)}</span>
+          <span className="text-stone-500">Max bid</span><span>{lot.quote?.max_bid_known ? pounds(lot.quote.max_bid_gbp) : "NOT YET KNOWN"}</span>
+          <span className="text-stone-500">Fees / tax</span><span>{lot.quote?.tax_label || lot.provenance_plain}</span>
+          <span className="text-stone-500">Profit</span><span>{lot.quote?.profit_eur ? money(lot.quote.profit_eur) : "—"}</span>
+        </div>
       </Link>
-      <div className="text-sm">
-        {badge(lot.status)}
-        <p className="mt-1">Floor {money(lot.market_floor)}</p>
-        <p>Pre-tax {money(lot.pre_tax_ceiling)}</p>
-        <p>Safe hammer {lot.final_safe_hammer ? money(lot.final_safe_hammer) : "Awaiting tax evidence"}</p>
-      </div>
+      <div>{badge(lot.quote?.status || lot.status)}</div>
     </article>
   );
 }
@@ -155,22 +160,23 @@ export function VehiclePage() {
   return (
     <Shell title={`Lot ${lot.lot_number}`}>
       <p className="text-stone-400">{lot.vehicle}</p>
-      <p className="mb-4 text-sm">{badge(lot.status)} <span className="ml-2 text-stone-400">{lot.provenance_plain}</span></p>
-      <div className="mb-4 grid gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-stone-800 p-4"><p className="text-sm text-stone-400">Current bid</p><p className="text-2xl">{lot.current_bid_gbp ? `£${lot.current_bid_gbp}` : "—"}</p></div>
-        <div className="rounded-xl border border-stone-800 p-4"><p className="text-sm text-stone-400">Market floor</p><p className="text-2xl">{money(lot.market_floor)}</p></div>
-        <div className="rounded-xl border border-stone-800 p-4"><p className="text-sm text-stone-400">Pre-tax ceiling</p><p className="text-2xl">{money(lot.pre_tax_ceiling)}</p></div>
-        <div className="rounded-xl border border-stone-800 p-4"><p className="text-sm text-stone-400">Final safe hammer</p><p className="text-2xl">{lot.final_safe_hammer ? money(lot.final_safe_hammer) : "Awaiting tax evidence"}</p><p className="text-xs text-stone-500">Headroom {lot.headroom_status === "KNOWN" ? "known" : "unknown"}</p></div>
+      <p className="mb-4 text-sm">{badge(lot.quote?.status || lot.status)} <span className="ml-2 text-stone-400">{lot.quote?.tax_label || lot.provenance_plain}</span></p>
+      <div className="mb-2 grid gap-3 sm:grid-cols-5">
+        <div className="rounded-xl border border-stone-800 p-4"><p className="text-sm text-stone-400">Current bid</p><p className="text-2xl">{lot.current_bid_gbp ? `£${Number(lot.current_bid_gbp).toLocaleString()}` : "—"}</p></div>
+        <div className="rounded-xl border border-stone-800 p-4"><p className="text-sm text-stone-400">Max bid</p><p className="text-2xl">{lot.quote?.max_bid_known ? pounds(lot.quote.max_bid_gbp) : "NOT YET KNOWN"}</p>{!lot.quote?.max_bid_known && lot.quote?.ceiling_before_tax_gbp && <p className="text-xs text-stone-500">Before unresolved taxes, the ceiling is {pounds(lot.quote.ceiling_before_tax_gbp)}</p>}</div>
+        <div className="rounded-xl border border-stone-800 p-4"><p className="text-sm text-stone-400">Sell for</p><p className="text-2xl">{money(lot.quote?.sell_eur)}</p><p className="text-xs text-stone-500">Conservative {money(lot.quote?.conservative_eur)} · Quick {money(lot.quote?.quick_eur)}</p></div>
+        <div className="rounded-xl border border-stone-800 p-4"><p className="text-sm text-stone-400">Known costs</p><p className="text-2xl">{lot.quote?.max_bid_known ? "See receipt" : "Unresolved tax"}</p></div>
+        <div className="rounded-xl border border-stone-800 p-4"><p className="text-sm text-stone-400">Profit</p><p className="text-2xl">{lot.quote?.profit_eur ? money(lot.quote.profit_eur) : "NOT YET KNOWN"}</p></div>
       </div>
       <form className="mb-4 flex gap-2" onSubmit={(event) => { event.preventDefault(); saveBid.mutate(); }}>
         <input aria-label="Current bid GBP" className="rounded-lg bg-stone-900 px-3 py-2" placeholder="Current bid GBP" value={bid} onChange={(event) => setBid(event.target.value)} />
         <button className="rounded-lg bg-stone-700 px-3">Save bid</button>
       </form>
-      <div className="mb-3 flex flex-wrap gap-3 text-sm">{["Overview", "Market", "Costs", "Diligence", "Evidence", "Audit"].map((item) => <button key={item} className={tab === item ? "text-emerald-200" : "text-stone-500"} onClick={() => setTab(item)}>{item}</button>)}</div>
+      <div className="mb-3 flex flex-wrap gap-3 text-sm">{["Overview", "Market", "Costs & taxes", "Why this tax?", "Evidence", "Audit"].map((item) => <button key={item} className={tab === item ? "text-emerald-200" : "text-stone-500"} onClick={() => setTab(item)}>{item}</button>)}</div>
       {tab === "Overview" && <div className="space-y-2 text-sm"><p>{lot.provenance_plain}</p><p>Market confidence {lot.market_confidence || "—"} · {plainDiversity(lot.dealer_diversity)}</p><p>What would change this: {(lot.blockers || []).join("; ") || "Nothing further is blocking a market view."}</p></div>}
       {tab === "Market" && <MarketChart lot={lot} />}
-      {tab === "Costs" && <CostList economics={economics} lot={lot} />}
-      {tab === "Diligence" && <ul className="space-y-2">{(lot.blockers || []).map((blocker) => <li key={blocker} className="rounded-lg border border-stone-800 p-3 text-sm"><strong>{blocker}</strong><p className="text-stone-400">Missing. This blocks a final safe hammer. Add evidence when you have it. Marking a task requested does not prove it.</p></li>)}{!(lot.blockers || []).length && <p>No open diligence.</p>}</ul>}
+      {tab === "Costs & taxes" && <CostList economics={economics} lot={lot} />}
+      {tab === "Why this tax?" && <TaxWhy lot={lot} />}
       {tab === "Evidence" && <EvidenceForm lot={lot} />}
       {tab === "Audit" && <pre className="overflow-auto rounded-lg bg-stone-950 p-3 text-xs">{JSON.stringify({ state: lot.technical_state, provenance: lot.provenance, blockers: lot.blockers }, null, 2)}</pre>}
       <button className="mt-4 text-sm text-stone-400" onClick={() => navigator.clipboard.writeText(lot.request_pack || "")}>Copy request</button>
@@ -211,9 +217,44 @@ function MarketChart({ lot }: { lot: Lot }) {
   );
 }
 
-function CostList({ economics, lot }: { economics: Record<string, string | null>; lot: Lot }) {
-  const lines = Object.keys(COST_LABELS);
-  return <ul className="space-y-1 text-sm">{lines.map((key) => <li key={key} className="flex justify-between gap-4 border-b border-stone-800 py-2"><span>{COST_LABELS[key]}</span><span className="text-right">{economics[key] ? (key.endsWith("_eur") ? money(economics[key]) : plainCost(economics[key])) : "UNKNOWN"}</span></li>)}<li className="pt-2">Safe headroom {lot.headroom_status === "KNOWN" ? "shown above" : "UNKNOWN — not calculated from the pre-tax ceiling"}</li></ul>;
+function line(label: string, value: string | null | undefined) {
+  return <li className="flex justify-between gap-4 border-b border-stone-800 py-2"><span>{label}</span><span>{value ? money(value) : "NOT YET KNOWN"}</span></li>;
+}
+
+function CostList({ lot }: { economics: Record<string, string | null>; lot: Lot }) {
+  const quote = lot.quote;
+  return (
+    <div className="text-sm">
+      <p className="mb-2 text-stone-400">Purchase and Irish taxes. Unknown lines are not treated as zero. NI relief, when proven, removes customs duty and import VAT. It does not remove VRT.</p>
+      <ul>
+        {line("Customs duty", quote?.customs_eur)}
+        {line("Import VAT", quote?.import_vat_eur)}
+        {line("VRT", quote?.vrt_eur)}
+        {line("Registration", quote?.registration_eur)}
+      </ul>
+      <p className="pt-3">Expected sell price {money(quote?.sell_eur)}</p>
+      <p>Expected profit {quote?.profit_eur ? money(quote.profit_eur) : "NOT YET KNOWN"}</p>
+      {!quote?.max_bid_known && <p className="text-stone-500">Max bid is waiting for tax info. {quote?.ceiling_before_tax_gbp ? `Current ceiling before unresolved tax: ${pounds(quote.ceiling_before_tax_gbp)}.` : ""}</p>}
+    </div>
+  );
+}
+
+function TaxWhy({ lot }: { lot: Lot }) {
+  const quote = lot.quote;
+  const source = "https://www.revenue.ie/en/vrt/registration-of-imported-used-vehicles/registering-vehicles-from-ni.aspx";
+  return (
+    <div className="space-y-3 text-sm">
+      <p>Rules checked against Revenue: {quote?.rules_checked || "2026-09-25"}</p>
+      <p>{quote?.tax_label}. No normal NI VRT exemption. NI relief relates to customs duty and import VAT.</p>
+      <ul className="space-y-2">
+        <li className="rounded-lg border border-stone-800 p-3">Customs duty: {quote?.customs_eur ? money(quote.customs_eur) : "NOT YET KNOWN"}</li>
+        <li className="rounded-lg border border-stone-800 p-3">Import VAT: {quote?.import_vat_eur ? money(quote.import_vat_eur) : "NOT YET KNOWN"}</li>
+        <li className="rounded-lg border border-stone-800 p-3">VRT: {quote?.vrt_eur ? money(quote.vrt_eur) : "NOT YET KNOWN"}</li>
+      </ul>
+      <a className="underline" href={source}>Revenue — Registering used vehicles acquired in Northern Ireland</a>
+      <p className="text-stone-500">Missing proof: {(lot.blockers || []).join("; ") || "None recorded."}</p>
+    </div>
+  );
 }
 
 function plainCost(value: string) {
@@ -280,6 +321,28 @@ export function DiligencePage() {
 export function MarketPage() {
   const query = useQuery({ queryKey: ["market"], queryFn: cv.market });
   return <Shell title="Market"><p>{query.data?.priced ?? 0} of {query.data?.lots ?? 0} vans have a conservative floor.</p><div className="mt-4 grid gap-2">{(query.data?.vehicles || []).filter((lot) => lot.market_floor).map((lot) => <VehicleRow key={lot.lot_id} lot={lot} />)}</div></Shell>;
+}
+
+export function TaxGuidePage() {
+  return (
+    <Shell title="How NI / GB van tax works">
+      <div className="grid gap-3">
+        <article className="rounded-xl border border-stone-800 p-4"><h2>NI vehicle — proven</h2><p>Customs duty €0. Import VAT €0. VRT is still payable. Proof is an NI import declaration, or Revenue’s discretionary bundle: original V5C, NI service history, and NI MOT. That bundle does not guarantee approval.</p><a className="underline" href="https://www.revenue.ie/en/vrt/registration-of-imported-used-vehicles/registering-vehicles-from-ni.aspx">View Revenue source</a></article>
+        <article className="rounded-xl border border-stone-800 p-4"><h2>GB vehicle</h2><p>Customs may apply. Import VAT is 23% of the customs value, which includes the price, transport, insurance, and duty. VRT is payable. A sale in NI does not make a GB vehicle tax-free.</p><a className="underline" href="https://www.revenue.ie/en/vrt/registration-of-imported-used-vehicles/vat-implications-importing-vehicles-gb-ni.aspx">View Revenue source</a></article>
+        <article className="rounded-xl border border-stone-800 p-4"><h2>Qualifying N1 van</h2><p>VRT can be €200 when there are fewer than four seats, the laden-mass test passes (130%, or 125% electric), and the documents are a CoC, NSSTA, or IVA. Category B otherwise is 8% of OMSP up to 120 g/km (minimum €160) or 13.3% above that (minimum €266).</p><a className="underline" href="https://www.revenue.ie/en/vrt/calculating-vrt/applying-tax.aspx">View Revenue source</a></article>
+        <article className="rounded-xl border border-stone-800 p-4"><h2>Electric van</h2><p>Possible VRT relief up to €5,000 for qualifying series-production electric Category A and B vehicles registered before 31 December 2026. The exact amount follows Revenue’s OMSP rules. The calculator is an estimate.</p><a className="underline" href="https://www.revenue.ie/en/vrt/reliefs-and-exemptions/electric-vehicles/index.aspx">View Revenue source</a></article>
+      </div>
+    </Shell>
+  );
+}
+
+export function SettingsPage() {
+  return (
+    <Shell title="Bid settings">
+      <p className="text-sm text-stone-400">Used for every van. Minimum profit €800. Minimum return 15%. VAT registration is not assumed, so import VAT is not treated as recovered.</p>
+      <p className="mt-3 text-sm">Rules checked against Revenue: 25 Sep 2026.</p>
+    </Shell>
+  );
 }
 
 export function SourcesPage() {

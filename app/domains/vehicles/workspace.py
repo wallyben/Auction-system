@@ -18,7 +18,7 @@ from app.domains.vehicles.enums import Fuel, ObservationStatus
 from app.domains.vehicles.market import MarketBook, MarketObservation
 from app.domains.vehicles.orm import CvAuctionRow, CvLotRow, CvOwnerEvidenceRow
 from app.domains.vehicles.owner_documents import apply_owner_document, parse_owner_document
-from app.domains.vehicles.owner_view import owner_status, plain_provenance
+from app.domains.vehicles.owner_view import owner_quote, owner_status, plain_provenance
 
 EVIDENCE_DIR = Path("artifacts/runtime/cv_evidence")
 T426_PATH = Path("artifacts/runtime/cv019/T426_CV019_INPUT_2026-09-23.txt")
@@ -74,7 +74,7 @@ def auction_detail(session: Session, auction_id: str) -> dict:
         raise KeyError(auction_id)
     lots = session.scalars(select(CvLotRow).where(CvLotRow.auction_id == auction_id)).all()
     card = auction_card(session, auction)
-    card["vehicles"] = [lot_card(row) for row in sorted(lots, key=lambda item: _lot_sort(item.lot_number))]
+    card["vehicles"] = [lot_card(row, fx=auction.fx) for row in sorted(lots, key=lambda item: _lot_sort(item.lot_number))]
     return card
 
 
@@ -82,7 +82,8 @@ def lot_detail(session: Session, lot_id: str) -> dict:
     row = session.get(CvLotRow, lot_id)
     if row is None:
         raise KeyError(lot_id)
-    card = lot_card(row)
+    auction = session.get(CvAuctionRow, row.auction_id)
+    card = lot_card(row, fx=auction.fx if auction else "")
     card["evaluation"] = row.payload.get("evaluation") or {}
     card["evidence"] = _evidence(session, lot_id)
     card["request_pack"] = request_pack(card)
@@ -154,7 +155,7 @@ def overview(session: Session) -> dict:
     return {
         "auctions": auctions,
         "counts": _counts(cards),
-        "attention": [card for card in cards if card["selected"] or card["status"] == "TAX DILIGENCE"][:8],
+        "attention": [card for card in cards if card["status"] == "READY TO BID"][:8] or [card for card in cards if card["status"] in {"NEED TAX PROOF", "NEED VRT INFO"}][:8],
     }
 
 
@@ -167,7 +168,7 @@ def diligence_queue(session: Session) -> list[dict]:
     items = []
     for row in session.scalars(select(CvLotRow)).all():
         card = lot_card(row)
-        if card["status"] not in {"TAX DILIGENCE", "MARKET READY"} and not card["selected"]:
+        if card["status"] not in {"NEED TAX PROOF", "NEED VRT INFO", "READY TO BID"} and not card["selected"]:
             continue
         for blocker in card["blockers"]:
             items.append({"lot_id": card["lot_id"], "lot": card["lot_number"], "vehicle": card["vehicle"], "blocker": blocker, "status": card["status"], "pre_tax_ceiling": card["pre_tax_ceiling"]})
@@ -191,7 +192,7 @@ def auction_card(session: Session, auction: CvAuctionRow) -> dict:
     }
 
 
-def lot_card(row: CvLotRow) -> dict:
+def lot_card(row: CvLotRow, *, fx: str = "") -> dict:
     report = row.payload.get("evaluation") or {}
     economics = report.get("economics") or {}
     valuation = report.get("valuation") or {}
@@ -204,7 +205,8 @@ def lot_card(row: CvLotRow) -> dict:
         "registration": row.registration,
         "year": row.payload.get("year"),
         "mileage_km": row.payload.get("mileage_km"),
-        "status": row.owner_status,
+        "status": owner_status(report),
+        "quote": owner_quote(report, fx=fx),
         "technical_state": report.get("prebid_group"),
         "selected": row.selected,
         "note": row.owner_note,
@@ -372,10 +374,14 @@ def _counts(cards: list[dict]) -> dict:
 
     return {
         "lots": len(cards),
-        "market_ready": n("MARKET READY"),
-        "tax_diligence": n("TAX DILIGENCE"),
-        "market_insufficient": n("MARKET INSUFFICIENT"),
-        "hard_reject": n("HARD REJECT"),
+        "market_ready": n("READY TO BID"),
+        "tax_diligence": n("NEED TAX PROOF") + n("NEED VRT INFO"),
+        "market_insufficient": n("NEED MARKET DATA"),
+        "hard_reject": n("REJECT"),
+        "ready_to_bid": n("READY TO BID"),
+        "need_tax": n("NEED TAX PROOF") + n("NEED VRT INFO"),
+        "need_market": n("NEED MARKET DATA"),
+        "rejected": n("REJECT"),
         "selected": sum(1 for card in cards if card["selected"]),
         "priced": sum(1 for card in cards if card["market_floor"]),
     }
