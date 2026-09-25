@@ -39,6 +39,9 @@ def test_unpriced_is_not_no_economic_headroom() -> None:
     empty = _valued(floor=False, stress=None, market="LOW")
     assert prebid_economic_group(empty) == "MARKET_INSUFFICIENT"
     attractive = _valued(floor=True, stress="4000")
-    assert prebid_economic_group(attractive) == "ROBUST_OPPORTUNITY"
+    assert prebid_economic_group(attractive) == "ECONOMICALLY_INTERESTING_TAX_DILIGENCE"
+    resolved = _valued(floor=True, stress="4000")
+    resolved.final_max_safe_hammer_eur = Decimal("4000")
+    assert prebid_economic_group(resolved) == "ROBUST_OPPORTUNITY"
     unattractive = _valued(floor=True, stress="0")
     assert prebid_economic_group(unattractive) == "NO_ECONOMIC_HEADROOM"

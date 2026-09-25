@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from decimal import Decimal
+from types import SimpleNamespace
 
 from app.core.money import ZERO, money
 from app.domains.vehicles.auction_costs import auction_costs
@@ -18,6 +19,7 @@ from app.domains.vehicles.enums import (
     ProvenanceState,
 )
 from app.domains.vehicles.evidence import EvidenceLedger
+from app.domains.vehicles.prebid_economics import assess_landed
 from app.domains.vehicles.scenarios import catalogue_hard_reject, economic_label, ni_landing_scenarios, prebid_economic_group
 from app.domains.vehicles.gates import GateReport, decide_gates
 from app.domains.vehicles.history import HistoryAssessment, assess_history
@@ -93,13 +95,37 @@ class Evaluation:
             write_off = self.history.write_off.interpretation
         return catalogue_hard_reject(title=self.title, write_off_label=write_off)
 
+    def _landed(self):
+        clear_states = {"ROI_NATIVE", "NI_PRE_2021_PROVEN", "NI_POST_2020_IMPORT_PROVEN"}
+        state = self.provenance.state.value
+        return assess_landed(
+            provenance=state,
+            pre_tax_ceiling_eur=self.valuation.max_hammer_vat_stress_eur,
+            current_bid_eur=self.current_bid_eur,
+            ni_clear_proven=self.provenance.customs_clear and state in clear_states,
+            vrt_eur=self.tax.vrt_eur,
+            vrt_confirmed=self.tax.vrt_eur is not None and self.tax.vrt_posture.value == "PROVEN",
+            homologation_present=False,
+            registration_eur=self.tax.registration_eur,
+            vat_recovery_posture="UNKNOWN",
+        )
+
     def to_dict(self) -> dict[str, object]:
+        landed = self._landed()
+        screen = SimpleNamespace(
+            prebid_floor_available=self.valuation.prebid_floor_available,
+            market_floor_confidence=self.valuation.market_floor_confidence,
+            max_hammer_vat_stress_eur=self.valuation.max_hammer_vat_stress_eur,
+            max_hammer_market_floor_eur=self.valuation.max_hammer_market_floor_eur,
+            final_max_safe_hammer_eur=landed.final_max_safe_hammer_eur,
+        )
         return {
             "state": self.state.value,
             "certification": self.certification.value,
             "purchasing_recommendation": self.purchasing_recommendation,
             "does_not_bid": True,
-            "prebid_group": prebid_economic_group(self.valuation, hard_reject=self._hard_reject_label()),
+            "prebid_group": prebid_economic_group(screen, hard_reject=self._hard_reject_label()),
+            "economics": landed.to_dict(),
             "economic_interest": economic_label(
                 state=self.state.value,
                 market_pass=bool(self.gates.gates.get("MARKET_EVIDENCE_PASS")),

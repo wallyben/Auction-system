@@ -28,12 +28,13 @@ def prebid_economic_group(valuation: object, *, hard_reject: str = "") -> str:
     market_hammer = getattr(valuation, "max_hammer_market_floor_eur", None)
     if not floor:
         return "MARKET_INSUFFICIENT"
-    if market in {"HIGH", "MEDIUM"} and stress is not None and stress > 0:
+    final_safe = getattr(valuation, "final_max_safe_hammer_eur", None)
+    if market in {"HIGH", "MEDIUM"} and final_safe is not None and final_safe > 0:
         return "ROBUST_OPPORTUNITY"
-    if market_hammer is not None and market_hammer > 0:
-        return "POTENTIAL_OPPORTUNITY_TAX_DILIGENCE"
-    if stress == 0 or market_hammer == 0:
+    if final_safe == 0 or stress == 0 or market_hammer == 0:
         return "NO_ECONOMIC_HEADROOM"
+    if stress is not None or market_hammer is not None:
+        return "ECONOMICALLY_INTERESTING_TAX_DILIGENCE"
     return "MARKET_INSUFFICIENT"
 
 

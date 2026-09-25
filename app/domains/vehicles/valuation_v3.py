@@ -92,6 +92,7 @@ def value_vehicle_v3(subject: VehicleIdentity, book: MarketBook, *, as_of: datet
     weights = [weight for _low, _high, weight, _anchor, _interval in used]
     market_label, market_numeric = _market_floor_confidence(used)
     dealer_count, largest_share, unnamed = _dealer_concentration(used)
+    diversity = _dealer_diversity(used)
     concentrated = largest_share > Decimal("0.50") or (dealer_count < 2 and not unnamed)
     if dealer_count > 0 and concentrated and market_label in {"HIGH", "MEDIUM"}:
         market_label = "LOW"
@@ -212,6 +213,11 @@ def value_vehicle_v3(subject: VehicleIdentity, book: MarketBook, *, as_of: datet
         prebid_state="PREBID_FLOOR_AVAILABLE" if prebid else "",
         dealer_count=dealer_count,
         largest_dealer_share=str(largest_share),
+        unique_physical_comps=len(used),
+        known_dealer_count=diversity[0],
+        unknown_dealer_count=diversity[1],
+        unique_source_count=diversity[2],
+        dealer_diversity_status=diversity[3],
     )
 
 
@@ -232,6 +238,36 @@ def _dealer_concentration(used: list[tuple[Decimal, Decimal, Decimal, _Anchor, P
         return 0, _ZERO, unnamed
     largest = max(totals.values()) / weight_sum
     return len(totals), largest.quantize(Decimal("0.01")), unnamed
+
+
+def _dealer_diversity(used: list[tuple[Decimal, Decimal, Decimal, _Anchor, PriceInterval]]) -> tuple[int, int, int, str]:
+    """Named dealers only. Missing seller names do not count as extra dealers."""
+
+    totals: dict[str, Decimal] = {}
+    unknown = 0
+    sources: set[str] = set()
+    weight_sum = _ZERO
+    for _low, _high, weight, anchor, _interval in used:
+        weight_sum += weight
+        source = (anchor.observation.source or "").strip()
+        if source:
+            sources.add(source)
+        name = (anchor.observation.dealer_name or "").strip()
+        if not name:
+            unknown += 1
+            continue
+        totals[name.casefold()] = totals.get(name.casefold(), _ZERO) + weight
+    known = len(totals)
+    largest = max(totals.values()) / weight_sum if totals and weight_sum > 0 else _ZERO
+    if known >= 2 and largest <= Decimal("0.50"):
+        status = "DIVERSE_PROVEN"
+    elif largest > Decimal("0.50") or (known == 1 and unknown == 0):
+        status = "CONCENTRATED"
+    elif len(sources) >= 2:
+        status = "DIVERSITY_LIKELY"
+    else:
+        status = "DIVERSITY_UNKNOWN"
+    return known, unknown, len(sources), status
 
 
 def _exact_effects(anchors: list[_Anchor], family: str) -> EffectModel:

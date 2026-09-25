@@ -128,6 +128,11 @@ class ValuationResult:
     prebid_state: str = ""
     dealer_count: int = 0
     largest_dealer_share: str = ""
+    unique_physical_comps: int = 0
+    known_dealer_count: int = 0
+    unknown_dealer_count: int = 0
+    unique_source_count: int = 0
+    dealer_diversity_status: str = ""
     max_hammer_market_floor_eur: Decimal | None = None
     max_hammer_vat_stress_eur: Decimal | None = None
     max_hammer_confirmed_tax_eur: Decimal | None = None
@@ -185,6 +190,11 @@ class ValuationResult:
             "prebid_state": self.prebid_state,
             "dealer_count": self.dealer_count,
             "largest_dealer_share": self.largest_dealer_share,
+            "unique_physical_comps": self.unique_physical_comps,
+            "known_dealer_count": self.known_dealer_count,
+            "unknown_dealer_count": self.unknown_dealer_count,
+            "unique_source_count": self.unique_source_count,
+            "dealer_diversity_status": self.dealer_diversity_status,
             "max_hammer_market_floor_eur": _s(self.max_hammer_market_floor_eur),
             "max_hammer_vat_stress_eur": _s(self.max_hammer_vat_stress_eur),
             "max_hammer_confirmed_tax_eur": _s(self.max_hammer_confirmed_tax_eur),

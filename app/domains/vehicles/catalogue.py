@@ -54,6 +54,8 @@ VAN_FAMILIES: tuple[VanFamily, ...] = (
     _family("fiat", "ducato", "ducato"),
     _family("mercedes-benz", "sprinter", "sprinter"),
     _family("volkswagen", "crafter", "crafter"),
+    _family("maxus", "edeliver_3", "edeliver 3", "e deliver 3", "edeliver3"),
+    _family("iveco", "daily", "iveco daily", "daily"),
 )
 
 # People-movers that share a name with a van family. They are not N1 panel vans.
@@ -118,6 +120,8 @@ MANUFACTURER_ALIASES: tuple[tuple[tuple[str, ...], str], ...] = (
     (("nissan",), "nissan"),
     (("toyota",), "toyota"),
     (("ford",), "ford"),
+    (("maxus", "ldv"), "maxus"),
+    (("iveco",), "iveco"),
 )
 
 # WMI prefixes are a consistency hint only. European VINs do not use the
