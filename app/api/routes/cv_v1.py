@@ -96,7 +96,7 @@ def post_bid(lot_id: str, body: dict, session: Session = Depends(get_db), _: Non
 
 
 @router.post("/lots/{lot_id}/evidence")
-async def post_evidence(
+def post_evidence(
     lot_id: str,
     kind: str = Form(...),
     reference: str = Form(""),
@@ -105,7 +105,7 @@ async def post_evidence(
     session: Session = Depends(get_db),
     _: None = Depends(_guard),
 ) -> dict:
-    content = await file.read() if file is not None else b""
+    content = file.file.read() if file is not None else b""
     document = {"kind": kind, "reference": reference or kind, "jurisdiction": jurisdiction or None, "resident_in": jurisdiction or None}
     try:
         return add_evidence(session, lot_id, document, filename=file.filename if file else "", content=content)

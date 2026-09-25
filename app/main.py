@@ -75,17 +75,34 @@ def _mount_owner_app(application: FastAPI) -> None:
     if not index.exists():
         return
 
-    @application.get("/cv")
-    @application.get("/cv/{path:path}")
-    def owner_app(path: str = ""):
-        from fastapi.responses import FileResponse
+    from fastapi.responses import FileResponse
 
-        if path.startswith("legacy"):
-            return FileResponse(index)
-        asset = dist / path
-        if path and asset.is_file():
-            return FileResponse(asset)
+    def owner_index() -> FileResponse:
         return FileResponse(index)
+
+    for route in (
+        "/cv",
+        "/cv/auctions",
+        "/cv/auctions/{auction_id}",
+        "/cv/lots/{lot_id}",
+        "/cv/shortlist",
+        "/cv/diligence",
+        "/cv/market",
+        "/cv/source-health",
+    ):
+        application.add_api_route(route, owner_index, methods=["GET"], include_in_schema=False)
+    if (dist / "assets").is_dir():
+        application.mount("/cv/assets", StaticFiles(directory=dist / "assets"), name="cv-assets")
+
+    def send_asset(path: Path) -> FileResponse:
+        def _send() -> FileResponse:
+            return FileResponse(path)
+
+        return _send
+
+    for asset in dist.iterdir():
+        if asset.is_file() and asset.name != "index.html":
+            application.add_api_route(f"/cv/{asset.name}", send_asset(asset), methods=["GET"], include_in_schema=False)
 
 
 app = create_app()

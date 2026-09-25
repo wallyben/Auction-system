@@ -9,7 +9,7 @@ const links = [
   ["/shortlist", "Shortlist", Star],
   ["/diligence", "Diligence", ClipboardList],
   ["/market", "Market", LineChart],
-  ["/sources", "Sources", Radio],
+  ["/source-health", "Sources", Radio],
 ] as const;
 
 export function App() {
@@ -34,7 +34,7 @@ export function App() {
           <Route path="/shortlist" element={<ComparePage />} />
           <Route path="/diligence" element={<DiligencePage />} />
           <Route path="/market" element={<MarketPage />} />
-          <Route path="/sources" element={<SourcesPage />} />
+          <Route path="/source-health" element={<SourcesPage />} />
         </Routes>
       </main>
       <nav className="fixed inset-x-0 bottom-0 flex justify-around border-t border-stone-800 bg-[#0c1014] p-2 md:hidden">

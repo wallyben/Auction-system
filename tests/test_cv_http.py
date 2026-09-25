@@ -108,7 +108,7 @@ def _payload_from_case() -> dict:
 def test_cv_dashboard_defaults_to_an_empty_candidate_list() -> None:
     clear()
     with TestClient(create_app()) as client:
-        page = client.get("/cv")
+        page = client.get("/cv/legacy")
         sources = client.get("/cv/sources")
     assert page.status_code == 200
     assert "No vehicles in this view" in page.text
@@ -136,7 +136,7 @@ def test_evidenced_case_appears_as_a_shadow_candidate() -> None:
     clear()
     with TestClient(create_app()) as client:
         response = client.post("/cv/api/evaluate", json=_payload_from_case())
-        page = client.get("/cv")
+        page = client.get("/cv/legacy")
     body = response.json()
     assert body["state"] == "BUY_CANDIDATE"
     assert body["purchasing_recommendation"] is False
