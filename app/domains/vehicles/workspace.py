@@ -98,7 +98,8 @@ def set_selection(session: Session, lot_id: str, *, selected: bool, note: str | 
     if note is not None:
         row.owner_note = note
     session.commit()
-    return lot_card(row)
+    auction = session.get(CvAuctionRow, row.auction_id)
+    return lot_card(row, fx=auction.fx if auction else "")
 
 
 def set_bid(session: Session, lot_id: str, bid_gbp: str) -> dict:
@@ -117,7 +118,8 @@ def set_bid(session: Session, lot_id: str, bid_gbp: str) -> dict:
     payload["evaluation"] = report
     row.payload = payload
     session.commit()
-    return lot_card(row)
+    auction = session.get(CvAuctionRow, row.auction_id)
+    return lot_card(row, fx=auction.fx if auction else "")
 
 
 def add_evidence(session: Session, lot_id: str, document: dict, *, filename: str = "", content: bytes = b"") -> dict:
@@ -150,8 +152,9 @@ def add_evidence(session: Session, lot_id: str, document: dict, *, filename: str
 
 def overview(session: Session) -> dict:
     auctions = list_auctions(session)
+    fx_by_auction = {row.auction_id: row.fx for row in session.scalars(select(CvAuctionRow)).all()}
     lots = session.scalars(select(CvLotRow)).all()
-    cards = [lot_card(row) for row in lots]
+    cards = [lot_card(row, fx=fx_by_auction.get(row.auction_id, "")) for row in lots]
     return {
         "auctions": auctions,
         "counts": _counts(cards),
@@ -161,13 +164,15 @@ def overview(session: Session) -> dict:
 
 def shortlist(session: Session) -> list[dict]:
     rows = session.scalars(select(CvLotRow).where(CvLotRow.selected.is_(True))).all()
-    return [lot_card(row) for row in rows]
+    fx_by_auction = {row.auction_id: row.fx for row in session.scalars(select(CvAuctionRow)).all()}
+    return [lot_card(row, fx=fx_by_auction.get(row.auction_id, "")) for row in rows]
 
 
 def diligence_queue(session: Session) -> list[dict]:
     items = []
+    fx_by_auction = {row.auction_id: row.fx for row in session.scalars(select(CvAuctionRow)).all()}
     for row in session.scalars(select(CvLotRow)).all():
-        card = lot_card(row)
+        card = lot_card(row, fx=fx_by_auction.get(row.auction_id, ""))
         if card["status"] not in {"NEED TAX PROOF", "NEED VRT INFO", "READY TO BID"} and not card["selected"]:
             continue
         for blocker in card["blockers"]:
@@ -177,7 +182,7 @@ def diligence_queue(session: Session) -> list[dict]:
 
 def auction_card(session: Session, auction: CvAuctionRow) -> dict:
     lots = session.scalars(select(CvLotRow).where(CvLotRow.auction_id == auction.auction_id)).all()
-    cards = [lot_card(row) for row in lots]
+    cards = [lot_card(row, fx=auction.fx) for row in lots]
     counts = _counts(cards)
     return {
         "auction_id": auction.auction_id,
@@ -196,6 +201,7 @@ def lot_card(row: CvLotRow, *, fx: str = "") -> dict:
     report = row.payload.get("evaluation") or {}
     economics = report.get("economics") or {}
     valuation = report.get("valuation") or {}
+    quote = owner_quote(report, fx=fx, registration=row.registration)
     return {
         "lot_id": row.lot_id,
         "auction_id": row.auction_id,
@@ -205,8 +211,8 @@ def lot_card(row: CvLotRow, *, fx: str = "") -> dict:
         "registration": row.registration,
         "year": row.payload.get("year"),
         "mileage_km": row.payload.get("mileage_km"),
-        "status": owner_status(report),
-        "quote": owner_quote(report, fx=fx),
+        "status": quote["status"],
+        "quote": quote,
         "technical_state": report.get("prebid_group"),
         "selected": row.selected,
         "note": row.owner_note,
@@ -218,7 +224,7 @@ def lot_card(row: CvLotRow, *, fx: str = "") -> dict:
         "market_confidence": valuation.get("market_floor_confidence"),
         "dealer_diversity": valuation.get("dealer_diversity_status"),
         "provenance": report.get("provenance_status"),
-        "provenance_plain": plain_provenance(str(report.get("provenance_status") or "")),
+        "provenance_plain": quote["tax_label"],
         "blockers": economics.get("blockers") or [],
         "buy_ready": bool(report.get("buy_ready")),
     }

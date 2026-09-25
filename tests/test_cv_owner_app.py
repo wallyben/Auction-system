@@ -16,7 +16,7 @@ def test_ni_looking_plates_need_documents() -> None:
         )
         assert result.state is ProvenanceState.LIKELY_NI_NEEDS_DOCUMENTS
         assert result.customs_clear is False
-        assert plain_provenance(result.state.value) == "NI TAX RELIEF POSSIBLE — NEED DOCUMENTS"
+        assert plain_provenance(result.state.value) == "LIKELY NORTHERN IRELAND"
 
 
 def test_tax_diligence_is_not_market_ready() -> None:

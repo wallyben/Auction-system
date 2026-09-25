@@ -2,81 +2,79 @@
 
 from __future__ import annotations
 
+from app.domains.vehicles.tax_scenarios import build_scenarios
 
-PLAIN_PROVENANCE = {
-    "ROI_NATIVE": "ALREADY IRISH",
-    "NI_PRE_2021_PROVEN": "NI TAX FREE — PROVEN",
-    "NI_POST_2020_IMPORT_PROVEN": "NI TAX FREE — PROVEN",
-    "LIKELY_NI_NEEDS_DOCUMENTS": "NI TAX RELIEF POSSIBLE — NEED DOCUMENTS",
-    "GB_ORIGIN": "GB IMPORT TAX APPLIES",
-    "GB_TO_NI_UNPROVEN": "GB IMPORT TAX APPLIES",
+
+PLAIN_JURISDICTION = {
+    "LIKELY_GB": "GB IMPORT",
+    "LIKELY_NI": "LIKELY NORTHERN IRELAND",
+    "ROI": "ALREADY IRISH",
     "UNKNOWN": "ORIGIN UNKNOWN",
 }
 
 
-def owner_status(evaluation: dict) -> str:
+def owner_status(evaluation: dict, *, quote: dict | None = None) -> str:
     group = str(evaluation.get("prebid_group") or "")
-    economics = evaluation.get("economics") or {}
     if group.startswith("REJECT"):
         return "REJECT"
     if group == "NO_ECONOMIC_HEADROOM":
         return "PRICE TOO HIGH"
-    if group == "MARKET_INSUFFICIENT" or not (evaluation.get("valuation") or {}).get("expected_achievable_eur"):
-        if group == "MARKET_INSUFFICIENT":
-            return "NEED MARKET DATA"
-    final = economics.get("final_max_safe_hammer_eur")
-    if final:
+    if group == "MARKET_INSUFFICIENT":
+        return "NEED MARKET DATA"
+    if quote and quote.get("safe_max_bid_gbp"):
+        if quote.get("tax_status") == "UNPROVEN" and quote.get("jurisdiction") == "LIKELY_NI":
+            return "NEED TAX PROOF"
+        if quote.get("tax_status") == "UNPROVEN":
+            return "READY TO BID"
         return "READY TO BID"
-    provenance = str(evaluation.get("provenance_status") or "")
-    vrt = str((economics.get("vrt_status") or ""))
-    if provenance in {"NI_PRE_2021_PROVEN", "NI_POST_2020_IMPORT_PROVEN", "ROI_NATIVE"} and vrt != "CONFIRMED":
-        return "NEED VRT INFO"
     if group in {"ECONOMICALLY_INTERESTING_TAX_DILIGENCE", "POTENTIAL_OPPORTUNITY_TAX_DILIGENCE", "ROBUST_OPPORTUNITY"}:
         return "NEED TAX PROOF"
     return "NEED MARKET DATA"
 
 
 def plain_provenance(state: str) -> str:
-    return PLAIN_PROVENANCE.get(state, "ORIGIN UNKNOWN")
+    from app.domains.vehicles.tax_scenarios import jurisdiction_from
+
+    jurisdiction, status = jurisdiction_from("", state)
+    if status == "PROVEN" and jurisdiction == "LIKELY_NI":
+        return "NI TAX FREE — PROVEN"
+    return PLAIN_JURISDICTION.get(jurisdiction, "ORIGIN UNKNOWN")
 
 
-def _gbp(eur: str | None, fx: str) -> str | None:
-    if not eur or not fx:
-        return None
-    from decimal import Decimal
-
-    rate = Decimal(fx)
-    if rate <= 0:
-        return None
-    return str((Decimal(eur) / rate).quantize(Decimal("0.01")))
-
-
-def owner_quote(evaluation: dict, *, fx: str = "") -> dict:
-    """Primary owner numbers. A missing material cost never becomes a bid."""
+def owner_quote(evaluation: dict, *, fx: str = "", registration: str = "") -> dict:
+    """Primary owner numbers, including conservative tax scenarios."""
 
     valuation = evaluation.get("valuation") or {}
-    economics = evaluation.get("economics") or {}
-    tax = evaluation.get("tax") or {}
-    sell = valuation.get("expected_achievable_eur") or valuation.get("conservative_eur")
-    final = economics.get("final_max_safe_hammer_eur")
-    ceiling = economics.get("pre_tax_hammer_ceiling_eur")
-    status = owner_status(evaluation)
+    scenarios = build_scenarios(evaluation, registration=registration, fx=fx)
+    sell = scenarios.get("sell_eur") or valuation.get("conservative_eur")
+    status = owner_status(evaluation, quote=scenarios)
     return {
         "status": status,
-        "tax_label": plain_provenance(str(evaluation.get("provenance_status") or "")),
+        "tax_label": PLAIN_JURISDICTION.get(str(scenarios.get("jurisdiction") or ""), "ORIGIN UNKNOWN"),
+        "jurisdiction": scenarios.get("jurisdiction"),
+        "tax_status": scenarios.get("tax_status"),
         "sell_eur": sell,
         "conservative_eur": valuation.get("conservative_eur"),
         "quick_eur": valuation.get("quick_sale_eur"),
-        "sell_low_eur": valuation.get("expected_achievable_low_eur"),
-        "sell_high_eur": valuation.get("expected_achievable_high_eur"),
-        "max_bid_gbp": _gbp(final, fx) if final else None,
-        "max_bid_known": bool(final),
-        "ceiling_before_tax_gbp": None if final else _gbp(ceiling, fx),
-        "customs_eur": tax.get("customs_duty_eur"),
-        "import_vat_eur": tax.get("import_vat_eur"),
-        "vrt_eur": tax.get("vrt_eur"),
-        "nox_eur": tax.get("nox_eur"),
-        "registration_eur": tax.get("registration_eur"),
-        "profit_eur": economics.get("headroom_eur") if final else None,
+        "max_bid_gbp": scenarios.get("safe_max_bid_gbp"),
+        "max_bid_known": bool(scenarios.get("safe_max_bid_gbp")),
+        "alt_max_bid_gbp": scenarios.get("alt_max_bid_gbp"),
+        "alt_label": scenarios.get("alt_label") or "",
+        "potential_saving_eur": scenarios.get("potential_saving_eur"),
+        "ceiling_before_tax_gbp": None,
+        "customs_eur": scenarios.get("customs_eur"),
+        "import_vat_eur": scenarios.get("import_vat_eur"),
+        "vrt_eur": scenarios.get("vrt_eur"),
+        "registration_eur": scenarios.get("registration_eur"),
+        "transport_eur": scenarios.get("transport_eur"),
+        "insurance_eur": scenarios.get("insurance_eur"),
+        "repairs_eur": scenarios.get("repairs_eur"),
+        "fees_and_tax_eur": scenarios.get("fees_and_tax_eur"),
+        "profit_eur": scenarios.get("profit_eur"),
+        "postures": scenarios.get("postures") or {},
+        "documents": scenarios.get("documents") or [],
+        "taric": scenarios.get("taric") or {},
+        "sources": scenarios.get("sources") or [],
+        "scenario_name": scenarios.get("scenario_name") or "",
         "rules_checked": "2026-09-25",
     }

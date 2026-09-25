@@ -132,10 +132,11 @@ def get_sources(_: None = Depends(_guard)) -> dict:
 
 @router.get("/market")
 def get_market(session: Session = Depends(get_db), _: None = Depends(_guard)) -> dict:
-    from app.domains.vehicles.orm import CvLotRow
+    from app.domains.vehicles.orm import CvAuctionRow, CvLotRow
     from app.domains.vehicles.workspace import lot_card
 
-    cards = [lot_card(row) for row in session.scalars(select(CvLotRow)).all()]
+    fx_by_auction = {row.auction_id: row.fx for row in session.scalars(select(CvAuctionRow)).all()}
+    cards = [lot_card(row, fx=fx_by_auction.get(row.auction_id, "")) for row in session.scalars(select(CvLotRow)).all()]
     return {"priced": sum(1 for card in cards if card["market_floor"]), "lots": len(cards), "vehicles": cards[:40]}
 
 

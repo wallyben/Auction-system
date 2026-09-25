@@ -24,17 +24,28 @@ export type Lot = {
   quote?: {
     status: string;
     tax_label: string;
+    jurisdiction?: string;
+    tax_status?: string;
     sell_eur: string | null;
     conservative_eur: string | null;
     quick_eur: string | null;
     max_bid_gbp: string | null;
     max_bid_known: boolean;
+    alt_max_bid_gbp?: string | null;
+    alt_label?: string;
+    potential_saving_eur?: string | null;
     ceiling_before_tax_gbp: string | null;
     customs_eur: string | null;
     import_vat_eur: string | null;
     vrt_eur: string | null;
     registration_eur: string | null;
+    transport_eur?: string | null;
+    insurance_eur?: string | null;
+    repairs_eur?: string | null;
+    fees_and_tax_eur?: string | null;
     profit_eur: string | null;
+    postures?: Record<string, string>;
+    documents?: string[];
     rules_checked: string;
   };
   evaluation?: Record<string, unknown>;

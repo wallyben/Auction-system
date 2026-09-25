@@ -135,7 +135,7 @@ function VehicleRow({ lot }: { lot: Lot }) {
         <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:text-right">
           <span className="text-stone-500">Sell</span><span>{money(lot.quote?.sell_eur || lot.market_floor)}</span>
           <span className="text-stone-500">Max bid</span><span>{lot.quote?.max_bid_known ? pounds(lot.quote.max_bid_gbp) : "NOT YET KNOWN"}</span>
-          <span className="text-stone-500">Fees / tax</span><span>{lot.quote?.tax_label || lot.provenance_plain}</span>
+          <span className="text-stone-500">Fees / tax</span><span>{money(lot.quote?.fees_and_tax_eur)}</span>
           <span className="text-stone-500">Profit</span><span>{lot.quote?.profit_eur ? money(lot.quote.profit_eur) : "—"}</span>
         </div>
       </Link>
@@ -163,9 +163,9 @@ export function VehiclePage() {
       <p className="mb-4 text-sm">{badge(lot.quote?.status || lot.status)} <span className="ml-2 text-stone-400">{lot.quote?.tax_label || lot.provenance_plain}</span></p>
       <div className="mb-2 grid gap-3 sm:grid-cols-5">
         <div className="rounded-xl border border-stone-800 p-4"><p className="text-sm text-stone-400">Current bid</p><p className="text-2xl">{lot.current_bid_gbp ? `£${Number(lot.current_bid_gbp).toLocaleString()}` : "—"}</p></div>
-        <div className="rounded-xl border border-stone-800 p-4"><p className="text-sm text-stone-400">Max bid</p><p className="text-2xl">{lot.quote?.max_bid_known ? pounds(lot.quote.max_bid_gbp) : "NOT YET KNOWN"}</p>{!lot.quote?.max_bid_known && lot.quote?.ceiling_before_tax_gbp && <p className="text-xs text-stone-500">Before unresolved taxes, the ceiling is {pounds(lot.quote.ceiling_before_tax_gbp)}</p>}</div>
+        <div className="rounded-xl border border-stone-800 p-4"><p className="text-sm text-stone-400">Max bid</p><p className="text-2xl">{lot.quote?.max_bid_known ? pounds(lot.quote.max_bid_gbp) : "NOT YET KNOWN"}</p>{lot.quote?.alt_max_bid_gbp && <p className="text-xs text-emerald-200/80">{lot.quote.alt_label}: {pounds(lot.quote.alt_max_bid_gbp)}</p>}</div>
         <div className="rounded-xl border border-stone-800 p-4"><p className="text-sm text-stone-400">Sell for</p><p className="text-2xl">{money(lot.quote?.sell_eur)}</p><p className="text-xs text-stone-500">Conservative {money(lot.quote?.conservative_eur)} · Quick {money(lot.quote?.quick_eur)}</p></div>
-        <div className="rounded-xl border border-stone-800 p-4"><p className="text-sm text-stone-400">Known costs</p><p className="text-2xl">{lot.quote?.max_bid_known ? "See receipt" : "Unresolved tax"}</p></div>
+        <div className="rounded-xl border border-stone-800 p-4"><p className="text-sm text-stone-400">Tax + fees</p><p className="text-2xl">{money(lot.quote?.fees_and_tax_eur)}</p></div>
         <div className="rounded-xl border border-stone-800 p-4"><p className="text-sm text-stone-400">Profit</p><p className="text-2xl">{lot.quote?.profit_eur ? money(lot.quote.profit_eur) : "NOT YET KNOWN"}</p></div>
       </div>
       <form className="mb-4 flex gap-2" onSubmit={(event) => { event.preventDefault(); saveBid.mutate(); }}>
@@ -217,42 +217,49 @@ function MarketChart({ lot }: { lot: Lot }) {
   );
 }
 
-function line(label: string, value: string | null | undefined) {
-  return <li className="flex justify-between gap-4 border-b border-stone-800 py-2"><span>{label}</span><span>{value ? money(value) : "NOT YET KNOWN"}</span></li>;
-}
-
 function CostList({ lot }: { economics: Record<string, string | null>; lot: Lot }) {
   const quote = lot.quote;
+  const postures = (quote?.postures || {}) as Record<string, string>;
   return (
     <div className="text-sm">
-      <p className="mb-2 text-stone-400">Purchase and Irish taxes. Unknown lines are not treated as zero. NI relief, when proven, removes customs duty and import VAT. It does not remove VRT.</p>
+      <p className="mb-2 text-stone-400">How calculated. Estimates stay labelled. NI relief is not treated as proven until the documents arrive.</p>
       <ul>
-        {line("Customs duty", quote?.customs_eur)}
-        {line("Import VAT", quote?.import_vat_eur)}
-        {line("VRT", quote?.vrt_eur)}
+        {line("Customs duty", quote?.customs_eur, postures.customs)}
+        {line("Import VAT", quote?.import_vat_eur, postures.import_vat)}
+        {line("VRT", quote?.vrt_eur, postures.vrt)}
         {line("Registration", quote?.registration_eur)}
+        {line("Transport", quote?.transport_eur)}
+        {line("Insurance", quote?.insurance_eur)}
+        {line("Repair reserve", quote?.repairs_eur)}
+        {line("Total tax + fees", quote?.fees_and_tax_eur)}
       </ul>
       <p className="pt-3">Expected sell price {money(quote?.sell_eur)}</p>
+      <p>Safe max bid {quote?.max_bid_known ? pounds(quote.max_bid_gbp) : "NOT YET KNOWN"}</p>
+      {quote?.alt_max_bid_gbp && <p className="text-emerald-200">{quote.alt_label}: {pounds(quote.alt_max_bid_gbp)}{quote.potential_saving_eur ? ` · potential hammer gain ${money(quote.potential_saving_eur)}` : ""}</p>}
       <p>Expected profit {quote?.profit_eur ? money(quote.profit_eur) : "NOT YET KNOWN"}</p>
-      {!quote?.max_bid_known && <p className="text-stone-500">Max bid is waiting for tax info. {quote?.ceiling_before_tax_gbp ? `Current ceiling before unresolved tax: ${pounds(quote.ceiling_before_tax_gbp)}.` : ""}</p>}
+      {(quote?.documents || []).length > 0 && <p className="pt-2 text-stone-500">Documents that raise the max bid: {(quote?.documents || []).join("; ")}</p>}
     </div>
   );
 }
 
+function line(label: string, value: string | null | undefined, posture?: string) {
+  return <li className="flex justify-between gap-4 border-b border-stone-800 py-2"><span>{label}</span><span>{value ? `${money(value)}${posture ? ` ${posture}` : ""}` : "NOT YET KNOWN"}</span></li>;
+}
+
 function TaxWhy({ lot }: { lot: Lot }) {
   const quote = lot.quote;
-  const source = "https://www.revenue.ie/en/vrt/registration-of-imported-used-vehicles/registering-vehicles-from-ni.aspx";
   return (
     <div className="space-y-3 text-sm">
-      <p>Rules checked against Revenue: {quote?.rules_checked || "2026-09-25"}</p>
-      <p>{quote?.tax_label}. No normal NI VRT exemption. NI relief relates to customs duty and import VAT.</p>
+      <p>Rules checked against Revenue and TARIC: {quote?.rules_checked || "2026-09-25"}</p>
+      <p>{quote?.tax_label}. NI relief, when proven, removes customs duty and import VAT. It does not remove VRT.</p>
       <ul className="space-y-2">
-        <li className="rounded-lg border border-stone-800 p-3">Customs duty: {quote?.customs_eur ? money(quote.customs_eur) : "NOT YET KNOWN"}</li>
-        <li className="rounded-lg border border-stone-800 p-3">Import VAT: {quote?.import_vat_eur ? money(quote.import_vat_eur) : "NOT YET KNOWN"}</li>
-        <li className="rounded-lg border border-stone-800 p-3">VRT: {quote?.vrt_eur ? money(quote.vrt_eur) : "NOT YET KNOWN"}</li>
+        <li className="rounded-lg border border-stone-800 p-3">Safe max bid: {quote?.max_bid_known ? pounds(quote.max_bid_gbp) : "NOT YET KNOWN"}</li>
+        {quote?.alt_max_bid_gbp && <li className="rounded-lg border border-stone-800 p-3">{quote.alt_label}: {pounds(quote.alt_max_bid_gbp)}</li>}
+        <li className="rounded-lg border border-stone-800 p-3">Customs: {quote?.customs_eur ? money(quote.customs_eur) : "NOT YET KNOWN"} · Import VAT: {quote?.import_vat_eur ? money(quote.import_vat_eur) : "NOT YET KNOWN"} · VRT: {quote?.vrt_eur ? money(quote.vrt_eur) : "NOT YET KNOWN"}</li>
       </ul>
-      <a className="underline" href={source}>Revenue — Registering used vehicles acquired in Northern Ireland</a>
-      <p className="text-stone-500">Missing proof: {(lot.blockers || []).join("; ") || "None recorded."}</p>
+      <a className="underline" href="https://www.revenue.ie/en/vrt/registration-of-imported-used-vehicles/registering-vehicles-from-ni.aspx">Revenue — NI registration</a>
+      <a className="ml-3 underline" href="https://ec.europa.eu/taxation_customs/dds2/taric/measures.jsp?Lang=en&Taric=87042199">EU TARIC 87042199</a>
+      <p className="text-stone-500">Documents that raise the max bid: {(quote?.documents || []).join("; ") || "None."}</p>
     </div>
   );
 }

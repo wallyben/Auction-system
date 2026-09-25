@@ -75,7 +75,7 @@ def test_category_b_rates_and_electric_mass() -> None:
     assert ev_vrt_relief_cap_eur(electric=True, before_deadline=False) is None
 
 
-def test_unknown_tax_withholds_max_bid() -> None:
+def test_unproven_tax_still_produces_a_conservative_max_bid() -> None:
     quote = owner_quote(
         {
             "prebid_group": "ECONOMICALLY_INTERESTING_TAX_DILIGENCE",
@@ -84,10 +84,11 @@ def test_unknown_tax_withholds_max_bid() -> None:
             "economics": {"pre_tax_hammer_ceiling_eur": "6800", "final_max_safe_hammer_eur": None, "vrt_status": "UNKNOWN"},
         },
         fx="1.16",
+        registration="UGZ 3040",
     )
-    assert quote["max_bid_known"] is False
-    assert quote["max_bid_gbp"] is None
-    assert quote["status"] == "NEED TAX PROOF"
+    assert quote["max_bid_known"] is True
+    assert quote["max_bid_gbp"]
+    assert quote["alt_max_bid_gbp"]
     assert quote["sell_eur"] == "16000"
 
 
