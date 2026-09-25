@@ -91,6 +91,11 @@ def value_vehicle_v3(subject: VehicleIdentity, book: MarketBook, *, as_of: datet
     highs = [high for _low, high, _weight, _anchor, _interval in used]
     weights = [weight for _low, _high, weight, _anchor, _interval in used]
     market_label, market_numeric = _market_floor_confidence(used)
+    dealer_count, largest_share, unnamed = _dealer_concentration(used)
+    concentrated = largest_share > Decimal("0.50") or (dealer_count < 2 and not unnamed)
+    if dealer_count > 0 and concentrated and market_label in {"HIGH", "MEDIUM"}:
+        market_label = "LOW"
+        market_numeric = Decimal("0.48")
     vat_label = _vat_basis_confidence(used)
     central_low = money(_weighted_median(lows, weights)) if lows else None
     central_high = money(_weighted_median(highs, weights)) if highs else None
@@ -205,7 +210,28 @@ def value_vehicle_v3(subject: VehicleIdentity, book: MarketBook, *, as_of: datet
         vat_stress_proceeds_eur=stress,
         prebid_floor_available=prebid,
         prebid_state="PREBID_FLOOR_AVAILABLE" if prebid else "",
+        dealer_count=dealer_count,
+        largest_dealer_share=str(largest_share),
     )
+
+
+def _dealer_concentration(used: list[tuple[Decimal, Decimal, Decimal, _Anchor, PriceInterval]]) -> tuple[int, Decimal, bool]:
+    """Share is of the whole priced book. Unnamed marketplace rows are not one dealer."""
+
+    totals: dict[str, Decimal] = {}
+    weight_sum = _ZERO
+    unnamed = False
+    for _low, _high, weight, anchor, _interval in used:
+        weight_sum += weight
+        name = (anchor.observation.dealer_name or "").strip()
+        if not name:
+            unnamed = True
+            continue
+        totals[name.casefold()] = totals.get(name.casefold(), _ZERO) + weight
+    if not totals or weight_sum <= 0:
+        return 0, _ZERO, unnamed
+    largest = max(totals.values()) / weight_sum
+    return len(totals), largest.quantize(Decimal("0.01")), unnamed
 
 
 def _exact_effects(anchors: list[_Anchor], family: str) -> EffectModel:

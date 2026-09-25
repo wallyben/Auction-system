@@ -126,6 +126,8 @@ class ValuationResult:
     vat_stress_proceeds_eur: Decimal | None = None
     prebid_floor_available: bool = False
     prebid_state: str = ""
+    dealer_count: int = 0
+    largest_dealer_share: str = ""
     max_hammer_market_floor_eur: Decimal | None = None
     max_hammer_vat_stress_eur: Decimal | None = None
     max_hammer_confirmed_tax_eur: Decimal | None = None
@@ -181,6 +183,8 @@ class ValuationResult:
             "vat_stress_proceeds_eur": _s(self.vat_stress_proceeds_eur),
             "prebid_floor_available": self.prebid_floor_available,
             "prebid_state": self.prebid_state,
+            "dealer_count": self.dealer_count,
+            "largest_dealer_share": self.largest_dealer_share,
             "max_hammer_market_floor_eur": _s(self.max_hammer_market_floor_eur),
             "max_hammer_vat_stress_eur": _s(self.max_hammer_vat_stress_eur),
             "max_hammer_confirmed_tax_eur": _s(self.max_hammer_confirmed_tax_eur),

@@ -52,15 +52,40 @@ def assign_duplicate_groups(rows: list[MarketObservation]) -> list[MarketObserva
 
 
 def primary_observations(rows: list[MarketObservation]) -> list[MarketObservation]:
-    seen: set[str] = set()
-    kept: list[MarketObservation] = []
+    """One physical van. A later dealer page can supply VAT wording the first source lacked."""
+
+    buckets: dict[str, list[MarketObservation]] = {}
+    order: list[str] = []
     for row in rows:
         key = row.cross_source_duplicate_group_id or row.observation_id
-        if key in seen:
-            continue
-        seen.add(key)
-        kept.append(row)
-    return kept
+        if key not in buckets:
+            order.append(key)
+            buckets[key] = []
+        buckets[key].append(row)
+    return [_merge_vat(buckets[key]) for key in order]
+
+
+def _merge_vat(group: list[MarketObservation]) -> MarketObservation:
+    primary = group[0]
+    if _vat_known(primary):
+        return primary
+    for other in group[1:]:
+        if _vat_known(other):
+            return replace(
+                primary,
+                vat_classification=other.vat_classification,
+                vat_presentation=other.vat_presentation,
+                vat_fragment=other.vat_fragment or primary.vat_fragment,
+            )
+    return primary
+
+
+def _vat_known(row: MarketObservation) -> bool:
+    token = (row.vat_classification or "").upper()
+    presentation = (row.vat_presentation or "").casefold()
+    if token in {"VAT_EXCLUSIVE", "VAT_INCLUSIVE", "NO_VAT", "MARGIN_SCHEME"}:
+        return True
+    return presentation in {"ex_vat", "vat_inclusive", "no_vat", "margin_scheme"}
 
 
 def _same(left: MarketObservation, right: MarketObservation) -> bool:
