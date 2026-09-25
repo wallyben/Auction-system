@@ -115,6 +115,20 @@ class ValuationResult:
     evidence: tuple[dict[str, object], ...] = ()
     sensitivity: dict[str, str] | None = None
     effect_basis: str = ""
+    market_floor_confidence: str = ""
+    vat_basis_confidence: str = ""
+    market_cash_low_eur: Decimal | None = None
+    market_cash_central_low_eur: Decimal | None = None
+    market_cash_central_high_eur: Decimal | None = None
+    market_cash_high_eur: Decimal | None = None
+    expected_achievable_low_eur: Decimal | None = None
+    expected_achievable_high_eur: Decimal | None = None
+    vat_stress_proceeds_eur: Decimal | None = None
+    prebid_floor_available: bool = False
+    prebid_state: str = ""
+    max_hammer_market_floor_eur: Decimal | None = None
+    max_hammer_vat_stress_eur: Decimal | None = None
+    max_hammer_confirmed_tax_eur: Decimal | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -156,6 +170,21 @@ class ValuationResult:
             "sensitivity": self.sensitivity,
             "effect_basis": self.effect_basis,
             "asking_market_only": True,
+            "market_floor_confidence": self.market_floor_confidence,
+            "vat_basis_confidence": self.vat_basis_confidence,
+            "market_cash_low_eur": _s(self.market_cash_low_eur),
+            "market_cash_central_low_eur": _s(self.market_cash_central_low_eur),
+            "market_cash_central_high_eur": _s(self.market_cash_central_high_eur),
+            "market_cash_high_eur": _s(self.market_cash_high_eur),
+            "expected_achievable_low_eur": _s(self.expected_achievable_low_eur),
+            "expected_achievable_high_eur": _s(self.expected_achievable_high_eur),
+            "vat_stress_proceeds_eur": _s(self.vat_stress_proceeds_eur),
+            "prebid_floor_available": self.prebid_floor_available,
+            "prebid_state": self.prebid_state,
+            "max_hammer_market_floor_eur": _s(self.max_hammer_market_floor_eur),
+            "max_hammer_vat_stress_eur": _s(self.max_hammer_vat_stress_eur),
+            "max_hammer_confirmed_tax_eur": _s(self.max_hammer_confirmed_tax_eur),
+            "conservative_resale_floor_eur": _s(self.conservative_eur),
         }
 
 

@@ -1,7 +1,10 @@
 """Irish VRT, NOx, customs duty, and import VAT for commercial vans.
 
-Rules are transcribed from Revenue pages retrieved 2026-09-22.
+Rules are transcribed from Revenue pages retrieved 2026-09-22 and rechecked 2026-09-25.
 They are operational calculations, not tax advice. A missing input stays unknown.
+The 2026-09-25 recheck confirmed the standard rate remains 23% from 1 January 2026.
+The margin scheme is optional and is not assumed. GB-origin vehicles imported via NI
+are outside the margin scheme. Vehicle-specific evidence still decides treatment.
 """
 
 from __future__ import annotations
@@ -20,6 +23,9 @@ REVENUE_VAT_RATES = "https://www.revenue.ie/en/vat/vat-rates/search-vat-rates/cu
 REVENUE_VAT_CUSTOMS = "https://www.revenue.ie/en/vrt/calculating-vrt/vat-customs-duty.aspx"
 REVENUE_GB_NI = "https://www.revenue.ie/en/vrt/registration-of-imported-used-vehicles/index.aspx"
 REVENUE_ORIGIN = "https://www.revenue.ie/en/customs/documents/ccc/ccc79-preferential-origin-and-returned-goods-relief.pdf"
+REVENUE_MARGIN = "https://www.revenue.ie/en/vat/vat-on-goods/schemes/margin-scheme/index.aspx"
+REVENUE_GB_NI_VAT = "https://www.revenue.ie/en/tax-professionals/tdm/value-added-tax/movement-of-second-motor-vehicles-from-gb-and-ni/movement-of-second-hand-motor-vehicles-from-gb-ni.pdf"
+TAX_RULES_RECHECKED_AT = "2026-09-25"
 
 VAT_RATE = Decimal("0.23")
 VAT_EFFECTIVE = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -202,6 +208,10 @@ def assess_tax(data: TaxInput, ledger: EvidenceLedger) -> TaxPosition:
     notes: list[str] = [
         f"Tax rule version {TAX_RULE_VERSION}, retrieved {TAX_RULES_RETRIEVED_AT.date().isoformat()}.",
         "Standard VAT 23% from 1 January 2026.",
+        f"Rechecked {TAX_RULES_RECHECKED_AT} against {REVENUE_VAT_RATES}, {REVENUE_MARGIN}, and {REVENUE_GB_NI_VAT}.",
+        "Margin scheme is optional. It is not applied unless the vehicle's acquisition evidence selects it.",
+        "A GB-origin vehicle imported through NI is outside the margin scheme. Resale VAT then follows normal rules.",
+        "FULL_OUTPUT_VAT_STRESS divides a cash floor by 1.23. That is a downside screen, not a ruling.",
     ]
     duty, duty_posture, import_vat, import_posture, customs_notes = _customs(data, ledger)
     notes.extend(customs_notes)

@@ -28,7 +28,7 @@ from app.domains.vehicles.market_provider import (
     search_enabled,
 )
 from app.domains.vehicles.market_search import MarketGroup, SearchQuery, queries_for, vat_queries
-from app.domains.vehicles.valuation_v2 import value_vehicle_v2
+from app.domains.vehicles.valuation_v3 import value_vehicle_v3
 
 SOURCE_AGE_UNKNOWN = "SOURCE_AGE_UNKNOWN"
 
@@ -64,8 +64,13 @@ class HarvestReport:
 
 
 def decision_usable(subject: VehicleIdentity, book: MarketBook, as_of: datetime) -> bool:
-    result = value_vehicle_v2(subject, book, as_of=as_of)
-    return result.confidence_label in {"MEDIUM", "HIGH"} and result.conservative_eur is not None
+    result = value_vehicle_v3(subject, book, as_of=as_of)
+    # A thin floor must not stop collection while more public pages remain.
+    return (
+        result.prebid_floor_available
+        and result.market_floor_confidence in {"MEDIUM", "HIGH"}
+        and result.comparable_count >= 20
+    )
 
 
 async def harvest_group(

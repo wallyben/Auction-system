@@ -5,6 +5,20 @@ from __future__ import annotations
 from decimal import Decimal
 
 
+def prebid_economic_group(valuation: object) -> str:
+    """Pre-bid economic screen. This is not BUY_READY."""
+
+    floor = bool(getattr(valuation, "prebid_floor_available", False))
+    market = getattr(valuation, "market_floor_confidence", "")
+    stress = getattr(valuation, "max_hammer_vat_stress_eur", None)
+    market_hammer = getattr(valuation, "max_hammer_market_floor_eur", None)
+    if floor and market in {"HIGH", "MEDIUM"} and stress is not None and stress > 0:
+        return "ROBUST_OPPORTUNITY"
+    if market_hammer is not None and market_hammer > 0:
+        return "POTENTIAL_OPPORTUNITY_TAX_DILIGENCE"
+    return "NO_ECONOMIC_HEADROOM"
+
+
 def economic_label(
     *,
     state: str,

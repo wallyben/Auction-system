@@ -91,7 +91,7 @@ def test_known_vat_comps_are_not_capped_by_unknown_neighbours() -> None:
     for index in range(10, 12):
         case.book.append(_obs(index, vat_presentation="unknown", asking_price_eur=Decimal("9000")))
     result = evaluate_vehicle(case)
-    assert result.valuation.market_asking_eur == Decimal("18000.00")
+    assert result.valuation.market_asking_eur == Decimal("22140.00")
     assert result.valuation.expected_achievable_eur is not None
     assert result.state.value == "BUY_CANDIDATE"
     assert "UNCALIBRATED_ASSUMPTION" in " ".join(result.valuation.notes)

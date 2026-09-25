@@ -16,7 +16,7 @@ from app.domains.vehicles.browser_market.base import ListingCard, PageFetch, Sou
 from app.domains.vehicles.browser_market.cache import load_cached, store_cached
 from app.domains.vehicles.browser_market.generic_cards import extract_cards
 from app.domains.vehicles.browser_market.html_tree import parse_html
-from app.domains.vehicles.browser_market.pagination import next_page_url
+from app.domains.vehicles.browser_market.pagination import next_page_url, sequential_page_url
 from app.domains.vehicles.browser_market.urls import classify_market_url, is_listing, result_urls
 from app.domains.vehicles.enums import Fuel, ObservationStatus
 from app.domains.vehicles.market import MarketBook, MarketObservation
@@ -162,6 +162,8 @@ def harvest_market_group(
                 if cached is not None:
                     cards = [_card_from_cache(item, source_id) for item in cached]
                     html = ""
+                    source.pages_opened += 1
+                    hops += 1
                 else:
                     if pause and hops:
                         time.sleep(pause)
@@ -187,10 +189,11 @@ def harvest_market_group(
                 source.accepted += len(accepted)
                 source.vat_known += sum(1 for row in accepted if row.vat_presentation not in {"", "unknown"})
                 report.rejected += rejected
-                if not html:
-                    break
-                nxt = next_page_url(parse_html(html), page_url)
-                if not nxt or nxt == page_url:
+                nxt = next_page_url(parse_html(html), page_url) if html else ""
+                if not nxt:
+                    candidate = sequential_page_url(page_url)
+                    nxt = candidate if load_cached(source_id, group.group_id, candidate, now=moment) is not None else ""
+                if not nxt or nxt == page_url or nxt in seen_urls:
                     break
                 page_url = nxt
             if source.challenge:

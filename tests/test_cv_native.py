@@ -194,7 +194,7 @@ def test_vat_bases_are_not_mixed_and_unknown_caps_confidence() -> None:
     for index in range(6, 12):
         mixed.book.append(_obs(index, vat_presentation="vat_inclusive", asking_price_eur=Decimal("12300")))
     mixed_result = evaluate_vehicle(mixed)
-    assert mixed_result.valuation.vat_basis == "vat_inclusive_ie_23"
+    assert mixed_result.valuation.vat_basis == "exact"
     assert mixed_result.valuation.market_asking_eur == Decimal("12300.00")
 
     unknown = golden()
@@ -228,8 +228,8 @@ def test_outlier_does_not_set_the_median_and_thin_book_withholds() -> None:
         case.book.append(_obs(index, asking_price_eur=Decimal("18000")))
     case.book.append(_obs(30, asking_price_eur=Decimal("80000")))
     result = evaluate_vehicle(case)
-    assert result.valuation.market_asking_eur == Decimal("18000.00")
-    assert result.valuation.model_version == "arie-native-v2"
+    assert result.valuation.market_asking_eur == Decimal("22140.00")
+    assert result.valuation.model_version == "arie-native-v3-vat-interval"
     from app.domains.vehicles.valuation import value_vehicle
 
     assert value_vehicle(case.identity, case.book, as_of=case.as_of).model_version == "arie-native-v1"
@@ -247,7 +247,7 @@ def test_future_observation_is_invisible_and_stale_book_withholds() -> None:
     case = golden()
     case.book.append(_obs(90, observation_id="future", observed_at=AS_OF + timedelta(days=2), asking_price_eur=Decimal("1000")))
     result = evaluate_vehicle(case)
-    assert result.valuation.market_asking_eur == Decimal("18000.00")
+    assert result.valuation.market_asking_eur == Decimal("22140.00")
 
     stale = golden()
     stale.as_of = AS_OF + timedelta(days=20)

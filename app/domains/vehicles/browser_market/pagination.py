@@ -51,6 +51,18 @@ def scroll_should_stop(counts: list[int], *, attempts_without_growth: int = 2, l
     return False
 
 
+def sequential_page_url(page_url: str) -> str:
+    """Carzone-style page query. Used when a cached page has no HTML to read a next link from."""
+
+    from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
+    parsed = urlparse(page_url)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    current = int(query.get("page") or "1")
+    query["page"] = str(current + 1)
+    return urlunparse(parsed._replace(query=urlencode(query)))
+
+
 def _page_number(url: str) -> int | None:
     match = re.search(r"[?&](?:page|p)=(\d+)", url)
     if match:

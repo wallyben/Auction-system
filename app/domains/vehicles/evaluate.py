@@ -18,7 +18,7 @@ from app.domains.vehicles.enums import (
     ProvenanceState,
 )
 from app.domains.vehicles.evidence import EvidenceLedger
-from app.domains.vehicles.scenarios import economic_label, ni_landing_scenarios
+from app.domains.vehicles.scenarios import economic_label, ni_landing_scenarios, prebid_economic_group
 from app.domains.vehicles.gates import GateReport, decide_gates
 from app.domains.vehicles.history import HistoryAssessment, assess_history
 from app.domains.vehicles.identity import apply_vin_consistency
@@ -39,7 +39,7 @@ from app.domains.vehicles.provenance import ProvenanceResult, assess_provenance
 from app.domains.vehicles.reconditioning import ReconditioningResult, estimate_reconditioning
 from app.domains.vehicles.tax import TaxInput, TaxPosition, assess_tax
 from app.domains.vehicles.valuation import ValuationResult
-from app.domains.vehicles.valuation_v2 import value_vehicle_v2
+from app.domains.vehicles.valuation_v3 import value_vehicle_v3
 
 _GOODS = {BodyKind.PANEL, BodyKind.CHASSIS, BodyKind.TIPPER, BodyKind.DROPSIDE, BodyKind.LUTON}
 
@@ -93,6 +93,7 @@ class Evaluation:
             "certification": self.certification.value,
             "purchasing_recommendation": self.purchasing_recommendation,
             "does_not_bid": True,
+            "prebid_group": prebid_economic_group(self.valuation),
             "economic_interest": economic_label(
                 state=self.state.value,
                 market_pass=bool(self.gates.gates.get("MARKET_EVIDENCE_PASS")),
@@ -223,7 +224,7 @@ def evaluate_vehicle(case: VehicleCase) -> Evaluation:
         keys=case.history.keys,
         mechanical_inspected=case.mechanical_inspected,
     )
-    valuation = value_vehicle_v2(case.identity, case.book, as_of=case.as_of)
+    valuation = value_vehicle_v3(case.identity, case.book, as_of=case.as_of)
     selling = _selling_cost(valuation.conservative_eur)
     currency = case.listing.currency
     rate = Decimal("1") if currency.upper() == "EUR" else case.fx_eur_per_unit
@@ -398,6 +399,7 @@ def evaluate_vehicle(case: VehicleCase) -> Evaluation:
     )
     why = _why(report)
     preliminary_hammer, preliminary_note = _payment_fee_reserve(case, valuation, selling, landed_at)
+    valuation = _attach_screening_hammers(case, valuation, repairs, tax_for, landed_at)
     return Evaluation(
         state=report.state,
         certification=CertificationPosture.SHADOW,
@@ -429,6 +431,78 @@ def evaluate_vehicle(case: VehicleCase) -> Evaluation:
         listing_screen="VALUATION_SUFFICIENT" if listing_identity_sufficient(case) and valuation.conservative_eur is not None else "LISTING_IDENTITY_INCOMPLETE",
         preliminary_max_hammer_eur=preliminary_hammer,
         preliminary_note=preliminary_note,
+    )
+
+
+def _attach_screening_hammers(case: VehicleCase, valuation: ValuationResult, repairs: ReconditioningResult, tax_for, landed_at) -> ValuationResult:
+    """Screening hammers use labelled cash proceeds. Unresolved purchase tax is excluded, not zeroed."""
+
+    from app.core.config import settings
+    from app.domains.vehicles.evidence import MoneyLine
+
+    if not valuation.prebid_floor_available or valuation.conservative_eur is None or valuation.quick_sale_eur is None:
+        return valuation
+    selling = _selling_cost(valuation.conservative_eur)
+
+    def screening_landed(hammer: Decimal) -> LandedCost:
+        fee = case.payment_fee_eur
+        posture = case.payment_fee_posture
+        if posture is EvidencePosture.UNKNOWN or fee is None:
+            fee = money(hammer * Decimal(str(settings.payment_fee_percent)) + Decimal(str(settings.payment_fee_fixed_eur)))
+            posture = EvidencePosture.ESTIMATED
+        auction = auction_costs(
+            hammer_eur=hammer,
+            schedule=case.schedule,
+            vat_treatment=case.vat_treatment,
+            hammer_is_vat_inclusive=case.hammer_includes_vat,
+            owner_vat_registered=case.owner_vat_registered,
+            commercial_vat_invoice_expected=case.commercial_vat_invoice_expected and _effective_class(case) is CommercialClass.N1_GOODS,
+            payment_fee_eur=fee,
+            payment_fee_posture=posture,
+            lot_vat_rate=case.auction_lot_vat_rate,
+        )
+        lines = [line for line in auction.lines if line.name != "auction_lot_vat_cash"]
+        if case.transport_posture is not EvidencePosture.UNKNOWN and case.transport_eur is not None:
+            lines.append(MoneyLine("transport", case.transport_eur, case.transport_posture, "logistics", "Collection and delivery."))
+        lines.append(MoneyLine("reconditioning", repairs.expected_eur, repairs.posture, "reconditioning", "Expected reserve"))
+        blocked = auction.blocked or any(line.amount_eur is None or line.posture is EvidencePosture.UNKNOWN for line in lines)
+        total = None if blocked else money(sum((line.amount_eur for line in lines if line.amount_eur is not None), ZERO))
+        return LandedCost(total, total, blocked, tuple(lines))
+
+    market = solve_max_hammer(
+        conservative_eur=valuation.conservative_eur,
+        quick_sale_eur=valuation.quick_sale_eur,
+        selling_cost_eur=selling,
+        landed_at=screening_landed,
+    )
+    stress_proceeds = valuation.vat_stress_proceeds_eur
+    stress_quick = None
+    if stress_proceeds is not None and valuation.conservative_eur > ZERO:
+        stress_quick = money(stress_proceeds * (valuation.quick_sale_eur / valuation.conservative_eur))
+    stress = solve_max_hammer(
+        conservative_eur=stress_proceeds,
+        quick_sale_eur=stress_quick,
+        selling_cost_eur=_selling_cost(stress_proceeds) if stress_proceeds is not None else selling,
+        landed_at=screening_landed,
+    )
+    market_hammer = market.max_safe_hammer_eur
+    stress_hammer = stress.max_safe_hammer_eur
+    if market_hammer is not None and stress_hammer is not None and stress_hammer > market_hammer:
+        stress_hammer = market_hammer
+    confirmed = None
+    probe = tax_for(market_hammer or ZERO, EvidenceLedger())
+    if not probe.blocked:
+        confirmed = solve_max_hammer(
+            conservative_eur=valuation.conservative_eur,
+            quick_sale_eur=valuation.quick_sale_eur,
+            selling_cost_eur=selling,
+            landed_at=landed_at,
+        ).max_safe_hammer_eur
+    return replace(
+        valuation,
+        max_hammer_market_floor_eur=market_hammer,
+        max_hammer_vat_stress_eur=stress_hammer,
+        max_hammer_confirmed_tax_eur=confirmed,
     )
 
 

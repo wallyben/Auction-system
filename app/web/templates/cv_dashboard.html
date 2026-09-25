@@ -123,7 +123,9 @@
             </ul>
             <p>Failed gates: {{ row.gates.failures|join(", ") or "none" }}</p>
             <p>Max bid base {{ row.max_bid_base_eur or "—" }}. Conservative {{ row.max_bid_conservative_eur or "—" }}. Stress {{ row.max_bid_stress_eur or "—" }}.</p>
-            <p>Asking-to-achievable adjustment {{ row.valuation.asking_to_achievable_adjustment }}. Status {{ row.valuation.asking_to_achievable_status }}. VAT basis {{ row.valuation.vat_basis }}. Known VAT share {{ row.valuation.known_vat_share or "—" }}. Effective sample {{ row.valuation.effective_sample_size }}. Confidence {{ row.valuation.confidence_label or row.valuation.confidence }}.</p>
+            <p>Irish market evidence. Unique comps {{ row.irish_comparable_count }}. VAT explicit share {{ row.valuation.known_vat_share or "—" }}. Market confidence {{ row.valuation.market_floor_confidence or row.valuation.confidence_label or "—" }}. VAT confidence {{ row.valuation.vat_basis_confidence or "—" }}.</p>
+            <p>Market cash range {{ row.valuation.market_cash_low_eur or "—" }} – {{ row.valuation.market_cash_high_eur or "—" }}. Conservative resale floor {{ row.valuation.conservative_eur or "—" }}. VAT stress resale {{ row.valuation.vat_stress_proceeds_eur or "—" }}.</p>
+            <p>Max safe hammer stress {{ row.valuation.max_hammer_vat_stress_eur or "—" }}. If tax resolved {{ row.valuation.max_hammer_confirmed_tax_eur or "—" }}. Prebid {{ row.valuation.prebid_state or "—" }}. Group {{ row.prebid_group }}.</p>
             <p>Market range {{ row.valuation.asking_low_eur or "—" }} / {{ row.valuation.market_asking_eur or "—" }} / {{ row.valuation.asking_high_eur or "—" }}. Tier A {{ row.valuation.tier_a_count }} B {{ row.valuation.tier_b_count }} C {{ row.valuation.tier_c_count }}.</p>
             <p>Economic interest {{ row.economic_interest }}. Landing {{ row.landing_scenarios.landing_cost }} / {{ row.landing_scenarios.classification }}.</p>
             {% for comp in row.valuation.comps %}
@@ -231,19 +233,25 @@
   <p>{{ evaluation.gates.failures|join(", ") or "None" }}</p>
   <h3>Max bid sensitivity</h3>
   <p>Base {{ evaluation.max_bid_base_eur or "—" }}. Conservative {{ evaluation.max_bid_conservative_eur or "—" }}. Stress {{ evaluation.max_bid_stress_eur or "—" }}. The decision ceiling is the conservative figure. Asking-to-achievable adjustment {{ evaluation.valuation.asking_to_achievable_adjustment }}. Status {{ evaluation.valuation.asking_to_achievable_status }}.</p>
-  <p>VAT basis {{ evaluation.valuation.vat_basis }}. Known VAT share {{ evaluation.valuation.known_vat_share or "—" }}. Effective comps {{ evaluation.valuation.effective_sample_size }}. Label {{ evaluation.valuation.confidence_label or "—" }}. This is an asking-market estimate, not a verified sold price.</p>
+  <p>Irish market evidence. Unique comps {{ evaluation.irish_comparable_count }}. Mileage-aware effective sample {{ evaluation.valuation.effective_sample_size }}. VAT explicit share {{ evaluation.valuation.known_vat_share or "—" }}.</p>
+  <p>Market cash range {{ evaluation.valuation.market_cash_low_eur or "—" }} – {{ evaluation.valuation.market_cash_high_eur or "—" }}. Lower median {{ evaluation.valuation.market_cash_central_low_eur or "—" }}. Upper median {{ evaluation.valuation.market_cash_central_high_eur or "—" }}.</p>
+  <p>Conservative resale floor {{ evaluation.valuation.conservative_eur or "—" }}. VAT stress resale {{ evaluation.valuation.vat_stress_proceeds_eur or "—" }}. Expected interval {{ evaluation.valuation.expected_achievable_low_eur or "—" }} – {{ evaluation.valuation.expected_achievable_high_eur or "—" }}.</p>
+  <p>Max safe hammer — stress {{ evaluation.valuation.max_hammer_vat_stress_eur or "—" }}. Max safe hammer — market floor {{ evaluation.valuation.max_hammer_market_floor_eur or "—" }}. Max safe hammer — if tax resolved {{ evaluation.valuation.max_hammer_confirmed_tax_eur or "—" }}.</p>
+  <p>Market confidence {{ evaluation.valuation.market_floor_confidence or "—" }}. VAT confidence {{ evaluation.valuation.vat_basis_confidence or "—" }}. Prebid {{ evaluation.valuation.prebid_state or "no floor" }}. Group {{ evaluation.prebid_group }}. Buy ready {{ evaluation.buy_ready }}.</p>
+  <p>Remaining blockers: {{ evaluation.gates.failures|join(", ") or "none" }}. This is an asking-market estimate, not a verified sold price. Unknown VAT is an interval, not a guess.</p>
   <p>Sensitivity at 10/15/20 percent: {{ evaluation.valuation.haircut_sensitivity }}. Scenario sensitivity: {{ evaluation.valuation.sensitivity }}.</p>
   {% if evaluation.valuation.evidence %}
   <h3>Valuation evidence</h3>
   <table>
-    <thead><tr><th>Vehicle</th><th>Year</th><th>Mileage</th><th>Price</th><th>VAT</th><th>Tier</th><th>Weight</th><th>Adjustment</th><th>Why</th></tr></thead>
+    <thead><tr><th>Vehicle</th><th>Year</th><th>Mileage</th><th>Advertised</th><th>Cash interval</th><th>VAT</th><th>Tier</th><th>Weight</th><th>Adjustment</th><th>Why</th></tr></thead>
     <tbody>
       {% for comp in evaluation.valuation.evidence %}
       <tr>
         <td>{{ comp.vehicle }}</td>
         <td>{{ comp.year or "—" }}</td>
         <td>{{ comp.mileage_km or "—" }}</td>
-        <td>{{ comp.asking_price_eur }}</td>
+        <td>{{ comp.advertised_eur or comp.asking_price_eur }}</td>
+        <td>{{ comp.cash_low_eur or "—" }} – {{ comp.cash_high_eur or "—" }}</td>
         <td>{{ comp.vat_basis }}</td>
         <td>{{ comp.tier }}</td>
         <td>{{ comp.similarity_weight }}</td>
