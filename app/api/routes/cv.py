@@ -135,7 +135,7 @@ _EXAMPLE = """{
 }"""
 
 
-@router.get("/cv", response_class=HTMLResponse)
+@router.get("/cv/legacy", response_class=HTMLResponse)
 def cv_dashboard(request: Request, view_name: str = "candidates", family: str = "") -> HTMLResponse:
     allowed = {"candidates", "manual", "price", "rejected", "insufficient", "all", "market"}
     active = view_name if view_name in allowed else "candidates"

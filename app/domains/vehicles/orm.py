@@ -50,6 +50,36 @@ class CvSourceStateRow(Base):
     payload: Mapped[dict[str, Any]] = mapped_column(JSON().with_variant(JSONB, "postgresql"), nullable=False)
 
 
+class CvAuctionRow(Base):
+    __tablename__ = "cv_auctions"
+
+    auction_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    sale_code: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    source: Mapped[str] = mapped_column(String(64), nullable=False, default="catalogue")
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="GBP")
+    fx: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="OPEN")
+    closes_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON().with_variant(JSONB, "postgresql"), nullable=False)
+
+
+class CvLotRow(Base):
+    __tablename__ = "cv_lots"
+
+    lot_id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    auction_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    lot_number: Mapped[str] = mapped_column(String(16), nullable=False)
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    registration: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    owner_status: Mapped[str] = mapped_column(String(40), nullable=False, default="")
+    selected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    owner_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    current_bid_gbp: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON().with_variant(JSONB, "postgresql"), nullable=False)
+
+
 class CvOwnerEvidenceRow(Base):
     __tablename__ = "cv_owner_evidence"
 

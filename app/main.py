@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes.cv import router as cv_router
+from app.api.routes.cv_v1 import router as cv_v1_router
 from app.api.routes.dashboard import router as dashboard_router
 from app.api.routes.ebay_oauth import router as ebay_oauth_router
 from app.api.routes.ebay_webhooks import router as ebay_webhook_router
@@ -63,7 +64,28 @@ def create_app() -> FastAPI:
     application.include_router(ebay_oauth_router)
     application.include_router(dashboard_router)
     application.include_router(cv_router)
+    application.include_router(cv_v1_router)
+    _mount_owner_app(application)
     return application
+
+
+def _mount_owner_app(application: FastAPI) -> None:
+    dist = Path("frontend/dist")
+    index = dist / "index.html"
+    if not index.exists():
+        return
+
+    @application.get("/cv")
+    @application.get("/cv/{path:path}")
+    def owner_app(path: str = ""):
+        from fastapi.responses import FileResponse
+
+        if path.startswith("legacy"):
+            return FileResponse(index)
+        asset = dist / path
+        if path and asset.is_file():
+            return FileResponse(asset)
+        return FileResponse(index)
 
 
 app = create_app()
