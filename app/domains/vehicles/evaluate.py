@@ -18,7 +18,7 @@ from app.domains.vehicles.enums import (
     ProvenanceState,
 )
 from app.domains.vehicles.evidence import EvidenceLedger
-from app.domains.vehicles.scenarios import economic_label, ni_landing_scenarios, prebid_economic_group
+from app.domains.vehicles.scenarios import catalogue_hard_reject, economic_label, ni_landing_scenarios, prebid_economic_group
 from app.domains.vehicles.gates import GateReport, decide_gates
 from app.domains.vehicles.history import HistoryAssessment, assess_history
 from app.domains.vehicles.identity import apply_vin_consistency
@@ -87,13 +87,19 @@ class Evaluation:
     preliminary_max_hammer_eur: Decimal | None = None
     preliminary_note: str = ""
 
+    def _hard_reject_label(self) -> str:
+        write_off = ""
+        if self.history.write_off is not None and self.history.write_off.outcome.value == "FAIL":
+            write_off = self.history.write_off.interpretation
+        return catalogue_hard_reject(title=self.title, write_off_label=write_off)
+
     def to_dict(self) -> dict[str, object]:
         return {
             "state": self.state.value,
             "certification": self.certification.value,
             "purchasing_recommendation": self.purchasing_recommendation,
             "does_not_bid": True,
-            "prebid_group": prebid_economic_group(self.valuation),
+            "prebid_group": prebid_economic_group(self.valuation, hard_reject=self._hard_reject_label()),
             "economic_interest": economic_label(
                 state=self.state.value,
                 market_pass=bool(self.gates.gates.get("MARKET_EVIDENCE_PASS")),

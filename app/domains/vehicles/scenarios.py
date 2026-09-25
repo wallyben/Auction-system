@@ -5,18 +5,36 @@ from __future__ import annotations
 from decimal import Decimal
 
 
-def prebid_economic_group(valuation: object) -> str:
+def catalogue_hard_reject(*, title: str = "", hint: str = "", write_off_label: str = "") -> str:
+    """Owner-facing hard stop. Economics must not override it."""
+
+    text = f"{hint} {title} {write_off_label}".upper().replace("-", " ").replace("_", " ")
+    if "NON RUNNER" in text:
+        return "REJECT_NON_RUNNER"
+    for label in ("CAT A", "CAT B", "CAT S"):
+        if label in text:
+            return f"REJECT_WRITE_OFF_{label.replace(' ', '_')}"
+    return ""
+
+
+def prebid_economic_group(valuation: object, *, hard_reject: str = "") -> str:
     """Pre-bid economic screen. This is not BUY_READY."""
 
+    if hard_reject:
+        return hard_reject
     floor = bool(getattr(valuation, "prebid_floor_available", False))
     market = getattr(valuation, "market_floor_confidence", "")
     stress = getattr(valuation, "max_hammer_vat_stress_eur", None)
     market_hammer = getattr(valuation, "max_hammer_market_floor_eur", None)
-    if floor and market in {"HIGH", "MEDIUM"} and stress is not None and stress > 0:
+    if not floor:
+        return "MARKET_INSUFFICIENT"
+    if market in {"HIGH", "MEDIUM"} and stress is not None and stress > 0:
         return "ROBUST_OPPORTUNITY"
     if market_hammer is not None and market_hammer > 0:
         return "POTENTIAL_OPPORTUNITY_TAX_DILIGENCE"
-    return "NO_ECONOMIC_HEADROOM"
+    if stress == 0 or market_hammer == 0:
+        return "NO_ECONOMIC_HEADROOM"
+    return "MARKET_INSUFFICIENT"
 
 
 def economic_label(
